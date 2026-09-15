@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: player-service
+
+server:
+  port: 8082
