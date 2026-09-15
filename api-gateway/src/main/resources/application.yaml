@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: PixelChiss
+server:
+  port: 8080
