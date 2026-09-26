@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: game-service
+
+  data:
+    redis:
+      url: ${REDIS_URL}
+
+    mongodb:
+      uri: ${MONGODB_URI}
+
+server:
+  port: 8084
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL}
