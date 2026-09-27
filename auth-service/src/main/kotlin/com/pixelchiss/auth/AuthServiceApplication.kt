@@ -1,4 +1,4 @@
-package com.pixelchiss.authservice
+package com.pixelchiss.auth
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
