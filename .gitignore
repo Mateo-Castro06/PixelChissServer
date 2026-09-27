@@ -47,3 +47,4 @@ docker-compose.override.yml
 
 # VS Code
 .vscode/
+auth-service/keys/
