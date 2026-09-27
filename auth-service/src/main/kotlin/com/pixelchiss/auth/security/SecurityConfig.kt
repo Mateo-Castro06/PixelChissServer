@@ -6,15 +6,24 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.web.SecurityFilterChain
 
 @Configuration
-class SecurityConfig {
+class SecurityConfig(
+    private val oauth2LoginSuccessHandler: OAuth2LoginSuccessHandler
+) {
 
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
             .authorizeHttpRequests {
                 it
-                    .requestMatchers("/actuator/health").permitAll()
+                    .requestMatchers(
+                        "/actuator/health",
+                        "/oauth2/**",
+                        "/login/**"
+                    ).permitAll()
                     .anyRequest().authenticated()
+            }
+            .oauth2Login {
+                it.successHandler(oauth2LoginSuccessHandler)
             }
 
         return http.build()
