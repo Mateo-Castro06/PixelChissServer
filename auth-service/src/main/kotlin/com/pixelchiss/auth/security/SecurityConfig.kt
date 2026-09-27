@@ -7,7 +7,8 @@ import org.springframework.security.web.SecurityFilterChain
 
 @Configuration
 class SecurityConfig(
-    private val oauth2LoginSuccessHandler: OAuth2LoginSuccessHandler
+    private val oauth2LoginSuccessHandler: OAuth2LoginSuccessHandler,
+    private val jwtAuthenticationConverter: JwtAuthenticationConverter
 ) {
 
     @Bean
@@ -24,6 +25,11 @@ class SecurityConfig(
             }
             .oauth2Login {
                 it.successHandler(oauth2LoginSuccessHandler)
+            }
+            .oauth2ResourceServer {
+                it.jwt {
+                    it.jwtAuthenticationConverter(jwtAuthenticationConverter)
+                }
             }
 
         return http.build()

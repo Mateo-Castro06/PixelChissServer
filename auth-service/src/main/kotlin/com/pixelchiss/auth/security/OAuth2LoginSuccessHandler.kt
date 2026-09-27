@@ -10,7 +10,8 @@ import org.springframework.stereotype.Component
 
 @Component
 class OAuth2LoginSuccessHandler(
-    private val userService: UserService
+    private val userService: UserService,
+    private val jwtService: JwtService
 ) : AuthenticationSuccessHandler {
 
     override fun onAuthenticationSuccess(
@@ -30,14 +31,24 @@ class OAuth2LoginSuccessHandler(
 
         val existingUser = userService.findByGoogleId(googleId)
 
-        if (existingUser == null) {
-            userService.createUser(
-                googleId = googleId,
-                email = email,
-                displayName = displayName
-            )
-        }
+        val user = existingUser ?: userService.createUser(
+            googleId = googleId,
+            email = email,
+            displayName = displayName
+        )
 
-        response.sendRedirect("/login/success")
+        val accessToken = jwtService.generateAccessToken(
+            userId = user.id!!,
+            email = user.email
+        )
+
+        response.contentType = "application/json"
+        response.writer.write(
+            """
+            {
+                "accessToken": "$accessToken"
+            }
+            """.trimIndent()
+        )
     }
 }
