@@ -1,5 +1,6 @@
 package com.pixelchiss.auth.security
 
+import com.pixelchiss.auth.service.RefreshTokenService
 import com.pixelchiss.auth.service.UserService
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -11,7 +12,8 @@ import org.springframework.stereotype.Component
 @Component
 class OAuth2LoginSuccessHandler(
     private val userService: UserService,
-    private val jwtService: JwtService
+    private val jwtService: JwtService,
+    private val refreshTokenService: RefreshTokenService
 ) : AuthenticationSuccessHandler {
 
     override fun onAuthenticationSuccess(
@@ -42,11 +44,16 @@ class OAuth2LoginSuccessHandler(
             email = user.email
         )
 
+        val refreshToken = refreshTokenService.create(
+            userId = user.id!!
+        )
+
         response.contentType = "application/json"
         response.writer.write(
             """
             {
-                "accessToken": "$accessToken"
+                "accessToken": "$accessToken",
+                "refreshToken": "${refreshToken.token}"
             }
             """.trimIndent()
         )
