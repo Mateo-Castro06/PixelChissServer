@@ -15,8 +15,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/actuator/health",
-                                "/api/auth/refresh",
-                                "/api/auth/logout"
+                                "/api/refresh",
+                                "/api/logout"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

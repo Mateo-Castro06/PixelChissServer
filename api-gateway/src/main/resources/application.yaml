@@ -8,6 +8,19 @@ spring:
         jwt:
           public-key-location: file:${JWT_PUBLIC_KEY_PATH}
 
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: auth-refresh
+              uri: lb://AUTH-SERVICE
+              predicates:
+                - Path=/api/refresh
+                - Method=POST
+              filters:
+                - RewritePath=/api/refresh, /api/auth/refresh
+
 server:
   port: 8080
 
@@ -15,3 +28,8 @@ eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka/
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.cloud.gateway: DEBUG
