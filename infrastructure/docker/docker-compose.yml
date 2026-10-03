@@ -1,5 +1,26 @@
 services:
 
+  api-gateway:
+    image: pixelchiss-gateway:latest
+    container_name: pixelchiss-gateway
+    restart: unless-stopped
+
+    environment:
+      EUREKA_URL: ${EUREKA_URL}
+      JWT_PUBLIC_KEY_PATH: ${JWT_PUBLIC_KEY_PATH}
+
+    ports:
+      - "8080:8080"
+
+    volumes:
+      - ../../api-gateway/keys:/app/keys:ro
+
+    depends_on:
+      - eureka-server
+
+    networks:
+      - pixelchiss-network
+
   eureka-server:
     image: pixelchiss-eureka:latest
     container_name: pixelchiss-eureka
