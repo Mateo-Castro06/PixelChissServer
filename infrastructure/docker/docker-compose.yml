@@ -1,5 +1,46 @@
 services:
 
+  eureka-server:
+    image: pixelchiss-eureka:latest
+    container_name: pixelchiss-eureka
+    restart: unless-stopped
+    ports:
+      - "8761:8761"
+    networks:
+      - pixelchiss-network
+
+  auth-service:
+    image: pixelchiss-auth:latest
+    container_name: pixelchiss-auth
+    restart: unless-stopped
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+      EUREKA_URL: ${EUREKA_URL}
+
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+
+      JWT_PRIVATE_KEY_PATH: ${JWT_PRIVATE_KEY_PATH}
+      JWT_PUBLIC_KEY_PATH: ${JWT_PUBLIC_KEY_PATH}
+
+    ports:
+      - "8081:8081"
+
+    volumes:
+      - ../../auth-service/keys:/app/keys:ro
+
+    depends_on:
+      - eureka-server
+      - postgres
+
+    networks:
+      - pixelchiss-network
+
   postgres:
     image: postgres:17
     container_name: pixelchiss-postgres
@@ -15,7 +56,7 @@ services:
     networks:
       - pixelchiss-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pixelchiss -d pixelchiss"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -33,7 +74,7 @@ services:
     networks:
       - pixelchiss-network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -49,7 +90,7 @@ services:
     networks:
       - pixelchiss-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
