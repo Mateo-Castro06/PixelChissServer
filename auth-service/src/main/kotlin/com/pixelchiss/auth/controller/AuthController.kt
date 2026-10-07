@@ -1,5 +1,7 @@
 package com.pixelchiss.auth.controller
 
+import com.pixelchiss.auth.dto.LogoutRequest
+import com.pixelchiss.auth.dto.MessageResponse
 import com.pixelchiss.auth.dto.RefreshTokenRequest
 import com.pixelchiss.auth.dto.TokenResponse
 import com.pixelchiss.auth.security.JwtService
@@ -11,6 +13,9 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.responses.ApiResponses
 
 @RestController
 @RequestMapping("/api/auth")
@@ -19,7 +24,22 @@ class AuthController(
     private val userRepository: UserRepository,
     private val jwtService: JwtService
 ) {
-
+    @Operation(
+        summary = "Renovar access token",
+        description = "Genera un nuevo access token utilizando un refresh token válido."
+    )
+    @ApiResponses(
+        value = [
+            ApiResponse(
+                responseCode = "200",
+                description = "Access token renovado correctamente"
+            ),
+            ApiResponse(
+                responseCode = "401",
+                description = "Refresh token inválido, expirado o usuario inexistente"
+            )
+        ]
+    )
     @PostMapping("/refresh")
     fun refresh(
         @RequestBody request: RefreshTokenRequest
@@ -50,15 +70,28 @@ class AuthController(
             accessToken = accessToken
         )
     }
+    @Operation(
+        summary = "Cerrar sesión",
+        description = "Revoca el refresh token proporcionado y cierra la sesión."
+    )
+    @ApiResponses(
+        value = [
+            ApiResponse(
+                responseCode = "200",
+                description = "Sesión cerrada correctamente"
+            )
+        ]
+    )
+
     @PostMapping("/logout")
     fun logout(
-        @RequestBody request: RefreshTokenRequest
-    ): Map<String, String> {
+        @RequestBody request: LogoutRequest
+    ): MessageResponse {
 
         refreshTokenService.revoke(request.refreshToken)
 
-        return mapOf(
-            "message" to "Sesión cerrada correctamente"
+        return MessageResponse(
+            message = "Sesión cerrada correctamente"
         )
     }
 }
