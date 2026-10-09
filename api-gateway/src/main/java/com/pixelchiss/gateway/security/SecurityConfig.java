@@ -16,7 +16,9 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/actuator/health",
                                 "/api/refresh",
-                                "/api/logout"
+                                "/api/logout",
+                                "/oauth2/**",
+                                "/login/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

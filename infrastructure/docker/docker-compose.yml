@@ -49,6 +49,8 @@ services:
       JWT_PRIVATE_KEY_PATH: ${JWT_PRIVATE_KEY_PATH}
       JWT_PUBLIC_KEY_PATH: ${JWT_PUBLIC_KEY_PATH}
 
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: INFO
+
     ports:
       - "8081:8081"
 
@@ -124,3 +126,4 @@ volumes:
 networks:
   pixelchiss-network:
     driver: bridge
+

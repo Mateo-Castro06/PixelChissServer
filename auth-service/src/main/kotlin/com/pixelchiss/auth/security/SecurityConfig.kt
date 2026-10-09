@@ -4,6 +4,8 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.web.SecurityFilterChain
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter
+import jakarta.servlet.DispatcherType
 
 @Configuration
 class SecurityConfig(
@@ -19,6 +21,7 @@ class SecurityConfig(
             }
             .authorizeHttpRequests {
                 it
+                    .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                     .requestMatchers(
                         "/actuator/health",
                         "/oauth2/**",
@@ -31,6 +34,10 @@ class SecurityConfig(
                     ).permitAll()
                     .anyRequest().authenticated()
             }
+            .addFilterBefore(
+                ClientLoginParamsFilter(),
+                OAuth2AuthorizationRequestRedirectFilter::class.java
+            )
             .oauth2Login {
                 it.successHandler(oauth2LoginSuccessHandler)
             }

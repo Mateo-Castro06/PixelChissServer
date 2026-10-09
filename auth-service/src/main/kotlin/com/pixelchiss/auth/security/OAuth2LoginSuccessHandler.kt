@@ -8,6 +8,8 @@ import org.springframework.security.core.Authentication
 import org.springframework.security.oauth2.core.user.OAuth2User
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler
 import org.springframework.stereotype.Component
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 @Component
 class OAuth2LoginSuccessHandler(
@@ -48,14 +50,42 @@ class OAuth2LoginSuccessHandler(
             userId = user.id!!
         )
 
-        response.contentType = "application/json"
-        response.writer.write(
-            """
-            {
-                "accessToken": "$accessToken",
-                "refreshToken": "${refreshToken.token}"
-            }
-            """.trimIndent()
+        val session = request.getSession(false)
+
+        val clientState = session?.getAttribute(
+            ClientLoginParamsFilter.STATE_ATTR
+        ) as? String
+
+        val clientPort = session?.getAttribute(
+            ClientLoginParamsFilter.PORT_ATTR
+        ) as? Int
+
+        requireNotNull(clientState)
+        requireNotNull(clientPort)
+
+        session.invalidate()
+
+        val encodedState = URLEncoder.encode(
+            clientState,
+            StandardCharsets.UTF_8
         )
+
+        val encodedAccessToken = URLEncoder.encode(
+            accessToken,
+            StandardCharsets.UTF_8
+        )
+
+        val encodedRefreshToken = URLEncoder.encode(
+            refreshToken.token,
+            StandardCharsets.UTF_8
+        )
+
+        val redirectUrl =
+            "http://127.0.0.1:$clientPort/callback" +
+                    "?accessToken=$encodedAccessToken" +
+                    "&refreshToken=$encodedRefreshToken" +
+                    "&state=$encodedState"
+
+        response.sendRedirect(redirectUrl)
     }
 }

@@ -21,6 +21,23 @@ spring:
               filters:
                 - RewritePath=/api/refresh, /api/auth/refresh
 
+            - id: auth-oauth2-start
+              uri: lb://AUTH-SERVICE
+              predicates:
+                - Path=/oauth2/authorization/**
+
+            - id: auth-oauth2-callback
+              uri: lb://AUTH-SERVICE
+              predicates:
+                - Path=/login/oauth2/code/**
+
+            - id: auth-logout
+              uri: lb://AUTH-SERVICE
+              predicates:
+                - Path=/api/logout
+                - Method=POST
+              filters:
+                 - RewritePath=/api/logout, /api/auth/logout
 server:
   port: 8080
 

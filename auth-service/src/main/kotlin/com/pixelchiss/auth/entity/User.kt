@@ -22,7 +22,8 @@ class User(
     @Column(unique = true, nullable = false)
     val email: String,
 
-    val displayName: String,
+    @Column(nullable = false)
+    var displayName: String,
 
     val createdAt: Instant = Instant.now()
 )
