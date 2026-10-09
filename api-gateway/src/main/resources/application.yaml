@@ -38,6 +38,17 @@ spring:
                 - Method=POST
               filters:
                  - RewritePath=/api/logout, /api/auth/logout
+            - id: auth-profile
+              uri: lb://AUTH-SERVICE
+              predicates:
+                - Path=/api/auth/me
+                - Method=GET
+
+            - id: auth-update-display-name
+              uri: lb://AUTH-SERVICE
+              predicates:
+                - Path=/api/auth/me/display-name
+                - Method=PUT
 server:
   port: 8080
 
