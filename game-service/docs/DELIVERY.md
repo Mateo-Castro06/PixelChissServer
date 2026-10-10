@@ -58,7 +58,7 @@ controller/LobbyIntegrationController.java
 domain/Board.java
 domain/CardDefinition.java
 domain/GameState.java
-controller/QuestionDefinition.java (paquete domain; movimiento ajeno detectado en esta etapa)
+domain/QuestionDefinition.java (ubicación restaurada con autorización al preparar la publicación)
 dto/Action.java
 dto/CreateGame.java
 dto/GameView.java

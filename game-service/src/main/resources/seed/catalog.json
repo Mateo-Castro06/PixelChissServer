@@ -1,0 +1,18 @@
+{
+  "cards": [
+    {"id":"capture-next","name":"Alcance rival","description":"Captura al siguiente rival no protegido hasta seis pasos por delante de una ficha propia.","type":"BUFF","effectCode":"CAPTURE_NEXT","parameters":{"maxDistance":6},"conditions":["OWN_BOARD_PIECE","NEAREST_UNPROTECTED_RIVAL_ON_ROUTE"],"targetRequired":true,"mapId":"*"},
+    {"id":"move-safe","name":"Refugio","description":"Mueve una ficha propia al primer seguro disponible hacia delante de su recorrido común.","type":"BUFF","effectCode":"MOVE_SAFE","parameters":{"capacity":2},"conditions":["OWN_BOARD_PIECE","FORWARD_SAFE_CELL","AVAILABLE_CAPACITY"],"targetRequired":true,"mapId":"*"},
+    {"id":"dice-limit","name":"Dados reducidos","description":"Cada dado tiene máximo tres durante los próximos tres turnos propios.","type":"DEBUFF","effectCode":"DICE_MAX_LIMIT","parameters":{"maxValue":3,"turns":3},"conditions":["SELF_NEXT_THREE_TURNS"],"targetRequired":false,"mapId":"*"},
+    {"id":"choose-dice","name":"Elección","description":"Elige los dos dados del próximo turno propio, respetando el límite activo.","type":"BUFF","effectCode":"CHOOSE_DICE","parameters":{"turns":1},"conditions":["SELF_NEXT_TURN","RESPECT_DICE_LIMIT"],"targetRequired":false,"mapId":"*"}
+  ],
+  "questions": [
+    {"id":"classic-1","mapId":"classic","prompt":"¿Cuántas caras tiene un dado del juego?","options":["4","6","8"],"correctIndex":1},
+    {"id":"classic-2","mapId":"classic","prompt":"¿Cuántas fichas tiene cada jugador?","options":["2","3","4"],"correctIndex":2},
+    {"id":"classic-3","mapId":"classic","prompt":"¿Cuántas casillas tiene el tablero?","options":["96","100","64"],"correctIndex":0},
+    {"id":"classic-4","mapId":"classic","prompt":"¿Qué protege una casilla segura?","options":["El dado","Las fichas frente a captura normal","El reloj"],"correctIndex":1},
+    {"id":"science-1","mapId":"science","prompt":"¿Cuál es la fórmula del agua?","options":["CO2","H2O","O2"],"correctIndex":1},
+    {"id":"science-2","mapId":"science","prompt":"¿Qué planeta está más cerca del Sol?","options":["Mercurio","Marte","Júpiter"],"correctIndex":0},
+    {"id":"science-3","mapId":"science","prompt":"¿Qué órgano bombea sangre?","options":["Pulmón","Cerebro","Corazón"],"correctIndex":2},
+    {"id":"science-4","mapId":"science","prompt":"¿Cuántos lados tiene un triángulo?","options":["3","4","5"],"correctIndex":0}
+  ]
+}

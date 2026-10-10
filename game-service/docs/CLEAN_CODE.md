@@ -173,4 +173,6 @@ docs/VALIDATION.md
 
 Se generaron logs, copia de referencia en `.build/clean-code-baseline/` y artefactos Maven bajo Game. Se observó durante la sesión un movimiento de `domain/QuestionDefinition.java` a `controller/QuestionDefinition.java`, ajeno a estas operaciones; conserva exactamente su contenido y paquete `domain`. No se deshizo ni se atribuye a esta refactorización; la verificación final se repitió sobre esa ubicación con71 pruebas aprobadas.
 
+Al preparar los commits y la publicación, el usuario autorizó devolver `QuestionDefinition.java` a `domain/`. Se restauró su ubicación sin alterar el contenido; la descripción anterior conserva el historial de la refactorización.
+
 No se modificó ningún archivo fuera de Game. Se preservaron los preexistentes `Terminal` y `Tool`. No se realizaron commits, pushes, resets, borrados de estados previos ni cambios de infraestructura. Propuesta opcional de agrupación futura: corrección de turnos y contrato; extracción de reglas; aplicación/transporte; pruebas/documentación. No se ejecutó ningún commit.
