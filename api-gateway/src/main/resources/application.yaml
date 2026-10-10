@@ -49,6 +49,42 @@ spring:
               predicates:
                 - Path=/api/auth/me/display-name
                 - Method=PUT
+            - id: game-board
+              uri: lb://GAME-SERVICE
+              predicates:
+                - Path=/api/game/board
+                - Method=GET
+            - id: game-state
+              uri: lb://GAME-SERVICE
+              predicates:
+                - Path=/api/game/games/{gameId}
+                - Method=GET
+            - id: game-diagnostics
+              uri: lb://GAME-SERVICE
+              predicates:
+                - Path=/api/game/test/mongodb,/api/game/test/redis
+                - Method=GET
+              filters:
+                - RewritePath=/api/game/test/(?<name>mongodb|redis), /test/${name}
+            - id: game-openapi
+              uri: lb://GAME-SERVICE
+              predicates:
+                - Path=/api/game/openapi
+                - Method=GET
+              filters:
+                - RewritePath=/api/game/openapi, /v3/api-docs/public-game
+            - id: game-swagger-index
+              uri: forward:/game-swagger.html
+              predicates:
+                - Path=/api/game/swagger-ui/index.html
+                - Method=GET
+            - id: game-swagger-assets
+              uri: lb://GAME-SERVICE
+              predicates:
+                - Path=/api/game/swagger-ui/**
+                - Method=GET
+              filters:
+                - RewritePath=/api/game/swagger-ui/(?<asset>.*), /swagger-ui/${asset}
 server:
   port: 8080
 
