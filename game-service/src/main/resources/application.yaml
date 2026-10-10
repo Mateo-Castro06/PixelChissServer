@@ -1,13 +1,21 @@
 spring:
   application:
     name: game-service
+  task:
+    scheduling:
+      pool:
+        size: 4
+  mongodb:
+    uri: ${MONGODB_URI}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location: file:${JWT_PUBLIC_KEY_PATH}
 
   data:
     redis:
       url: ${REDIS_URL}
-
-    mongodb:
-      uri: ${MONGODB_URI}
 
 server:
   port: 8084
@@ -16,3 +24,11 @@ eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_URL}
+
+game:
+  turn-millis: ${GAME_TURN_MILLIS:60000}
+  trivia-millis: ${GAME_TRIVIA_MILLIS:15000}
+  card-millis: ${GAME_CARD_MILLIS:15000}
+  disconnect-grace-millis: ${GAME_DISCONNECT_GRACE_MILLIS:60000}
+  lobby-token: ${GAME_LOBBY_TOKEN:}
+  allowed-origins: ${GAME_ALLOWED_ORIGINS:http://localhost:8080}
