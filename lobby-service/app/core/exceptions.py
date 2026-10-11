@@ -1,3 +1,5 @@
+from app.core import config
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -6,6 +8,22 @@ class LobbyError(Exception):
         self.status_code = status_code
         self.detail = detail
 
+class LobbyNotFoundError(LobbyError):
+    def __init__(self):
+        super().__init__(404, "Lobby no encontrado")
+
+class LobbyFullError(LobbyError):
+    def __init__(self):
+        super().__init__(409,f"Lobby lleno (maximo {config.MAX_PLAYERS} jugadores)")
+
+class GameAlreadyStartedError(LobbyError):
+    def __init__(self):
+        super().__init__(409, "El juego ya ha comenzado")
+
+class NotInLobbyError(LobbyError):
+    def __init__(self):
+        super().__init__(403, "No perteneces a este lobby")
+        
 async def lobby_error_handler(request: Request, exc: LobbyError):
     return JSONResponse(
         status_code=exc.status_code,

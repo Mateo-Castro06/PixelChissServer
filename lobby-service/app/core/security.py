@@ -14,6 +14,7 @@ bearer = HTTPBearer(auto_error=False)
 class CurrentUser:
     id: str
     email: str
+    token: str
 
 @lru_cache
 def _public_key():
@@ -28,9 +29,9 @@ def get_current_user(
     if credentials is None:
         raise HTTPException(status_code=401, detail="Falta el token de acceso")
     try:
-        payload = jwt.decode(credentials.credentials, _public_key(), algorithms=["RS256"])
+        payload = jwt.decode(credentials.credentials, _public_key(), algorithms=["RS256", "RS384", "RS512"])
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Sesion expirada, inicia sesion nuevamente")
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Token invalido")
-    return CurrentUser(id=payload["sub"], email=payload.get("email", ""))
+    return CurrentUser(id=payload["sub"], email=payload.get("email", ""), token=credentials.credentials)
