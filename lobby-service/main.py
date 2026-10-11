@@ -1,48 +1,35 @@
-import os
+from contextlib import asynccontextmanager
 
-import redis
-import py_eureka_client.eureka_client as eureka_client
-from fastapi import FastAPI
+import redis.asyncio as redis
+from fastapi import Depends, FastAPI
 
-app = FastAPI()
-
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-EUREKA_URL = os.getenv("EUREKA_URL", "http://localhost:8761/eureka/")
-
-redis_client = redis.from_url(
-    REDIS_URL,
-    decode_responses=True
-)
+from app.core import eureka
+from app.core.exceptions import LobbyError, lobby_error_handler
+from app.core.redis import get_redis
+from app.core.security import CurrentUser, get_current_user
 
 
-@app.on_event("startup")
-async def register_with_eureka():
-    await eureka_client.init_async(
-        eureka_server=EUREKA_URL,
-        app_name="LOBBY-SERVICE",
-        instance_host="localhost",
-        instance_port=8083,
-    )
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await eureka.register()
+    yield
+    await eureka.deregister()
 
 
-@app.get("/")
-async def root():
-    return {"message": "Hello World"}
-
-
-@app.get("/hello/{name}")
-async def say_hello(name: str):
-    return {"message": f"Hello {name}"}
+app = FastAPI(title="PixelChiss Lobby Service", lifespan=lifespan)
+app.add_exception_handler(LobbyError, lobby_error_handler)
 
 
 @app.get("/health/redis")
-async def redis_health():
+async def redis_health(r: redis.Redis = Depends(get_redis)):
     try:
-        redis_client.ping()
-        return {
-            "redis": "UP"
-        }
+        await r.ping()
+        return {"redis": "UP"}
     except redis.RedisError:
-        return {
-            "redis": "DOWN"
-        }
+        return {"redis": "DOWN"}
+
+
+@app.get("/me")
+async def me(user: CurrentUser = Depends(get_current_user)):
+    """Temporal: sirve para comprobar que el JWT del Auth se valida bien."""
+    return {"id": user.id, "email": user.email}
