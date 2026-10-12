@@ -1,5 +1,9 @@
 .build/
 .idea/
-src/
 .mvn/
 docs/
+target/
+keys/
+.git/
+.env
+.env.*
