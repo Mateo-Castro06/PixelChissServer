@@ -9,7 +9,8 @@ class PlayerResponse(BaseModel):
     user_id: str = Field(description="Id del usuario (claim sub del JWT)", examples=["42"])
     display_name: str = Field(description="Nombre que se muestra en la sala", examples=["Ana"])
     role: PlayerRole = Field(description="HOST es el anfitrión actual de la sala")
-    ready: bool = Field(description="True si el jugador marcó que está listo", examples=[False])
+    ready: bool = Field(description="True si el jugador marcó que está listo. Los bots siempre están listos", examples=[False])
+    is_bot: bool = Field(description="True si es un bot añadido por el anfitrión", examples=[False])
 
 
 class LobbyResponse(BaseModel):

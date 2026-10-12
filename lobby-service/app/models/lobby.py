@@ -10,6 +10,7 @@ class Player:
     display_name: str
     role: PlayerRole
     ready: bool = False 
+    is_bot: bool = False
 
 @dataclass
 class Lobby:

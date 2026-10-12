@@ -23,6 +23,15 @@ class GameAlreadyStartedError(LobbyError):
 class NotInLobbyError(LobbyError):
     def __init__(self):
         super().__init__(403, "No perteneces a este lobby")
+
+class NotHostError(LobbyError):
+    def __init__(self):
+        super().__init__(403, "Solo el anfitrion puede realizar esta accion")
+
+
+class BotNotFoundError(LobbyError):
+    def __init__(self):
+        super().__init__(404, "Bot no encontrado")
         
 async def lobby_error_handler(request: Request, exc: LobbyError):
     return JSONResponse(
