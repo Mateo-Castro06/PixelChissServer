@@ -1,10 +1,9 @@
 package com.pixelchiss.authservice
 
 import org.junit.jupiter.api.Test
-import org.springframework.boot.test.context.SpringBootTest
+import com.pixelchiss.auth.support.AuthIntegrationTest
 
-@SpringBootTest
-class AuthServiceApplicationTests {
+class AuthServiceApplicationTests : AuthIntegrationTest() {
 
     @Test
     fun contextLoads() {
