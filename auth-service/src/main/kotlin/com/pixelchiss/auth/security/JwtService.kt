@@ -16,6 +16,9 @@ class JwtService(
     @Value("\${jwt.private-key}")
     private val privateKeyPath: String
 ) {
+    private companion object {
+        const val ACCESS_TOKEN_LIFETIME_MILLIS = 15L * 60 * 1000
+    }
 
     private val privateKey: PrivateKey by lazy {
         loadPrivateKey(privateKeyPath)
@@ -23,7 +26,7 @@ class JwtService(
 
     fun generateAccessToken(userId: Long, email: String): String {
         val now = Date()
-        val expiration = Date(now.time + 15 * 60 * 1000)
+        val expiration = Date(now.time + ACCESS_TOKEN_LIFETIME_MILLIS)
 
         return Jwts.builder()
             .subject(userId.toString())

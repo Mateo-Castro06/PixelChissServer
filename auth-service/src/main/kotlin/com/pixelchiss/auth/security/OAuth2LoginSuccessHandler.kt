@@ -1,5 +1,6 @@
 package com.pixelchiss.auth.security
 
+import com.pixelchiss.auth.entity.User
 import com.pixelchiss.auth.service.RefreshTokenService
 import com.pixelchiss.auth.service.UserService
 import jakarta.servlet.http.HttpServletRequest
@@ -23,24 +24,7 @@ class OAuth2LoginSuccessHandler(
         response: HttpServletResponse,
         authentication: Authentication
     ) {
-        val oauth2User = authentication.principal as OAuth2User
-
-        val googleId = oauth2User.getAttribute<String>("sub")
-        val email = oauth2User.getAttribute<String>("email")
-        val displayName = oauth2User.getAttribute<String>("name")
-
-        requireNotNull(googleId)
-        requireNotNull(email)
-        requireNotNull(displayName)
-
-        val existingUser = userService.findByGoogleId(googleId)
-
-        val user = existingUser ?: userService.createUser(
-            googleId = googleId,
-            email = email,
-            displayName = displayName
-        )
-
+        val user = findOrCreateUser(authentication.principal as OAuth2User)
         val accessToken = jwtService.generateAccessToken(
             userId = user.id!!,
             email = user.email
@@ -50,6 +34,30 @@ class OAuth2LoginSuccessHandler(
             userId = user.id!!
         )
 
+        response.sendRedirect(createClientRedirect(request, accessToken, refreshToken.token))
+    }
+
+    private fun findOrCreateUser(oauth2User: OAuth2User): User {
+        val googleId = oauth2User.getAttribute<String>("sub")
+        val email = oauth2User.getAttribute<String>("email")
+        val displayName = oauth2User.getAttribute<String>("name")
+
+        requireNotNull(googleId)
+        requireNotNull(email)
+        requireNotNull(displayName)
+
+        return userService.findByGoogleId(googleId) ?: userService.createUser(
+            googleId = googleId,
+            email = email,
+            displayName = displayName
+        )
+    }
+
+    private fun createClientRedirect(
+        request: HttpServletRequest,
+        accessToken: String,
+        refreshToken: String
+    ): String {
         val session = request.getSession(false)
 
         val clientState = session?.getAttribute(
@@ -65,27 +73,15 @@ class OAuth2LoginSuccessHandler(
 
         session.invalidate()
 
-        val encodedState = URLEncoder.encode(
-            clientState,
-            StandardCharsets.UTF_8
-        )
+        val encodedState = encodeQueryValue(clientState)
+        val encodedAccessToken = encodeQueryValue(accessToken)
+        val encodedRefreshToken = encodeQueryValue(refreshToken)
 
-        val encodedAccessToken = URLEncoder.encode(
-            accessToken,
-            StandardCharsets.UTF_8
-        )
-
-        val encodedRefreshToken = URLEncoder.encode(
-            refreshToken.token,
-            StandardCharsets.UTF_8
-        )
-
-        val redirectUrl =
-            "http://127.0.0.1:$clientPort/callback" +
-                    "?accessToken=$encodedAccessToken" +
-                    "&refreshToken=$encodedRefreshToken" +
-                    "&state=$encodedState"
-
-        response.sendRedirect(redirectUrl)
+        return "http://127.0.0.1:$clientPort/callback" +
+            "?accessToken=$encodedAccessToken" +
+            "&refreshToken=$encodedRefreshToken" +
+            "&state=$encodedState"
     }
+
+    private fun encodeQueryValue(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
 }
