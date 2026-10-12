@@ -1,12 +1,15 @@
 from dataclasses import dataclass
+from typing import Optional
 
 from app.core import config
 from app.models.enums import LobbyStatus, PlayerRole
+
 @dataclass
 class Player:
     user_id: str
     display_name: str
     role: PlayerRole
+    ready: bool = False 
 
 @dataclass
 class Lobby:
@@ -17,3 +20,4 @@ class Lobby:
     version: int
     players: list[Player]
     max_players: int = config.MAX_PLAYERS
+    map_id: Optional[str] = None
