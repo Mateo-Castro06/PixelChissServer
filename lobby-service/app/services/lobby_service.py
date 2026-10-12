@@ -11,6 +11,10 @@ ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 CODE_LENGTH = 6
 
 
+def _normalize(code: str):
+    return code.strip().upper()
+
+
 def _new_code():
     return "".join(secrets.choice(ALPHABET) for _ in range(CODE_LENGTH))
 
@@ -48,8 +52,27 @@ class LobbyService:
             raise NotInLobbyError()
         return lobby
 
+    async def leave_lobby(self, code: str, user: CurrentUser):
+        result = await self.repo.leave(_normalize(code), user.id)
+        self._raise_if_failed(result)
+
+    async def set_ready(self, code: str, user: CurrentUser, ready: bool):
+        code = _normalize(code)
+        result = await self.repo.set_ready(code, user.id, ready)
+        self._raise_if_failed(result)
+        return await self.repo.get(code)
+
     async def _find(self, code: str):
-        lobby = await self.repo.get(code.strip().upper())
+        lobby = await self.repo.get(_normalize(code))
         if lobby is None:
             raise LobbyNotFoundError()
         return lobby
+
+    def _raise_if_failed(self, result: str):
+        """Traduce los resultados de error del repositorio a su excepción."""
+        if result == repo_results.NOT_FOUND:
+            raise LobbyNotFoundError()
+        if result == repo_results.ALREADY_STARTED:
+            raise GameAlreadyStartedError()
+        if result == repo_results.NOT_IN_LOBBY:
+            raise NotInLobbyError()
