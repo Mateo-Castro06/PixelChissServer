@@ -1,0 +1,7 @@
+target/
+keys/
+.idea/
+.git/
+docs/
+.env
+.env.*

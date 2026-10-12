@@ -2,6 +2,8 @@ services:
 
   api-gateway:
     image: pixelchiss-gateway:latest
+    build:
+      context: ../../api-gateway
     container_name: pixelchiss-gateway
     restart: unless-stopped
 
@@ -21,8 +23,17 @@ services:
     networks:
       - pixelchiss-network
 
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+
   eureka-server:
     image: pixelchiss-eureka:latest
+    build:
+      context: ../../eureka-server
     container_name: pixelchiss-eureka
     restart: unless-stopped
     ports:
@@ -32,6 +43,8 @@ services:
 
   auth-service:
     image: pixelchiss-auth:latest
+    build:
+      context: ../../auth-service
     container_name: pixelchiss-auth
     restart: unless-stopped
     environment:
@@ -63,6 +76,51 @@ services:
 
     networks:
       - pixelchiss-network
+
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "--silent", "http://localhost:8081/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+
+  game-service:
+    image: pixelchiss-game:latest
+    build:
+      context: ../../game-service
+    container_name: pixelchiss-game
+    restart: unless-stopped
+    environment:
+      EUREKA_URL: ${EUREKA_URL}
+      JWT_PUBLIC_KEY_PATH: ${JWT_PUBLIC_KEY_PATH}
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/pixelchiss}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      GAME_LOBBY_TOKEN: ${GAME_LOBBY_TOKEN:?Set a private Lobby-to-Game token of at least 32 characters}
+      GAME_ALLOWED_ORIGINS: ${GAME_ALLOWED_ORIGINS:-http://localhost:8080}
+
+    expose:
+      - "8084"
+
+    volumes:
+      - ../../auth-service/keys/public_key.pem:${JWT_PUBLIC_KEY_PATH}:ro
+
+    depends_on:
+      eureka-server:
+        condition: service_started
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    networks:
+      - pixelchiss-network
+
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "--silent", "http://localhost:8084/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
 
   postgres:
     image: postgres:17

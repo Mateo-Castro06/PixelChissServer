@@ -10,12 +10,15 @@ import java.util.UUID
 class RefreshTokenService(
     private val refreshTokenRepository: RefreshTokenRepository
 ) {
+    private companion object {
+        const val REFRESH_TOKEN_LIFETIME_SECONDS = 30L * 24 * 60 * 60
+    }
 
     fun create(userId: Long): RefreshToken {
         val refreshToken = RefreshToken(
             token = UUID.randomUUID().toString(),
             userId = userId,
-            expiresAt = Instant.now().plusSeconds(30L * 24 * 60 * 60)
+            expiresAt = Instant.now().plusSeconds(REFRESH_TOKEN_LIFETIME_SECONDS)
         )
 
         return refreshTokenRepository.save(refreshToken)
@@ -23,16 +26,9 @@ class RefreshTokenService(
 
     fun findValidToken(token: String): RefreshToken? {
         val refreshToken = refreshTokenRepository.findByToken(token).orElse(null)
+            ?: return null
 
-        if (refreshToken == null) {
-            return null
-        }
-
-        if (refreshToken.revoked) {
-            return null
-        }
-
-        if (refreshToken.expiresAt.isBefore(Instant.now())) {
+        if (refreshToken.revoked || refreshToken.expiresAt.isBefore(Instant.now())) {
             return null
         }
 
