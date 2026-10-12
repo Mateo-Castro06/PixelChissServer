@@ -1,8 +1,8 @@
 import secrets
 
 from app.clients.auth_client import AuthClient
-from app.core.exceptions import (GameAlreadyStartedError, LobbyError, LobbyFullError,
-                                 LobbyNotFoundError, NotInLobbyError)
+from app.core.exceptions import (BotNotFoundError, GameAlreadyStartedError, LobbyError, LobbyFullError,
+                                 LobbyNotFoundError, NotHostError, NotInLobbyError)
 from app.core.security import CurrentUser
 from app.repositories import lobby_repository as repo_results
 from app.repositories.lobby_repository import LobbyRepository
@@ -62,6 +62,18 @@ class LobbyService:
         self._raise_if_failed(result)
         return await self.repo.get(code)
 
+    async def add_bot(self, code: str, user: CurrentUser):
+        code = _normalize(code)
+        result = await self.repo.add_bot(code, user.id)
+        self._raise_if_failed(result)
+        return await self.repo.get(code)
+
+    async def remove_bot(self, code: str, user: CurrentUser, bot_id: str):
+        code = _normalize(code)
+        result = await self.repo.remove_bot(code, user.id, bot_id)
+        self._raise_if_failed(result)
+        return await self.repo.get(code)
+
     async def _find(self, code: str):
         lobby = await self.repo.get(_normalize(code))
         if lobby is None:
@@ -76,3 +88,9 @@ class LobbyService:
             raise GameAlreadyStartedError()
         if result == repo_results.NOT_IN_LOBBY:
             raise NotInLobbyError()
+        if result == repo_results.NOT_HOST:
+            raise NotHostError()
+        if result == repo_results.FULL:
+            raise LobbyFullError()
+        if result == repo_results.BOT_NOT_FOUND:
+            raise BotNotFoundError()

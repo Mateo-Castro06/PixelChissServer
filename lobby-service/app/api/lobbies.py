@@ -124,3 +124,47 @@ async def set_ready(
     service: LobbyService = Depends(get_lobby_service),
 ):
     return await service.set_ready(code, user, body.ready)
+
+@router.post(
+    "/{code}/bots",
+    response_model=LobbyResponse,
+    status_code=201,
+    summary="Añadir un bot",
+    description="Solo el anfitrión. Agrega un bot a la sala. "
+                "Ocupa un cupo (el máximo de 4 incluye a los bots). Se llama Bot N, su id es bot-CODIGO-N"
+                "y siempre aparece como listo. Sus decisiones en la partida las toma el Game, sin elegir dificultad.",
+    responses={
+        **UNAUTHORIZED,
+        **NOT_FOUND,
+        403: {"model": ErrorResponse, "description": "No perteneces a la sala o no eres el anfitrión"},
+        409: {"model": ErrorResponse, "description": "La sala alcanzó el máximo de 4 o la partida ya inició"},
+    },
+)
+async def add_bot(
+    code: str,
+    user: CurrentUser = Depends(get_current_user),
+    service: LobbyService = Depends(get_lobby_service),
+):
+    return await service.add_bot(code, user)
+
+
+@router.delete(
+    "/{code}/bots/{bot_id}",
+    response_model=LobbyResponse,
+    summary="Quitar un bot",
+    description="Solo el anfitrión. Retira al bot de la sala y libera su cupo. "
+                "Con este endpoint no se puede sacar a jugadores humanos.",
+    responses={
+        **UNAUTHORIZED,
+        404: {"model": ErrorResponse, "description": "La sala o el bot no existen"},
+        403: {"model": ErrorResponse, "description": "No perteneces a la sala o no eres el anfitrión"},
+        409: {"model": ErrorResponse, "description": "La partida ya inició"},
+    },
+)
+async def remove_bot(
+    code: str,
+    bot_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    service: LobbyService = Depends(get_lobby_service),
+):
+    return await service.remove_bot(code, user, bot_id)
