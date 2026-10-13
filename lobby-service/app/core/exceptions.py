@@ -36,6 +36,14 @@ class BotNotFoundError(LobbyError):
 class InvalidMapError(LobbyError):
     def __init__(self):
         super().__init__(400, "El mapa no existe")
+
+class BannedError(LobbyError):
+    def __init__(self):
+        super().__init__(403, "Fuiste expulsado de esta sala")
+
+class PlayerNotFoundError(LobbyError):
+    def __init__(self):
+        super().__init__(404, "Jugador no encontrado en la sala")
                
 async def lobby_error_handler(request: Request, exc: LobbyError):
     return JSONResponse(

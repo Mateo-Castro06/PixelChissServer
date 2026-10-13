@@ -42,6 +42,15 @@ async def create_lobby(
 ):
     return await service.create_lobby(user)
 
+@router.get(
+    "/maps",
+    response_model=list[MapResponse],
+    summary="Listar los mapas",
+    description="Devuelve los mapas disponibles con su nombre, temática y descripción "
+                "para mostrar la vista previa antes de votar. La imagen de la vista previa la pone el cliente, "
+                "usando el id del mapa.",
+    responses={**UNAUTHORIZED},
+)
 
 @router.get(
     "/{code}",
@@ -56,15 +65,6 @@ async def create_lobby(
     },
 )
 
-@router.get(
-    "/maps",
-    response_model=list[MapResponse],
-    summary="Listar los mapas",
-    description="Devuelve los mapas disponibles con su nombre, temática y descripción "
-                "para mostrar la vista previa antes de votar. La imagen de la vista previa la pone el cliente, "
-                "usando el id del mapa.",
-    responses={**UNAUTHORIZED},
-)
 
 async def list_maps(user: CurrentUser = Depends(get_current_user)):
     return MAPS
