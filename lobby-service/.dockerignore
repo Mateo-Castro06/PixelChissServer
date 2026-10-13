@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.idea/
+.git/
+.env
+.env.*
+tools/
+test_main.http

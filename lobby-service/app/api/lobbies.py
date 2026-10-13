@@ -2,6 +2,7 @@ import redis.asyncio as redis
 from fastapi import APIRouter, Depends, Response
 
 from app.clients.auth_client import AuthClient
+from app.clients.game_client import GameClient
 from app.core.redis import get_redis
 from app.core.security import CurrentUser, get_current_user
 from app.repositories.lobby_repository import LobbyRepository
@@ -19,12 +20,15 @@ NOT_FOUND = {404: {"model": ErrorResponse, "description": "El código de sala es
 def get_auth_client():
     return AuthClient()
 
+def get_game_client():
+    return GameClient()
 
 def get_lobby_service(
     r: redis.Redis = Depends(get_redis),
     auth_client: AuthClient = Depends(get_auth_client),
+    game_client: GameClient = Depends(get_game_client),
 ):
-    return LobbyService(LobbyRepository(r), auth_client)
+    return LobbyService(LobbyRepository(r), auth_client, game_client)
 
 
 @router.post(
@@ -216,3 +220,10 @@ async def kick_player(code: str, player_id: str,
                       user: CurrentUser = Depends(get_current_user),
                       service: LobbyService = Depends(get_lobby_service)):
     return await service.kick_player(code, user, player_id)
+
+@router.post("/{code}/start", response_model=LobbyResponse, summary="Iniciar la partida",
+             description="Solo el anfitrión. Mínimo 2 participantes y todos listos.",
+             responses={**UNAUTHORIZED, **NOT_FOUND})
+async def start_game(code: str, user: CurrentUser = Depends(get_current_user),
+                     service: LobbyService = Depends(get_lobby_service)):
+    return await service.start_game(code, user)

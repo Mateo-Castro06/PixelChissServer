@@ -85,6 +85,10 @@ spring:
                 - Method=GET
               filters:
                 - RewritePath=/api/game/swagger-ui/(?<asset>.*), /swagger-ui/${asset}
+            - id: lobby-api
+              uri: lb://LOBBY-SERVICE
+              predicates:
+                - Path=/api/lobbies/**
 server:
   port: 8080
 
