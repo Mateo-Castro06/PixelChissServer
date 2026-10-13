@@ -208,3 +208,11 @@ async def vote_map(
     service: LobbyService = Depends(get_lobby_service),
 ):
     return await service.vote_map(code, user, body.map_id)
+
+@router.delete("/{code}/players/{player_id}", response_model=LobbyResponse, summary="Expulsar a un jugador",
+               description="Solo el anfitrión y solo en sala de espera. El expulsado no puede volver a unirse.",
+               responses={**UNAUTHORIZED, **NOT_FOUND})
+async def kick_player(code: str, player_id: str,
+                      user: CurrentUser = Depends(get_current_user),
+                      service: LobbyService = Depends(get_lobby_service)):
+    return await service.kick_player(code, user, player_id)

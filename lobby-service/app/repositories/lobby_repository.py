@@ -1,3 +1,4 @@
+import code
 import time
 
 import redis.asyncio as redis
@@ -24,10 +25,17 @@ BOT_ADDED = "BOT_ADDED"
 BOT_REMOVED = "BOT_REMOVED"
 BOT_NOT_FOUND = "BOT_NOT_FOUND"
 
+BANNED = "BANNED"
+KICKED = "KICKED"
+PLAYER_NOT_FOUND = "PLAYER_NOT_FOUND"
+IS_BOT = "IS_BOT"
+SELF_KICK = "SELF_KICK"
+
 _ADD_PLAYER_LUA = """
 local status = redis.call('HGET', KEYS[2], 'status')
 if not status then return -2 end
 if status ~= 'WAITING' then return -1 end
+if redis.call('SISMEMBER', KEYS[4], ARGV[1]) == 1 then return -3 end
 if redis.call('ZSCORE', KEYS[1], ARGV[1]) then return 2 end
 if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[2]) then return 0 end
 redis.call('ZADD', KEYS[1], ARGV[3], ARGV[1])
@@ -35,7 +43,7 @@ redis.call('HSET', KEYS[3], ARGV[1], ARGV[4])
 redis.call('HINCRBY', KEYS[2], 'version', 1)
 return 1
 """
-_ADD_PLAYER_RESULTS = {1: ADDED, 2: ALREADY_IN, 0: FULL, -1: ALREADY_STARTED, -2: NOT_FOUND}
+_ADD_PLAYER_RESULTS = {1: ADDED, 2: ALREADY_IN, 0: FULL, -1: ALREADY_STARTED, -2: NOT_FOUND, -3: BANNED}
 
 _LEAVE_LUA = """
 local status = redis.call('HGET', KEYS[2], 'status')
@@ -46,6 +54,7 @@ redis.call('ZREM', KEYS[1], ARGV[1])
 redis.call('HDEL', KEYS[3], ARGV[1])
 redis.call('SREM', KEYS[4], ARGV[1])
 redis.call('HDEL', KEYS[6], ARGV[1])
+redis.call('HDEL', KEYS[7], ARGV[1])
 local next_host = nil
 for _, id in ipairs(redis.call('ZRANGE', KEYS[1], 0, -1)) do
   if redis.call('SISMEMBER', KEYS[5], id) == 0 then
@@ -54,7 +63,7 @@ for _, id in ipairs(redis.call('ZRANGE', KEYS[1], 0, -1)) do
   end
 end
 if not next_host then
-  redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6])
+  redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6], KEYS[7])
   return 2
 end
 if redis.call('HGET', KEYS[2], 'host_id') == ARGV[1] then
@@ -131,9 +140,28 @@ return 1
 """
 _VOTE_RESULTS = {1: CHANGED, 0: UNCHANGED, -3: NOT_IN_LOBBY, -1: ALREADY_STARTED, -2: NOT_FOUND}
 
+_KICK_LUA = """
+local status = redis.call('HGET', KEYS[2], 'status')
+if not status then return -2 end
+if status ~= 'WAITING' then return -1 end
+if not redis.call('ZSCORE', KEYS[1], ARGV[1]) then return -3 end
+if redis.call('HGET', KEYS[2], 'host_id') ~= ARGV[1] then return -4 end
+if ARGV[1] == ARGV[2] then return -6 end
+if redis.call('SISMEMBER', KEYS[5], ARGV[2]) == 1 then return -7 end
+if not redis.call('ZSCORE', KEYS[1], ARGV[2]) then return -5 end
+redis.call('ZREM', KEYS[1], ARGV[2])
+redis.call('HDEL', KEYS[3], ARGV[2])
+redis.call('SREM', KEYS[4], ARGV[2])
+redis.call('HDEL', KEYS[6], ARGV[2])
+redis.call('SADD', KEYS[7], ARGV[2])
+redis.call('HINCRBY', KEYS[2], 'version', 1)
+return 1
+"""
+_KICK_RESULTS = {1: KICKED, -5: PLAYER_NOT_FOUND, -6: SELF_KICK, -7: IS_BOT, -4: NOT_HOST,
+                 -3: NOT_IN_LOBBY, -1: ALREADY_STARTED, -2: NOT_FOUND}
+
 def _lobby_key(code: str):
     return f"lobby:{code}"
-
 
 def _players_key(code: str):
     return f"lobby:{code}:players"
@@ -147,8 +175,11 @@ def _ready_key(code: str):
 def _bots_key(code: str):
     return f"lobby:{code}:bots"
 
-def _votes_key(code: str):# hash: user_id y el id del mapa por el que votó
+def _votes_key(code: str):
     return f"lobby:{code}:votes"
+
+def _banned_key(code: str):
+    return f"lobby:{code}:banned"
 
 class LobbyRepository:
     def __init__(self, r: redis.Redis):
@@ -159,6 +190,7 @@ class LobbyRepository:
         self._add_bot_script = r.register_script(_ADD_BOT_LUA)
         self._remove_bot_script = r.register_script(_REMOVE_BOT_LUA)
         self._vote_script = r.register_script(_VOTE_LUA)
+        self._kick_script = r.register_script(_KICK_LUA)
 
     async def create(self, code: str, host_id: str, host_name: str):
         created = await self.r.hsetnx(_lobby_key(code), "host_id", host_id)
@@ -171,24 +203,25 @@ class LobbyRepository:
         })
         await self.r.zadd(_players_key(code), {host_id: time.time()})
         await self.r.hset(_names_key(code), host_id, host_name)
-        await self._renew_ttl(code)
+        await self._refresh_lobby_expiration(code)
         return True
 
     async def add_player(self, code: str, user_id: str, display_name: str):
         result = await self._add_player_script(
-            keys=[_players_key(code), _lobby_key(code), _names_key(code)],
+            keys=[_players_key(code), _lobby_key(code), _names_key(code), _banned_key(code)],
             args=[user_id, config.MAX_PLAYERS, time.time(), display_name],
         )
         if result == 1:
-            await self._renew_ttl(code)
+            await self._refresh_lobby_expiration(code)
         return _ADD_PLAYER_RESULTS.get(result, NOT_FOUND)
 
     async def leave(self, code: str, user_id: str):
         result = await self._leave_script(
-            keys=[_players_key(code), _lobby_key(code), _names_key(code), _ready_key(code), _bots_key(code), _votes_key(code)],            args=[user_id],
+            keys=[_players_key(code), _lobby_key(code), _names_key(code), _ready_key(code), _bots_key(code), _votes_key(code), _banned_key(code)],
+            args=[user_id],
         )
         if result == 1:
-            await self._renew_ttl(code)
+            await self._refresh_lobby_expiration(code)
         return _LEAVE_RESULTS.get(result, NOT_FOUND)
 
     async def set_ready(self, code: str, user_id: str, ready: bool):
@@ -197,7 +230,7 @@ class LobbyRepository:
             args=[user_id, "1" if ready else "0"],
         )
         if result == 1:
-            await self._renew_ttl(code)
+            await self._refresh_lobby_expiration(code)
         return _SET_READY_RESULTS.get(result, NOT_FOUND)
 
     async def add_bot(self, code: str, host_id: str):
@@ -206,7 +239,7 @@ class LobbyRepository:
             args=[host_id, config.MAX_PLAYERS, code, time.time()],
         )
         if result == 1:
-            await self._renew_ttl(code)
+            await self._refresh_lobby_expiration(code)
         return _ADD_BOT_RESULTS.get(result, NOT_FOUND)
 
     async def remove_bot(self, code: str, host_id: str, bot_id: str):
@@ -215,7 +248,7 @@ class LobbyRepository:
             args=[host_id, bot_id],
         )
         if result == 1:
-            await self._renew_ttl(code)
+            await self._refresh_lobby_expiration(code)
         return _REMOVE_BOT_RESULTS.get(result, NOT_FOUND)
 
     async def vote(self, code: str, user_id: str, map_id: str):
@@ -224,7 +257,7 @@ class LobbyRepository:
             args=[user_id, map_id],
         )
         if result == 1:
-            await self._renew_ttl(code)
+            await self._refresh_lobby_expiration(code)
         return _VOTE_RESULTS.get(result, NOT_FOUND)
     
     async def get(self, code: str):
@@ -236,6 +269,7 @@ class LobbyRepository:
         ready_ids = await self.r.smembers(_ready_key(code))
         bot_ids = await self.r.smembers(_bots_key(code))
         votes = await self.r.hgetall(_votes_key(code))
+        banned = await self.r.smembers(_banned_key(code))
         players = [
             Player(
                 user_id=user_id,
@@ -256,8 +290,19 @@ class LobbyRepository:
             players=players,
             map_id=data.get("map_id"),
             map_votes={map_id: list(votes.values()).count(map_id) for map_id in MAP_IDS},
+            banned_ids=sorted(banned),
         )
 
-    async def _renew_ttl(self, code: str):
-        for key in (_lobby_key(code), _players_key(code), _names_key(code), _ready_key(code), _bots_key(code), _votes_key(code)):
+    async def _refresh_lobby_expiration(self, code: str):
+        for key in (_lobby_key(code), _players_key(code), _names_key(code), _ready_key(code), _bots_key(code), _votes_key(code), _banned_key(code)):
             await self.r.expire(key, config.LOBBY_TIMEOUT)
+
+    async def kick(self, code: str, host_id: str, target_id: str):
+        result = await self._kick_script(
+            keys=[_players_key(code), _lobby_key(code), _names_key(code), _ready_key(code),
+                _bots_key(code), _votes_key(code), _banned_key(code)],
+            args=[host_id, target_id],
+        )
+        if result == 1:
+            await self._refresh_lobby_expiration(code)
+        return _KICK_RESULTS.get(result, NOT_FOUND)

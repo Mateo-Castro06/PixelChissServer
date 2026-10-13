@@ -44,7 +44,15 @@ class BannedError(LobbyError):
 class PlayerNotFoundError(LobbyError):
     def __init__(self):
         super().__init__(404, "Jugador no encontrado en la sala")
-               
+
+class NotEnoughPlayersError(LobbyError):
+    def __init__(self):
+        super().__init__(409, f"Se necesitan al menos {config.MIN_PLAYERS} jugadores para iniciar")
+
+class NotAllReadyError(LobbyError):
+    def __init__(self):
+        super().__init__(409, "Debes esperar a que todos los jugadores estén listos")
+
 async def lobby_error_handler(request: Request, exc: LobbyError):
     return JSONResponse(
         status_code=exc.status_code,

@@ -25,3 +25,4 @@ class Lobby:
     map_id: Optional[str] = None
     map_votes: dict[str, int] = field(default_factory=dict)
     banned_players: list[str] = field(default_factory=list)
+    game_id: Optional[str] = None

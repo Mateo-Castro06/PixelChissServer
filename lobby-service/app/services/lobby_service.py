@@ -1,7 +1,7 @@
 import secrets
 
 from app.clients.auth_client import AuthClient
-from app.core.exceptions import (BotNotFoundError, GameAlreadyStartedError,
+from app.core.exceptions import (BannedError, PlayerNotFoundError, BotNotFoundError, GameAlreadyStartedError,
                                  InvalidMapError, LobbyError, LobbyFullError,
                                  LobbyNotFoundError, NotHostError, NotInLobbyError)
 from app.core.security import CurrentUser
@@ -44,6 +44,8 @@ class LobbyService:
             raise LobbyFullError()
         if result == repo_results.ALREADY_STARTED:
             raise GameAlreadyStartedError()
+        if result == repo_results.BANNED:
+            raise BannedError()
         if result == repo_results.NOT_FOUND:
             raise LobbyNotFoundError()
         return await self.repo.get(lobby.code)
@@ -76,6 +78,12 @@ class LobbyService:
         self._raise_if_failed(result)
         return await self.repo.get(code)
 
+    async def kick_player(self, code: str, user: CurrentUser, target_id: str):
+        code = _normalize(code)
+        result = await self.repo.kick(code, user.id, target_id)
+        self._raise_if_failed(result)
+        return await self.repo.get(code)
+
     async def vote_map(self, code: str, user: CurrentUser, map_id: str):
         if map_id not in MAP_IDS:
             raise InvalidMapError()
@@ -104,3 +112,9 @@ class LobbyService:
             raise LobbyFullError()
         if result == repo_results.BOT_NOT_FOUND:
             raise BotNotFoundError()
+        if result == repo_results.PLAYER_NOT_FOUND:
+            raise PlayerNotFoundError()
+        if result == repo_results.IS_BOT:
+            raise LobbyError(400, "Para quitar un bot usa DELETE /api/lobbies/{code}/bots/{bot_id}")
+        if result == repo_results.SELF_KICK:
+            raise LobbyError(400, "No puedes expulsarte a ti mismo; usa salir de la sala")

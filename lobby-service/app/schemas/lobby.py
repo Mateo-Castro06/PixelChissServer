@@ -25,6 +25,7 @@ class LobbyResponse(BaseModel):
     map_votes: dict[str, int] = Field(description="Votos que lleva cada mapa (incluye los que tienen 0)", examples=[{"classic": 2, "science": 1}])
     players: list[PlayerResponse] = Field(description="Participantes, en el orden en que entraron")
     banned_players: list[str] = Field(description="Lista de jugadores expulsados", examples=[["57"]])
+    game_id: Optional[str] = Field(default=None, description="Id de la partida en curso", examples=["123"])
 
 
 class MapResponse(BaseModel):
