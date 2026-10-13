@@ -4,6 +4,7 @@ import redis.asyncio as redis
 
 from app.core import config
 from app.models.enums import LobbyStatus, PlayerRole
+from app.models.game_map import MAP_IDS
 from app.models.lobby import Lobby, Player
 
 ADDED = "ADDED"
@@ -44,6 +45,7 @@ if not redis.call('ZSCORE', KEYS[1], ARGV[1]) then return -3 end
 redis.call('ZREM', KEYS[1], ARGV[1])
 redis.call('HDEL', KEYS[3], ARGV[1])
 redis.call('SREM', KEYS[4], ARGV[1])
+redis.call('HDEL', KEYS[6], ARGV[1])
 local next_host = nil
 for _, id in ipairs(redis.call('ZRANGE', KEYS[1], 0, -1)) do
   if redis.call('SISMEMBER', KEYS[5], id) == 0 then
@@ -52,7 +54,7 @@ for _, id in ipairs(redis.call('ZRANGE', KEYS[1], 0, -1)) do
   end
 end
 if not next_host then
-  redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5])
+  redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6])
   return 2
 end
 if redis.call('HGET', KEYS[2], 'host_id') == ARGV[1] then
@@ -117,6 +119,17 @@ return 1
 """
 _REMOVE_BOT_RESULTS = {1: BOT_REMOVED, -5: BOT_NOT_FOUND, -4: NOT_HOST, -3: NOT_IN_LOBBY, -1: ALREADY_STARTED, -2: NOT_FOUND}
 
+_VOTE_LUA = """
+local status = redis.call('HGET', KEYS[2], 'status')
+if not status then return -2 end
+if status ~= 'WAITING' then return -1 end
+if not redis.call('ZSCORE', KEYS[1], ARGV[1]) then return -3 end
+if redis.call('HGET', KEYS[3], ARGV[1]) == ARGV[2] then return 0 end
+redis.call('HSET', KEYS[3], ARGV[1], ARGV[2])
+redis.call('HINCRBY', KEYS[2], 'version', 1)
+return 1
+"""
+_VOTE_RESULTS = {1: CHANGED, 0: UNCHANGED, -3: NOT_IN_LOBBY, -1: ALREADY_STARTED, -2: NOT_FOUND}
 
 def _lobby_key(code: str):
     return f"lobby:{code}"
@@ -134,6 +147,9 @@ def _ready_key(code: str):
 def _bots_key(code: str):
     return f"lobby:{code}:bots"
 
+def _votes_key(code: str):# hash: user_id y el id del mapa por el que votó
+    return f"lobby:{code}:votes"
+
 class LobbyRepository:
     def __init__(self, r: redis.Redis):
         self.r = r
@@ -142,6 +158,7 @@ class LobbyRepository:
         self._set_ready_script = r.register_script(_SET_READY_LUA)
         self._add_bot_script = r.register_script(_ADD_BOT_LUA)
         self._remove_bot_script = r.register_script(_REMOVE_BOT_LUA)
+        self._vote_script = r.register_script(_VOTE_LUA)
 
     async def create(self, code: str, host_id: str, host_name: str):
         created = await self.r.hsetnx(_lobby_key(code), "host_id", host_id)
@@ -168,8 +185,7 @@ class LobbyRepository:
 
     async def leave(self, code: str, user_id: str):
         result = await self._leave_script(
-            keys=[_players_key(code), _lobby_key(code), _names_key(code), _ready_key(code), _bots_key(code)],
-            args=[user_id],
+            keys=[_players_key(code), _lobby_key(code), _names_key(code), _ready_key(code), _bots_key(code), _votes_key(code)],            args=[user_id],
         )
         if result == 1:
             await self._renew_ttl(code)
@@ -202,6 +218,15 @@ class LobbyRepository:
             await self._renew_ttl(code)
         return _REMOVE_BOT_RESULTS.get(result, NOT_FOUND)
 
+    async def vote(self, code: str, user_id: str, map_id: str):
+        result = await self._vote_script(
+            keys=[_players_key(code), _lobby_key(code), _votes_key(code)],
+            args=[user_id, map_id],
+        )
+        if result == 1:
+            await self._renew_ttl(code)
+        return _VOTE_RESULTS.get(result, NOT_FOUND)
+    
     async def get(self, code: str):
         data = await self.r.hgetall(_lobby_key(code))
         if not data:
@@ -210,6 +235,7 @@ class LobbyRepository:
         names = await self.r.hgetall(_names_key(code))
         ready_ids = await self.r.smembers(_ready_key(code))
         bot_ids = await self.r.smembers(_bots_key(code))
+        votes = await self.r.hgetall(_votes_key(code))
         players = [
             Player(
                 user_id=user_id,
@@ -217,6 +243,7 @@ class LobbyRepository:
                 role=PlayerRole.HOST if user_id == data["host_id"] else PlayerRole.PLAYER,
                 ready=user_id in bot_ids or user_id in ready_ids,
                 is_bot=user_id in bot_ids,
+                voted_map_id=votes.get(user_id),
             )
             for user_id in members
         ]
@@ -228,8 +255,9 @@ class LobbyRepository:
             version=int(data.get("version", 1)),
             players=players,
             map_id=data.get("map_id"),
+            map_votes={map_id: list(votes.values()).count(map_id) for map_id in MAP_IDS},
         )
 
     async def _renew_ttl(self, code: str):
-        for key in (_lobby_key(code), _players_key(code), _names_key(code), _ready_key(code), _bots_key(code)):
+        for key in (_lobby_key(code), _players_key(code), _names_key(code), _ready_key(code), _bots_key(code), _votes_key(code)):
             await self.r.expire(key, config.LOBBY_TIMEOUT)

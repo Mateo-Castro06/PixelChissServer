@@ -1,9 +1,11 @@
 import secrets
 
 from app.clients.auth_client import AuthClient
-from app.core.exceptions import (BotNotFoundError, GameAlreadyStartedError, LobbyError, LobbyFullError,
+from app.core.exceptions import (BotNotFoundError, GameAlreadyStartedError,
+                                 InvalidMapError, LobbyError, LobbyFullError,
                                  LobbyNotFoundError, NotHostError, NotInLobbyError)
 from app.core.security import CurrentUser
+from app.models.game_map import MAP_IDS
 from app.repositories import lobby_repository as repo_results
 from app.repositories.lobby_repository import LobbyRepository
 
@@ -74,6 +76,14 @@ class LobbyService:
         self._raise_if_failed(result)
         return await self.repo.get(code)
 
+    async def vote_map(self, code: str, user: CurrentUser, map_id: str):
+        if map_id not in MAP_IDS:
+            raise InvalidMapError()
+        code = _normalize(code)
+        result = await self.repo.vote(code, user.id, map_id)
+        self._raise_if_failed(result)
+        return await self.repo.get(code)
+    
     async def _find(self, code: str):
         lobby = await self.repo.get(_normalize(code))
         if lobby is None:

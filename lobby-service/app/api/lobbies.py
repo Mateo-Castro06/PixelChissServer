@@ -5,7 +5,9 @@ from app.clients.auth_client import AuthClient
 from app.core.redis import get_redis
 from app.core.security import CurrentUser, get_current_user
 from app.repositories.lobby_repository import LobbyRepository
-from app.schemas.lobby import ErrorResponse, LobbyResponse, ReadyRequest
+from app.models.game_map import MAPS
+from app.schemas.lobby import (ErrorResponse, LobbyResponse, MapResponse, ReadyRequest,
+                               VoteRequest)
 from app.services.lobby_service import LobbyService
 
 router = APIRouter(prefix="/api/lobbies", tags=["Salas"])
@@ -53,6 +55,20 @@ async def create_lobby(
         403: {"model": ErrorResponse, "description": "No perteneces a esta sala"},
     },
 )
+
+@router.get(
+    "/maps",
+    response_model=list[MapResponse],
+    summary="Listar los mapas",
+    description="Devuelve los mapas disponibles con su nombre, temática y descripción "
+                "para mostrar la vista previa antes de votar. La imagen de la vista previa la pone el cliente, "
+                "usando el id del mapa.",
+    responses={**UNAUTHORIZED},
+)
+
+async def list_maps(user: CurrentUser = Depends(get_current_user)):
+    return MAPS
+
 async def get_lobby(
     code: str,
     user: CurrentUser = Depends(get_current_user),
@@ -168,3 +184,27 @@ async def remove_bot(
     service: LobbyService = Depends(get_lobby_service),
 ):
     return await service.remove_bot(code, user, bot_id)
+
+@router.put(
+    "/{code}/vote",
+    response_model=LobbyResponse,
+    summary="Votar el mapa",
+    description="**US-012 esc. 1.** Cualquier jugador de la sala vota por un mapa mientras está en espera. "
+                "Puede cambiar su voto las veces que quiera; cuenta el último. Los bots no votan. "
+                "El mapa ganador (el de más votos; si hay empate o nadie votó, uno al azar entre las opciones) "
+                "se fija cuando el anfitrión inicia la partida.",
+    responses={
+        **UNAUTHORIZED,
+        **NOT_FOUND,
+        400: {"model": ErrorResponse, "description": "El mapa no existe"},
+        403: {"model": ErrorResponse, "description": "No perteneces a esta sala"},
+        409: {"model": ErrorResponse, "description": "La partida ya inició"},
+    },
+)
+async def vote_map(
+    code: str,
+    body: VoteRequest,
+    user: CurrentUser = Depends(get_current_user),
+    service: LobbyService = Depends(get_lobby_service),
+):
+    return await service.vote_map(code, user, body.map_id)
