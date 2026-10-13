@@ -55,6 +55,9 @@ async def create_lobby(
                 "usando el id del mapa.",
     responses={**UNAUTHORIZED},
 )
+async def list_maps(user: CurrentUser = Depends(get_current_user)):
+    return MAPS
+
 
 @router.get(
     "/{code}",
@@ -69,9 +72,6 @@ async def create_lobby(
     },
 )
 
-
-async def list_maps(user: CurrentUser = Depends(get_current_user)):
-    return MAPS
 
 async def get_lobby(
     code: str,

@@ -59,7 +59,7 @@ redis.call('ZREM', KEYS[1], ARGV[1])
 redis.call('HDEL', KEYS[3], ARGV[1])
 redis.call('SREM', KEYS[4], ARGV[1])
 redis.call('HDEL', KEYS[6], ARGV[1])
-redis.call('HDEL', KEYS[7], ARGV[1])
+redis.call('SREM', KEYS[7], ARGV[1])
 local next_host = nil
 for _, id in ipairs(redis.call('ZRANGE', KEYS[1], 0, -1)) do
   if redis.call('SISMEMBER', KEYS[5], id) == 0 then
@@ -333,7 +333,7 @@ class LobbyRepository:
             players=players,
             map_id=data.get("map_id"),
             map_votes={map_id: list(votes.values()).count(map_id) for map_id in MAP_IDS},
-            banned_ids=sorted(banned),
+            banned_players=sorted(banned),
             game_id=data.get("game_id"),
         )
 
@@ -360,7 +360,7 @@ class LobbyRepository:
 
     async def finish_start(self, code: str, map_id: str, game_id: str):
         await self._finish_start_script(keys=[_lobby_key(code)], args=[map_id, game_id])
-        await self._renew_ttl(code)
+        await self._refresh_lobby_expiration(code)
 
     async def abort_start(self, code: str):
         await self._abort_start_script(keys=[_lobby_key(code)])

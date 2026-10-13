@@ -122,36 +122,36 @@ services:
       retries: 6
       start_period: 60s
 
-    lobby-service:
-      image: pixelchiss-lobby:latest
-      build:
-        context: ../../lobby-service
-      container_name: pixelchiss-lobby
-      restart: unless-stopped
-      environment:
-        EUREKA_URL: ${EUREKA_URL}
-        JWT_PUBLIC_KEY_PATH: ${JWT_PUBLIC_KEY_PATH}
-        REDIS_URL: ${LOBBY_REDIS_URL:-redis://redis:6379/1}
-        SERVICE_HOST: lobby-service
-        SERVICE_PORT: 8083
-        GAME_LOBBY_TOKEN: ${GAME_LOBBY_TOKEN:?Set a private Lobby-to-Game token of at least 32 characters}
-      expose:
-        - "8083"
-      volumes:
-        - ../../auth-service/keys/public_key.pem:${JWT_PUBLIC_KEY_PATH}:ro
-      depends_on:
-        eureka-server:
-          condition: service_started
-        redis:
-          condition: service_healthy
-      networks:
-        - pixelchiss-network
-      healthcheck:
-        test: [ "CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if b'UP' in urllib.request.urlopen('http://localhost:8083/health/redis').read() else 1)" ]
-        interval: 10s
-        timeout: 5s
-        retries: 6
-        start_period: 20s
+  lobby-service:
+    image: pixelchiss-lobby:latest
+    build:
+      context: ../../lobby-service
+    container_name: pixelchiss-lobby
+    restart: unless-stopped
+    environment:
+      EUREKA_URL: ${EUREKA_URL}
+      JWT_PUBLIC_KEY_PATH: ${JWT_PUBLIC_KEY_PATH}
+      REDIS_URL: ${LOBBY_REDIS_URL:-redis://redis:6379/1}
+      SERVICE_HOST: lobby-service
+      SERVICE_PORT: 8083
+      GAME_LOBBY_TOKEN: ${GAME_LOBBY_TOKEN:?Set a private Lobby-to-Game token of at least 32 characters}
+    expose:
+      - "8083"
+    volumes:
+      - ../../auth-service/keys/public_key.pem:${JWT_PUBLIC_KEY_PATH}:ro
+    depends_on:
+      eureka-server:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - pixelchiss-network
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if b'UP' in urllib.request.urlopen('http://localhost:8083/health/redis').read() else 1)" ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
   postgres:
     image: postgres:17
