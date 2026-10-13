@@ -135,8 +135,8 @@ services:
       SERVICE_HOST: lobby-service
       SERVICE_PORT: 8083
       GAME_LOBBY_TOKEN: ${GAME_LOBBY_TOKEN:?Set a private Lobby-to-Game token of at least 32 characters}
-    expose:
-      - "8083"
+    ports:
+      - "8083:8083"
     volumes:
       - ../../auth-service/keys/public_key.pem:${JWT_PUBLIC_KEY_PATH}:ro
     depends_on:
@@ -215,4 +215,3 @@ volumes:
 networks:
   pixelchiss-network:
     driver: bridge
-

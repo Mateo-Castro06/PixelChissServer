@@ -95,6 +95,25 @@ docker exec pixelchiss-gateway curl --fail http://game-service:8084/actuator/hea
 No usar `down -v`, `volume prune`, `system prune --volumes` ni eliminar bases o
 volúmenes. Tampoco cambiar el nombre de proyecto para actualizar este despliegue.
 
+## Swagger de Lobby
+
+`lobby-service` es un servicio Compose independiente y publica el puerto 8083 en
+el host. FastAPI sirve Swagger UI en `/docs` y OpenAPI en `/openapi.json`; se
+accede directamente al servicio, no a través del Gateway.
+
+Antes de iniciarlo, configura `GAME_LOBBY_TOKEN` en el `.env` usado por Compose
+con al menos 32 caracteres. El mismo valor debe configurarse en Lobby y Game
+para que puedan comunicarse internamente. Desde la raíz del repositorio:
+
+```powershell
+docker compose --env-file infrastructure/docker/.env -p docker -f infrastructure/docker/docker-compose.yml config --quiet
+docker compose --env-file infrastructure/docker/.env -p docker -f infrastructure/docker/docker-compose.yml up -d --build eureka-server redis lobby-service
+docker compose --env-file infrastructure/docker/.env -p docker -f infrastructure/docker/docker-compose.yml ps
+```
+
+Abre `http://localhost:8083/docs`. Si el contenedor no queda activo, consulta
+`docker compose --env-file infrastructure/docker/.env -p docker -f infrastructure/docker/docker-compose.yml logs lobby-service`.
+
 ## Informe del despliegue del 11 de octubre de 2026
 
 ### Estado inicial, imágenes y recreaciones
