@@ -32,7 +32,11 @@ class NotHostError(LobbyError):
 class BotNotFoundError(LobbyError):
     def __init__(self):
         super().__init__(404, "Bot no encontrado")
-        
+
+class InvalidMapError(LobbyError):
+    def __init__(self):
+        super().__init__(400, "El mapa no existe")
+               
 async def lobby_error_handler(request: Request, exc: LobbyError):
     return JSONResponse(
         status_code=exc.status_code,

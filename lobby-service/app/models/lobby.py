@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from app.core import config
@@ -11,6 +11,7 @@ class Player:
     role: PlayerRole
     ready: bool = False 
     is_bot: bool = False
+    voted_map_id: Optional[str] = None
 
 @dataclass
 class Lobby:
@@ -22,3 +23,4 @@ class Lobby:
     players: list[Player]
     max_players: int = config.MAX_PLAYERS
     map_id: Optional[str] = None
+    map_votes: dict[str, int] = field(default_factory=dict)
