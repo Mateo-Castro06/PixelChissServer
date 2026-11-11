@@ -101,3 +101,9 @@ logging:
   level:
     org.springframework.security: INFO
     org.springframework.cloud.gateway: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus

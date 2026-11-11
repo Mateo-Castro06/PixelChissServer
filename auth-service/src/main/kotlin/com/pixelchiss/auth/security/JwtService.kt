@@ -1,5 +1,6 @@
 package com.pixelchiss.auth.security
 
+import com.pixelchiss.auth.application.AccessTokenIssuer
 import io.jsonwebtoken.Jwts
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -15,7 +16,7 @@ import java.util.Date
 class JwtService(
     @Value("\${jwt.private-key}")
     private val privateKeyPath: String
-) {
+) : AccessTokenIssuer {
     private companion object {
         const val ACCESS_TOKEN_LIFETIME_MILLIS = 15L * 60 * 1000
     }
@@ -24,7 +25,7 @@ class JwtService(
         loadPrivateKey(privateKeyPath)
     }
 
-    fun generateAccessToken(userId: Long, email: String): String {
+    override fun generateAccessToken(userId: Long, email: String): String {
         val now = Date()
         val expiration = Date(now.time + ACCESS_TOKEN_LIFETIME_MILLIS)
 

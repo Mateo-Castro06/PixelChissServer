@@ -1,6 +1,6 @@
 package com.pixelchiss.auth.service
 
-import com.pixelchiss.auth.security.JwtService
+import com.pixelchiss.auth.application.AccessTokenIssuer
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
@@ -9,7 +9,7 @@ import org.springframework.web.server.ResponseStatusException
 class AuthService(
     private val refreshTokenService: RefreshTokenService,
     private val userService: UserService,
-    private val jwtService: JwtService
+    private val jwtService: AccessTokenIssuer
 ) {
     fun refreshAccessToken(token: String): String {
         val refreshToken = refreshTokenService.findValidToken(token)

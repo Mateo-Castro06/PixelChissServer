@@ -1,5 +1,6 @@
 package com.pixelchiss.auth.security
 
+import com.pixelchiss.auth.application.AccessTokenIssuer
 import com.pixelchiss.auth.entity.User
 import com.pixelchiss.auth.service.RefreshTokenService
 import com.pixelchiss.auth.service.UserService
@@ -15,7 +16,7 @@ import java.nio.charset.StandardCharsets
 @Component
 class OAuth2LoginSuccessHandler(
     private val userService: UserService,
-    private val jwtService: JwtService,
+    private val jwtService: AccessTokenIssuer,
     private val refreshTokenService: RefreshTokenService
 ) : AuthenticationSuccessHandler {
 

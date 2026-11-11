@@ -52,3 +52,9 @@ logging:
   level:
     org.springframework.security: INFO
     org.springframework.security.web.FilterChainProxy: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
