@@ -1,0 +1,23 @@
+# Only isolated test data. Use a separate Compose project name.
+services:
+  redis:
+    image: redis:8
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
+    ports: ["127.0.0.1:16379:6379"]
+    volumes: ["redis-test:/data"]
+  mongo:
+    image: mongo:7
+    ports: ["127.0.0.1:17017:27017"]
+    volumes: ["mongo-test:/data/db"]
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: auth_test
+      POSTGRES_PASSWORD: auth_test
+      POSTGRES_DB: auth_refactor_tests
+    ports: ["127.0.0.1:55432:5432"]
+    volumes: ["postgres-test:/var/lib/postgresql/data"]
+volumes:
+  redis-test:
+  mongo-test:
+  postgres-test:
