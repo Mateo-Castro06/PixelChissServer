@@ -31,6 +31,16 @@ curl -fsS http://localhost:8080/actuator/health
 curl -fsS http://localhost:8083/health/redis
 ```
 
+En Windows, usa Docker Desktop con contenedores Linux. Git conserva los scripts
+`.sh` con finales de línea LF y el arranque de Redis también normaliza CRLF para
+admitir copias existentes. Si Redis fallaba con `set: Illegal option`, después de
+actualizar el repositorio recréalo conservando su volumen:
+
+```sh
+docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps --force-recreate redis
+docker compose -f infrastructure/docker/docker-compose.yml up -d
+```
+
 Para monitoreo, define en el mismo `.env` `PIXELCHISS_METRICS_KEY` (mínimo 32 caracteres) y `GRAFANA_ADMIN_PASSWORD` y ejecuta:
 
 ```sh

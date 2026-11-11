@@ -203,7 +203,13 @@ services:
 
   redis:
     image: redis:8
-    entrypoint: ["/bin/sh", "/etc/pixelchiss/redis-start.sh"]
+    # Normalize existing Windows checkouts before the shell parses the script.
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        tr -d '\r' < /etc/pixelchiss/redis-start.sh > /tmp/redis-start.sh
+        exec /bin/sh /tmp/redis-start.sh
     environment:
       REDIS_APPENDONLY: ${REDIS_APPENDONLY:-auto}
     container_name: pixelchiss-redis
