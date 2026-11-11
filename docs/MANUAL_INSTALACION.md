@@ -6,17 +6,17 @@
 
 **Tipo de documento:** manual técnico de instalación, configuración y operación
 
-**Fecha:** 13 de octubre de 2026
+**Actualización del segundo corte:** 10 de noviembre de 2026
 
-**Referencia del código inspeccionado:** rama `main`; inspección funcional y verificaciones sobre `98dd7f4`, actualización de publicación con los cambios de `68c6bbf`.
+**Evidencia vigente:** [matriz y pruebas del segundo corte](second-cut/evidence.md). La sección 6.7 conserva comprobaciones históricas.
 
-Este manual describe los componentes implementados: API Gateway, Eureka Server, Auth Service, Game Service y Lobby Service, junto con PostgreSQL, MongoDB y Redis. El cliente Godot es un consumidor externo; su código no está incluido en este repositorio. La decisión [ADR-001](decisions/ADR-001-remove-player-service.md) retiró Player Service. No existe un servicio ejecutable de Log Aggregator en el Compose actual.
+Este manual describe los componentes implementados: API Gateway, Eureka Server, Auth Service, Game Service y Lobby Service, junto con PostgreSQL, MongoDB, Redis Streams, Prometheus y Grafana. El cliente Godot es un consumidor externo; su código no está incluido en este repositorio. La decisión [ADR-001](decisions/ADR-001-remove-player-service.md) retiró Player Service. No existe un servicio ejecutable de Log Aggregator en el Compose actual.
 
 Las instrucciones se basan en el código y en `infrastructure/docker/docker-compose.yml`. Algunas guías anteriores conservan afirmaciones históricas sobre Lobby o el despliegue de Game que ya no describen la implementación actual. **Lobby está implementado y dispone de imagen y servicio Docker**, incluidas operaciones de bots, votación e integración de inicio con Game. Las limitaciones puntuales se indican en los capítulos correspondientes.
 
 **Convenciones de ejecución.** Cada bloque Bash identifica el directorio de trabajo. `PixelChissServer/` significa la raíz del clon, independientemente de dónde se encuentre en el equipo. Los comandos de administración usan el proyecto Compose `docker` y se ejecutan en `PixelChissServer/infrastructure/docker/`. Mantener ese nombre permite reutilizar la red y los volúmenes del despliegue existente. Si Docker requiere privilegios en el equipo, anteponer `sudo` a los comandos `docker`; no ejecutar Git ni la preparación del repositorio como root. Los valores entre `<...>` son marcadores que deben sustituirse, nunca credenciales reales.
 
-**Alcance de la comprobación.** Durante la elaboración se realizaron consultas de lectura y un handshake WebSocket con token ficticio. No se reiniciaron contenedores, no se crearon salas ni partidas, no se revocaron sesiones y no se ejecutaron instrucciones de instalación sobre el equipo existente. Los pasos de instalación y arranque siguientes son instrucciones para el lector.
+**Comprobación histórica del primer corte.** Durante la elaboración inicial se realizaron consultas de lectura y un handshake WebSocket con token ficticio. No se reiniciaron contenedores, no se crearon salas ni partidas, no se revocaron sesiones y no se ejecutaron instrucciones de instalación sobre el equipo existente. Los pasos de instalación y arranque siguientes son instrucciones para el lector.
 
 **Actualización antes de publicar.** El Compose incorporó posteriormente `8083:8083` para Lobby y su README. Las instrucciones siguientes reflejan esa publicación del puerto. Las verificaciones de 6.7 corresponden al despliegue anterior, donde Lobby se consultó desde Docker; no se recrearon contenedores para comprobar la publicación nueva en el anfitrión.
 
@@ -36,11 +36,12 @@ Las instrucciones se basan en el código y en `infrastructure/docker/docker-comp
 6. [Documentación de los microservicios con Swagger](#capitulo-6)
    - [Tabla de operaciones REST](#operaciones-rest)
    - [WebSocket y ejemplo Godot](#websocket)
-7. [Anexo A. Arquitectura del sistema](#anexo-a)
-8. [Anexo B. Estructura del repositorio](#anexo-b)
-9. [Anexo C. Comandos de administración](#anexo-c)
-10. [Anexo D. Solución de problemas](#anexo-d)
-11. [Anexo E. Lista de verificación para la sustentación](#anexo-e)
+7. [Redis Streams, SAGA y monitoreo](#capitulo-7)
+8. [Anexo A. Arquitectura del sistema](#anexo-a)
+9. [Anexo B. Estructura del repositorio](#anexo-b)
+10. [Anexo C. Comandos de administración](#anexo-c)
+11. [Anexo D. Solución de problemas](#anexo-d)
+12. [Anexo E. Lista de verificación para la sustentación](#anexo-e)
 
 <a id="capitulo-1"></a>
 ## 1. Instalación del API Gateway
@@ -284,7 +285,7 @@ Resultado: `accepting connections`. Tras iniciar Auth deben existir `users` y `r
 
 MongoDB almacena el catálogo de cartas y trivia de Game. `MONGO_INITDB_DATABASE` se configura como `pixelchiss`; **la base y sus colecciones se materializan al escribir datos**. Compose no monta scripts propios ni configura autenticación MongoDB. `CatalogSeeder`, al arrancar Game, lee `game-service/src/main/resources/seed/catalog.json` y realiza upserts por `_id` con `$setOnInsert`.
 
-Las colecciones son `game_cards` y `game_questions`. La semilla contiene cuatro cartas y ocho preguntas, distribuidas entre `classic` y `science`. No sobreescribe documentos que ya existen ni requiere que el lector ejecute una importación manual.
+Las colecciones son `game_cards` y `game_questions`. La semilla final contiene seis cartas y 32 preguntas: 16 para cada mapa. Si la base ya existía, usa la [guía de actualización](GUIA_ACTUALIZACION.md#migrar-mongodb) con Game detenido para retirar los IDs antiguos y conservar los demás datos. No sobreescribe documentos que ya existen ni requiere que el lector ejecute una importación manual.
 
 ```bash
 # Directorio: PixelChissServer/infrastructure/docker/
@@ -382,7 +383,7 @@ Comprobar la conectividad con `pg_isready`, las tablas del capítulo 3, el healt
 | `CardDefinition` | `game_cards` | `id`, `name`, `description`, `type`, `effectCode`, `parameters`, `conditions`, `targetRequired`, `mapId` |
 | `QuestionDefinition` | `game_questions` | `id`, `mapId`, `prompt`, `options:list<String>`, `correctIndex:int` |
 
-MongoDB guarda definiciones del catálogo; las partidas no se duplican allí. Game consulta cartas por tipo y mapa, admitiendo `mapId="*"` para cartas comunes; las preguntas se seleccionan por temática. La semilla se activa por defecto mediante `game.seed.enabled` y no sobreescribe cambios administrativos. No existe un CRUD REST público del catálogo.
+MongoDB guarda definiciones del catálogo; las partidas no se duplican allí. Game consulta cartas por tipo y mapa, admitiendo `mapId="*"` para cartas comunes; las preguntas se seleccionan por temática. La semilla se activa por defecto mediante `game.seed.enabled`: preserva documentos existentes, pero recrea los que falten. Para mantener un catálogo administrado tras retirar documentos, configura `GAME_SEED_ENABLED=false` en el `.env` de Compose o en el entorno del proceso si ejecutas Game fuera de Docker. No arranques la aplicación contra esa base con el valor predeterminado. No existe un CRUD REST público del catálogo.
 
 Comprobar ping, nombres de colecciones, recuentos y `/actuator/health` de Game. Los diagnósticos `/test/mongodb` y `/test/redis` no se usan en las verificaciones de este manual: están deshabilitados por defecto y, si se habilitan, **escriben** datos de prueba.
 
@@ -1031,8 +1032,31 @@ Las rutas siguientes permiten auditar el manual; el código y Compose prevalecen
 - Lobby: `main.py`, `requirements.txt`, `app/api/lobbies.py`, modelos, schemas, servicios, repositorio, clientes Auth/Game, configuración, seguridad, Redis, Eureka y excepciones; prueba de regresión y archivo HTTP legado como contraste.
 - `docs/architecture/ports-and-services.md`, `docs/architecture/api-routing-convention.md` y `docs/decisions/ADR-001-remove-player-service.md`.
 
+<a id="capitulo-7"></a>
+## 7. Redis Streams, SAGA y monitoreo
+
+**Event Bus.** Game y Lobby usan el mismo Redis con bases lógicas distintas. `REDIS_URL` selecciona la base de Game y del stream; `LOBBY_REDIS_URL` la de las salas. Compose configura automáticamente `GAME_EVENTS_REDIS_URL` de Lobby con la primera. Si se ejecuta Lobby fuera de Compose, configura ambas conexiones. El stream por defecto es `pixelchiss:game:integration`; conserva ese valor salvo que también se configure el prefijo Redis de Game. Los grupos se crean automáticamente. No hace falta Kafka ni RabbitMQ.
+
+Redis arranca con `appendfsync everysec` y `noeviction`; el modo `REDIS_APPENDONLY=auto` habilita AOF en una instalación nueva y conserva RDB en un volumen antiguo hasta [convertirlo de forma controlada](GUIA_ACTUALIZACION.md#conservar-redis-al-activar-aof). Mantén el volumen en reinicios y dimensiona memoria/disco. Una caída abrupta antes del fsync puede perder escrituras recientes. No ejecutes FLUSH ni reinicies el volumen para reparar una SAGA.
+
+**Monitoreo.** En `.env` añade una clave aleatoria `PIXELCHISS_METRICS_KEY` (mínimo 32 caracteres) y `GRAFANA_ADMIN_PASSWORD`. No las publiques. Si vas a entrar por Gateway para OAuth, configura `OAUTH_REDIRECT_URI` y registra exactamente esa URI en el proveedor; el valor de desarrollo por defecto sigue siendo el callback directo de Auth.
+
+```bash
+# PixelChissServer/infrastructure/docker/
+docker compose -p docker --profile monitoring config --quiet
+docker compose -p docker --profile monitoring up -d --build
+docker compose -p docker --profile monitoring ps
+docker compose -p docker --profile monitoring exec prometheus promtool check config /etc/prometheus/prometheus.yml
+```
+
+Abre [targets](http://localhost:9090/targets) y comprueba cinco servicios UP. En [Grafana](http://localhost:3000/d/pixelchiss-services), entra como `admin` con la contraseña configurada. El origen Prometheus y el dashboard se aprovisionan desde `infrastructure/monitoring/`. Si un target devuelve 401/403, verifica la clave del scraper y la del servicio sin imprimirlas. Si devuelve error de conexión, verifica el nombre y puerto internos del servicio. Si no hay series de negocio, genera tráfico en una instalación de pruebas y espera el intervalo de scraping.
+
+Si el inicio de una sala devuelve 502/503, consulta la sala existente. Una respuesta ambigua deja el intento recuperable en `STARTING`; no implica que Game haya rechazado. Para diagnóstico usa [estados y contrato](second-cut/start-saga.md). No cambies manualmente el `gameId` ni borres una partida como compensación.
+
 <a id="anexo-a"></a>
 ## Anexo A. Arquitectura del sistema
+
+[Diagrama general vigente con Streams y monitoreo](second-cut/architecture.md). El siguiente diagrama conserva la vista de rutas del primer corte.
 
 ```mermaid
 flowchart LR

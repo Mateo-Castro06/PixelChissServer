@@ -1,5 +1,7 @@
 # Corrección de turnos y refactorización — 10 de octubre de 2026
 
+> Registro histórico de la entrega anterior. Los componentes y resultados vigentes se consultan en la [evidencia del segundo corte](../../docs/second-cut/evidence.md).
+
 ## Resultado y alcance
 
 El creador **original** de la sala siempre inicia cada nueva partida. `creatorPlayerId` es obligatorio, debe identificar un participante y solo se recibe por `POST /internal/games`, protegido por la credencial de servicio de Lobby. No se sortea ni se deduce del primer elemento de una lista. Los siguientes turnos siguen asientos físicos explícitos en sentido horario, incluyendo bots. Esta regla sustituye el antiguo `firstPlayerId` como elección del iniciador.
@@ -23,7 +25,7 @@ No se reconstruyó Game ni se cambiaron sus demás reglas. Se conserva el tabler
 }
 ```
 
-Header `X-Lobby-Token`, al menos32 caracteres configurados en `GAME_LOBBY_TOKEN`. IDs humanos iguales al `sub` de Auth. Lobby debe conservar el creador original aunque cambie el anfitrión operativo; Game valida pertenencia, pero no puede verificar el historial de una sala en el Lobby actual, que todavía solo tiene endpoints de ejemplo. La confianza viene de la credencial interna de servicio, no de Godot.
+Header `X-Lobby-Token`, al menos32 caracteres configurados en `GAME_LOBBY_TOKEN`. IDs humanos iguales al `sub` de Auth. Lobby debe conservar el creador original aunque cambie el anfitrión operativo; Game valida pertenencia, pero no puede verificar el historial de una sala sin consultar el estado privado de Lobby. La confianza viene de la credencial interna de servicio, no de Godot.
 
 Asientos: `0=RED → 1=BLUE → 2=GREEN → 3=YELLOW → 0`, representando posiciones físicas horarias. Cada participante, humano o bot, debe tener un asiento único; se admiten2–4 participantes y huecos. El array puede llegar desordenado. La secuencia del ejemplo es `C→D→A→B→C`. Game asigna fichas y colores por asiento y lo mantiene; no renumera al retirar/reconectar.
 
@@ -124,7 +126,7 @@ El probe no leyó la clave privada de Auth, no modificó sus clases ni servicios
 
 El primer intento arrancó con saludUP y registration204, pero la consulta Eureka no mostróUP en los20 segundos de espera. Se amplió a45 segundos solo el plazo del probe, sin editar Eureka o configuración de Game. Log fallido: `.build/clean-code-runtime.log`; reporte `.build/runtime-validation/host-e9bc7edce8ed.json`.
 
-Pendientes externos: Lobby todavía debe implementar salas, creador inmutable y asientos; Gateway carece de ruta/proxy WebSocket y exige Bearer en el handshake; consumo real desde Godot y login OAuth con token de sesión real no comprobados. El token compatible de los probes se emite con la clase compilada Auth JwtService y clave de prueba aislada, nunca su clave privada. Las imágenes Docker de [VALIDATION.md](VALIDATION.md) pertenecen al cierre anterior; no se han reconstruido en esta etapa. No se declara integración completa.
+En este cierre histórico no se probó el flujo desde Lobby y Gateway. El uso real desde Godot y Google se debe comprobar aparte. El token compatible de los probes se emite con la clase compilada Auth JwtService y clave de prueba aislada, nunca su clave privada. Las imágenes Docker de [VALIDATION.md](VALIDATION.md) pertenecen al cierre anterior; no se han reconstruido en esta etapa. No se declara integración completa.
 
 ## Archivos de esta etapa y límites
 

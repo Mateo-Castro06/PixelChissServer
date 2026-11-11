@@ -1,5 +1,7 @@
 # Game a través del API Gateway
 
+> Registro histórico de la entrega anterior. Los componentes y resultados vigentes se consultan en la [evidencia del segundo corte](../../docs/second-cut/evidence.md).
+
 El [informe de integración](../../api-gateway/docs/GAME_INTEGRATION.md) incluye archivos, comandos, resultados reales, auditoría de bots y Swagger, decisiones de proxy y límites. Las reglas de negocio de Game no se modificaron en esta etapa.
 
 Rutas públicas: GET `/api/game/board`, GET `/api/game/games/{gameId}`, GET `/api/game/test/mongodb` y `/api/game/test/redis` si Game habilita diagnósticos; WebSocket `/api/game/ws`→Game `/ws/game`. Todas descubren `GAME-SERVICE` en Eureka. `POST /internal/games` permanece privado para Lobby, sin ruta pública ni exposición en el documento público.
@@ -8,7 +10,7 @@ Swagger UI: `http://localhost:8080/api/game/swagger-ui/index.html`. Documento p�
 
 **Auditoría de REST:** cinco operaciones de controladores, tres activas por defecto y dos diagnósticos opt-in. Las tres aparecen en OpenAPI con la configuración normal; las cinco aparecen al habilitar diagnósticos. Grupo público: dos o cuatro, excluyendo el inicio privado y reescribiendo los paths de diagnósticos. Las pruebas comparan con el registro MVC, métodos HTTP, DTOs, parámetros, cuerpos, respuestas, errores y seguridad. `BoardLayout` únicamente describe el JSON existente; no cambia su estructura.
 
-**Bots:** `BotRunner` funciona con scheduling habilitado y utiliza el mismo motor/CAS que humanos. Se verifican captura, seguridad, coronación, liberación, efectos y trivia en `BotTest`; el probe de JAR observa sus dados, movimientos y cambios horarios por Gateway sin enviar solicitudes de ejecución. Lobby actual todavía no permite agregar bots a una sala porque su dominio de salas no está implementado. Debe enviar `participants[].bot`, asientos y creador mediante el [contrato](INTEGRATIONS.md).
+**Bots:** `BotRunner` funciona con scheduling habilitado y utiliza el mismo motor/CAS que humanos. Se verifican captura, seguridad, coronación, liberación, efectos y trivia en `BotTest`; el probe de JAR observa sus dados, movimientos y cambios horarios por Gateway sin enviar solicitudes de ejecución. Lobby administra bots en la sala y envía `participants[].bot`, asientos y creador mediante el [contrato](INTEGRATIONS.md).
 
 **Autenticación WebSocket:** conexión pública sin Bearer en el handshake, seguida obligatoriamente de AUTH con JWT. Game rechaza acciones no autenticadas y deriva identidad del token. Tokens en query strings rechazados400; Origin validado en Gateway y Game. El Gateway conserva la instancia backend por conexión y sus propios latidos; cierre/expiración libera ambos tramos. REST sigue requiriendo JWT. Los mensajes y ejemplos completos están en [WEBSOCKET.md](WEBSOCKET.md).
 

@@ -20,7 +20,7 @@ java -jar target/game-service-0.0.1-SNAPSHOT.jar
 docker build -t pixelchiss-game:latest .
 ```
 
-No es necesario editar `.env`. Game necesita la misma clave RSA pública X.509 PEM de Auth, nunca la privada. Boot4 utiliza `spring.mongodb.uri`; se conserva `MONGODB_URI`.
+En ejecución directa configura las variables en el entorno. En una base existente, aplica la [guía de actualización](../docs/GUIA_ACTUALIZACION.md) antes de habilitar la semilla. Game necesita la misma clave RSA pública X.509 PEM de Auth, nunca la privada. Boot4 utiliza `spring.mongodb.uri`; se conserva `MONGODB_URI`.
 
 | Configuración | Predeterminado |
 |---|---:|
@@ -58,31 +58,17 @@ Swagger directo: **http://localhost:8084/swagger-ui/index.html**. OpenAPI comple
 - [Informe de entrega, archivos, pruebas y propuesta de commits](docs/DELIVERY.md).
 - [Validación real del JAR y Docker, defecto corregido y límites de integración](docs/VALIDATION.md).
 
-## Pruebas
+## Catálogo y pruebas
+
+Hay seis cartas (3 BUFF, 3 DEBUFF) y 16 preguntas por mapa. `classic` es cultura general y `science`, ciencia; comparten el tablero. Los efectos y el tratamiento de objetivos vacíos están en [ENGINE.md](docs/ENGINE.md).
 
 ```bash
+# Desde game-service/
 mvn test
-# Pruebas reales HTTP/WebSocket/MongoDB/Redis; requiere localhost:27017 y localhost:6379.
-mvn -Dgame.integration=true verify
+# MongoDB nuevo y Redis aislados, nunca la base de desarrollo:
+GAME_TEST_MONGO_URI=mongodb://127.0.0.1:17017/pixelchiss_pruebas \
+  GAME_TEST_REDIS_URL=redis://127.0.0.1:16379/0 \
+  mvn -Dgame.integration=true verify
 ```
 
-La integración usa la base existente `pixelchiss`, colecciones propias de Game, clave pública de prueba en `target/` y prefijo Redis aleatorio. Limpia sus claves sin vaciar Redis; la semilla de Game permanece. Eureka se deshabilita para no registrar instancias de prueba.
-
-En este workspace se copió la caché Maven a `.build/m2` y se usó `mvn -Dmaven.repo.local=.build/m2 ...`, para no escribir dependencias fuera de Game. `.build/` y `target/` están ignorados. El wrapper original se conserva; `./mvnw` puede necesitar red para descargar Maven.
-
-La última verificación ejecutó **74 pruebas, sin fallos, errores ni omisiones**,
-incluida auditoría OpenAPI con los diagnósticos habilitados y deshabilitados.
-El creador original inicia y la rotación es horaria por asientos explícitos; Lobby debe
-enviar `creatorPlayerId` y `seat` por participante. Ver [CLEAN_CODE.md](docs/CLEAN_CODE.md).
-El JAR refactorizado comprobó registroUP en Eureka, rotación horaria automática de
-cuatro jugadores, bots, JWT compatible y dos sockets directos. La imagen Docker se
-probó en el cierre previo y no se reconstruyó en esta etapa. Evidencia actual en el
-informe de refactorización. La integración Gateway→Game está implementada y probada; inicio real en Lobby y
-consumo desde Godot continúan pendientes; consulte [VALIDATION.md](docs/VALIDATION.md).
-
-Para repetir los probes del JAR: `python3 tools/validate_runtime.py`. Requieren
-Java 21, Python con `websockets` y `cryptography`, MongoDB/Redis/Eureka disponibles,
-la clave pública de Auth y su clase JwtService ya compilada. No compilan ni modifican
-Auth y nunca leen su clave privada. Crean partidas aisladas que se conservan y
-detienen solamente sus propios procesos. Si 8084 o 18084 están ocupados, liberar
-esos puertos por un medio autorizado antes de ejecutar el probe.
+La integración siembra dos veces la base MongoDB de prueba para verificar idempotencia y usa prefijo Redis aleatorio. Prueba reglas, REST, OpenAPI, WebSocket, concurrencia y resolución de las seis cartas. Las pruebas deterministas de coronación cubren los cuatro asientos y ambos mapas; el [probe de dos humanos](../infrastructure/tests/two_humans.py) prueba el flujo por Gateway. No ejecuta Godot.

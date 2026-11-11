@@ -1,5 +1,7 @@
 # Validación operativa — 10 de octubre de 2026
 
+> Registro histórico de la entrega anterior. Los componentes y resultados vigentes se consultan en la [evidencia del segundo corte](../../docs/second-cut/evidence.md).
+
 **Informe histórico del cierre anterior a la corrección de turnos.** La comprobación de `firstPlayerId` de este informe fue sustituida por la regla definitiva del creador original y los asientos explícitos. Las 46 pruebas y las imágenes citadas corresponden a aquel artefacto, no a la refactorización actual. Los resultados actuales están en [CLEAN_CODE.md](CLEAN_CODE.md).
 
 Se verificó Game con la infraestructura existente, sin editar Auth, Gateway, Eureka,

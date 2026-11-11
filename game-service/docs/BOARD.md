@@ -44,7 +44,7 @@ Dos fichas coinciden únicamente por **ID físico**, no por progreso. Rojo progr
 
 ## Dados y turnos
 
-El creador original de la sala, `creatorPlayerId` autenticado mediante el contrato interno de Lobby, siempre tiene el primer turno. Debe pertenecer a la partida; no se elige otro si falta. Después se avanza por `seat` en sentido horario `0→1→2→3→0`, omitiendo asientos vacíos y retirados. Si C ocupa2 en una partida completa, la secuencia es `C→D→A→B→C`. Bots comparten esta secuencia. Dobles repiten el mismo asiento y luego continúa su sucesor horario; una reconexión o el orden de llegada de sockets no reorganiza los asientos. Contrato exacto en [INTEGRATIONS.md](INTEGRATIONS.md).
+El participante indicado en `creatorPlayerId` mediante el contrato interno de Lobby tiene el primer turno. Lobby envía al creador si permanece en la sala o al anfitrión actual si salió. Game exige que ese participante exista. Después se avanza por `seat` en sentido horario `0→1→2→3→0`, omitiendo asientos vacíos y retirados. Si C ocupa2 en una partida completa, la secuencia es `C→D→A→B→C`. Bots comparten esta secuencia. Dobles repiten el mismo asiento y luego continúa su sucesor horario; una reconexión o el orden de llegada de sockets no reorganiza los asientos. Contrato exacto en [INTEGRATIONS.md](INTEGRATIONS.md).
 
 El servidor genera **dos dados**, normalmente 1–6, mediante `SecureRandom` encapsulado en `DiceSource`. El cliente nunca crea resultados ordinarios. `dieIndex=0|1` identifica los consumos: incluso con `[4,4]`, cada resultado solo se usa una vez. `dieValue` debe coincidir. No se permite sumar dados como un tercer resultado ni relanzar.
 
@@ -63,3 +63,27 @@ La cuarta coronación declara un único ganador y `FINISHED` en la misma actuali
 El retiro devuelve **todas** las fichas a casa, incluidas coronadas, y elimina efectos. Con dos o más activos continúa y omite retirados. Con menos de dos termina `ABANDONED`, sin ganador, preservando la condición de victoria por cuatro coronaciones.
 
 La geometría está aislada en `Board`; `classic` y `science` usan layout v1 con bancos temáticos diferentes. Otra geometría requiere implementación explícita y migración/versionado de layout; nunca cambiar recorridos de partidas activas.
+
+## Posiciones auditadas en ambos mapas
+
+`classic` y `science` comparten `Board`; cambia únicamente el catálogo temático de preguntas. Los índices físicos empiezan en cero.
+
+| Tipo | Posiciones físicas | Regla |
+|---|---|---|
+| Pista normal | `0–63`, excluyendo seguros y trivia | Recorrido común; captura ordinaria al llegar a un rival en casilla desprotegida. |
+| Seguros | `0, 5, 10, 16, 21, 26, 32, 37, 42, 48, 53, 58` | Capacidad dos. Protegen de captura ordinaria, no de las cartas de captura en casilla común. |
+| Trivia | `8, 24, 40, 56` | Una llegada ordinaria abre pregunta del mapa. |
+| Salida individual | `64 + 4 × asiento + númeroDeFicha` | Progreso 0. Desde casa se libera con dobles y se consume el dado elegido. |
+| Recorrido común | `(16 × asiento + progreso − 1) mod 64` | Progresos 1 a 64. |
+| Tramo privado | `80 + 4 × asiento + progreso − 65` | Progresos 65 a 68. Casillas previas protegidas, capacidad uno; la cuarta es la corona. |
+
+| Asiento | Color | Salidas por ficha | Primera / última común | Tramo privado, en orden | Corona |
+|---:|---|---|---|---|---:|
+| 0 | Rojo | 64–67 | 0 / 63 | 80 → 81 → 82 → 83 | 83 |
+| 1 | Azul | 68–71 | 16 / 15 | 84 → 85 → 86 → 87 | 87 |
+| 2 | Verde | 72–75 | 32 / 31 | 88 → 89 → 90 → 91 | 91 |
+| 3 | Amarillo | 76–79 | 48 / 47 | 92 → 93 → 94 → 95 | 95 |
+
+Ejemplo: verde pasa de 31 a 88 con 1; desde 89 necesita 2 para coronar en 91. Un dado puede recorrer varias casillas consecutivas; nunca cambia la ruta, omite distancia ni rebota al superar la corona. Si excede el progreso 68, `RuleEngine.calculate` conserva `OVERSHOOT`. La ficha coronada ya no se puede mover (`CROWNED_PIECE`). El motor valida el destino y su cupo; no agrega un bloqueo de paso por casillas intermedias.
+
+Lobby asigna los asientos `[0,2]` con dos participantes, `[0,1,2]` con tres y `[0,1,2,3]` con cuatro. Los asientos no se compactan por retirada. Si no quedan movimientos válidos, se avanza automáticamente, con turno extra solo cuando corresponde por dobles y sin perjuicio de un efecto explícito de salto.

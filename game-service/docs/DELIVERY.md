@@ -1,5 +1,7 @@
 # Informe de entrega — Game Service
 
+> Registro histórico de la entrega anterior. Los componentes y resultados vigentes se consultan en la [evidencia del segundo corte](../../docs/second-cut/evidence.md).
+
 Fecha: 10 de octubre de 2026. Todo el código, documentación y artefactos de compilación se creó/modificó dentro de `game-service/`. No se hicieron commits ni pushes. Los archivos preexistentes `Terminal` y `Tool` fuera de Game no se tocaron.
 
 Actualizado tras corregir turnos y refactorizar: **71 pruebas aprobadas**. El creador original inicia y la rotación es horaria por asientos explícitos. Cambios de esta etapa y verificación en [CLEAN_CODE.md](CLEAN_CODE.md). El registro real en Eureka, la imagen Docker y la corrección de lectura de efectos del cierre previo conservan su evidencia histórica en [VALIDATION.md](VALIDATION.md).
@@ -21,7 +23,7 @@ Actualizado tras corregir turnos y refactorizar: **71 pruebas aprobadas**. El cr
 
 ## 2. Alcance pendiente y motivos
 
-Las funciones propias de Game solicitadas están implementadas y probadas. La integración extremo a extremo desde Godot **a través del Gateway actual y del inicio real de Lobby** está pendiente: faltan rutas/proxy WebSocket y Lobby solo contiene endpoints de ejemplo. Los cambios externos estaban prohibidos y se describen en [INTEGRATIONS.md](INTEGRATIONS.md).
+Este cierre histórico validó Game por separado. El estado de la integración vigente está en [INTEGRATIONS.md](INTEGRATIONS.md).
 
 No se probó un login OAuth real ni un token de sesión obtenido del contenedor Auth; sí firma/claims compatibles, algoritmos RSA y tokens emitidos por su clase JwtService compilada con claves de prueba. Eureka Client y configuración existente se conservan; las pruebas Spring deshabilitan el registro. Los probes del cierre previo registraron JAR y Docker UP; el nuevo JAR refactorizado también registróUP y verificó una vuelta horaria, bots y WebSocket directos. La imagen Docker corregida del cierre anterior se construyó y probó; no se reconstruyó tras esta refactorización. El nuevo JAR ejecutable sí se produjo.
 

@@ -1,5 +1,7 @@
 # Integración de Game con Gateway — 10 de octubre de 2026
 
+> Registro histórico de la entrega anterior. Los componentes y resultados vigentes se consultan en la [evidencia del segundo corte](../../docs/second-cut/evidence.md).
+
 ## Cambios y enrutamiento
 
 Se conservó Gateway Server WebMVC5.0.3, aplicación `api-gateway`, puerto8080, Eureka y todas las rutas/reescrituras de Auth. El código instalado de `HandlerFunctions` ofrece HTTP/HTTPS/forward, sin proxy ws/wss; la [incidencia oficial3442](https://github.com/spring-cloud/spring-cloud-gateway/issues/3442) refleja esa limitación. Por ello se agregó un puente WebSocket específico para Game, sin migrar a WebFlux ni implementar reglas de juego en el Gateway.
@@ -50,13 +52,13 @@ Swagger UI Gateway: `http://localhost:8080/api/game/swagger-ui/index.html`. Espe
 
 ## Bots y orden de turnos
 
-Lobby actual solo tiene `/`, `/hello/{name}` y `/health/redis`: **no implementa todavía salas ni añadir bots**. No se modificó. El contrato de inicio de Game sí recibe `participants[].bot`, `seat` y `creatorPlayerId`; Game los valida y asigna cuatro fichas por participante.
+En esta prueba histórica se simuló Lobby. El Lobby vigente sí implementa salas y bots. El contrato de inicio de Game sí recibe `participants[].bot`, `seat` y `creatorPlayerId`; Game los valida y asigna cuatro fichas por participante.
 
 `BotRunner` se ejecuta automáticamente cada500ms, lee estado activo de Redis, consulta `BotPolicy` y llama `GameService.botAction`. Las acciones pasan por `RuleEngine`/`TriviaRules` y la misma confirmación CAS que humanos. No existe ni se añadió endpoint para disparar bots. Dados del servidor, decisiones por corona/captura/seguro/exposición/liberación/avance, efectos y trivia usan el motor existente. La política se reevalúa tras confirmar cada dado; no fue reimplementada.
 
 Las pruebas `BotTest` ejecutadas cubren captura+seguridad con ambos dados, corona, liberación de distintas fichas, ausencia de movimientos y rechazo fuera de turno, cartas/trivia y elección de dados respetando efectos. `TurnOrderTest` cubre creador,2/3/4 jugadores, bots, dobles, retirada/reconexión, asientos dispersos y arrays reordenados. El creador inicia y la rotación por asiento es horaria; no depende del orden de conexión.
 
-**¿Los bots ejecutan automáticamente sus turnos? Sí, verificado mediante prueba ejecutada de Game a través del Gateway.** El reporte `1704a978f5d9/report.json` observa35 segundos de conexión: creador900001 primero, bots en asientos1 y3, dados de servidor, movimientos publicados, retorno al humano y turnos adicionales. El cliente únicamente envió AUTH y JOIN_GAME. Se conservaron los asientos horarios, sin invocar acciones manuales para bots. Esto prueba el comportamiento de Game con un inicio interno autorizado que simula a Lobby; no prueba añadir bots en el Lobby inexistente.
+**¿Los bots ejecutan automáticamente sus turnos? Sí, verificado mediante prueba ejecutada de Game a través del Gateway.** El reporte `1704a978f5d9/report.json` observa35 segundos de conexión: creador900001 primero, bots en asientos1 y3, dados de servidor, movimientos publicados, retorno al humano y turnos adicionales. El cliente únicamente envió AUTH y JOIN_GAME. Se conservaron los asientos horarios, sin invocar acciones manuales para bots. Esto prueba el comportamiento de Game con un inicio interno autorizado que simula a Lobby; no prueba añadir bots por el Lobby vigente.
 
 En una partida adicional de cuatro humanos, con payload reordenado, se observó `900003→900004→900001→900002→900003` mediante cuatro expiraciones, iniciando el creador de asiento2.
 
@@ -104,7 +106,7 @@ Comando real: `python3 tools/validate_game_gateway.py > .build/gateway-runtime-c
 
 La clase compilada Auth JwtService emitió los tokens aislados que validaron Gateway y Game. La comprobación contra Auth desplegado usa su clave pública real y la misma red Docker para resolver sus nombres anunciados. No se leyó su clave privada. El puerto18081 pertenece a un nuevo contenedor Gateway con el JAR actual montado de solo lectura; el8080 existente no fue reiniciado.
 
-Token OAuth real de usuario, login completo en Google, perfil autenticado contra el Auth desplegado y cliente Godot real quedan pendientes. Se usan tokens emitidos por la clase Auth JwtService compilada con una clave aislada, sin leer/modificar su clave privada. Lobby aún debe implementar su contrato. No se declara probado el ciclo completo Lobby→Godot.
+Token OAuth real de usuario, login completo en Google, perfil autenticado contra el Auth desplegado y cliente Godot real quedan pendientes. Se usan tokens emitidos por la clase Auth JwtService compilada con una clave aislada, sin leer/modificar su clave privada. Esta prueba histórica no ejercitó el Lobby vigente. No se declara probado el ciclo completo Lobby→Godot.
 
 El despliegue existente8080 no fue sustituido por los probes; estos usan18080/18081 y Game18084. Las URLs8080/8084 son las configuraciones conservadas para el nuevo artefacto. Debe arrancarse/reconstruirse el Gateway con el JAR nuevo por el procedimiento habitual de despliegue; no hace falta editar Compose para las rutas. No se hicieron commits ni pushes.
 

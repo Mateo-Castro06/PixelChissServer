@@ -1,10 +1,10 @@
-# Integración y cambios externos propuestos
+# Integración de Game
 
-En la integración de Gateway solo se modificaron `game-service/` y `api-gateway/`. Auth, Lobby, Eureka, Compose, infraestructura y Godot no se modificaron.
+La creación recuperable y la mensajería interna se describen en [SAGA y EDA](../../docs/second-cut/start-saga.md).
 
 ## Lobby
 
-`lobby-service/main.py` solo ofrece ejemplos, conectividad Redis y registro Eureka. No hay contrato de salas/inicio reutilizable. Su propietario debe llamar internamente a `POST /internal/games` después de autorizar el inicio:
+Lobby autoriza y reserva el inicio, luego invoca `POST /internal/games` con su plan persistido:
 
 ```json
 {
@@ -24,7 +24,7 @@ Header `X-Lobby-Token` debe coincidir con `GAME_LOBBY_TOKEN`, mínimo 32 caracte
 
 Se admiten 2–4 participantes únicos. Humanos usan exactamente `sub` de Auth; bots usan IDs distintos, preferentemente `bot-`. Mapas iniciales: `classic`, `science`; nuevos mapas necesitan banco MongoDB.
 
-**El creador original siempre empieza.** Lobby debe guardar al crear la sala un `creatorPlayerId` inmutable, independiente de posteriores transferencias de anfitrión, y enviarlo al iniciar Game. Game verifica que esté entre los participantes. No hay sorteo ni sustitución por el primer elemento del array. Falta/vacío: HTTP400 `MISSING_CREATOR`; ID ajeno: HTTP400 `INVALID_CREATOR`. Game confía en la identificación de Lobby por la credencial interna; no puede corroborar una sala en el Lobby actual, que aún no implementa ese dominio. Godot no puede enviar una acción para cambiar el creador o el turno inicial.
+**El participante indicado en `creatorPlayerId` empieza.** Lobby conserva el creador original y lo envía si sigue en la sala; si salió, envía al anfitrión actual. Game verifica que esté entre los participantes. No hay sorteo ni sustitución por el primer elemento del array. Falta/vacío: HTTP400 `MISSING_CREATOR`; ID ajeno: HTTP400 `INVALID_CREATOR`. Game confía en la identificación de Lobby por la credencial interna; no lee el estado privado de Lobby. Godot no puede enviar una acción para cambiar el creador o el turno inicial.
 
 **Asientos explícitos e inmutables:** `seat` entero único de0 a3; rojo0, azul1, verde2, amarillo3. Esta secuencia representa las posiciones físicas en sentido horario `0→1→2→3→0`. Pueden existir huecos; no se compactan asientos al retirar un participante. El array puede llegar en cualquier orden: Game ordena por `seat`, asigna color y fichas al asiento y rota al siguiente asiento activo. En el ejemplo: `57(seat2) → bot(seat3) → 42(seat0) → 57`. El creador puede ocupar cualquier asiento. Un asiento ausente/duplicado/fuera de rango provoca HTTP400; Bean Validation puede devolver `INVALID_REQUEST`, el motor devuelve `INVALID_SEATS`.
 
@@ -34,7 +34,7 @@ Dobles repiten el asiento actual según las reglas existentes; al terminar el tu
 
 Reintentar exactamente el mismo payload devuelve estado existente. Otro payload con igual gameId responde409. Lobby entrega el gameId a sus participantes. Lobby administra incorporación/eliminación de bots antes de iniciar; Game ejecuta comportamiento, sin administración de anfitrión, votos ni mapas. Estados Redis anteriores sin `creatorPlayerId` siguen siendo legibles y conservan turno/asientos; no se inventa retrospectivamente su creador ni se reinician partidas activas.
 
-Cambio externo recomendado: `lobby-service/main.py` y sus futuros modelos/servicios de salas deben persistir el creador original, asignar asientos horarios únicos, identificar bots, validar permisos de inicio y enviar este payload con la credencial de servicio y reintentos idempotentes. Motivo: faltan salas e inicio real. No fue aplicado.
+Game registra `GameInitialized` al confirmar la creación. Lobby usa ese evento para completar la SAGA aunque se pierda la respuesta HTTP.
 
 ## Gateway HTTP y WebSocket
 
@@ -58,7 +58,7 @@ SecurityConfig permite exclusivamente el handshake GET `/api/game/ws` sin Bearer
 
 Swagger público excluye `/internal/games`; contiene paths públicos y servidor `/` para evitar prefijos duplicados. Game conserva Swagger directo y documento completo para la integración privada. Las cinco operaciones de controlador se auditan con y sin diagnósticos. Ver [GATEWAY.md](GATEWAY.md).
 
-Los probes usan instancias nuevas18080/18081/18084. Compilar no sustituye el contenedor Gateway existente8080: deberá arrancarse con el nuevo artefacto mediante su procedimiento habitual. No se editó Compose ni se cambió la arquitectura de servicios.
+Los probes usan instancias nuevas18080/18081/18084. Compilar no sustituye el contenedor Gateway existente8080: deberá arrancarse con el nuevo artefacto mediante su procedimiento habitual. Las pruebas de esta etapa usan un entorno aislado; consultar la evidencia del segundo corte.
 
 ## Auth, Eureka y despliegue
 
@@ -66,7 +66,7 @@ Se conserva clave RSA pública y subject de Auth, sin nuevo login. [JJWT elige a
 
 Se mantiene aplicación `game-service`, cliente Eureka y `${EUREKA_URL}`. Puertos reales: Gateway 8080, Auth 8081, Lobby 8083, Game 8084, Eureka 8761. No se cambiaron a los orientativos del diagrama.
 
-Compose aún no declara Game. Su propietario deberá agregar imagen/arranque, puerto 8084, las mismas variables de Mongo/Redis/Eureka, `JWT_PUBLIC_KEY_PATH`, `GAME_LOBBY_TOKEN`, origins si hay cliente web y montaje de clave pública solo lectura. Archivo recomendado: `infrastructure/docker/docker-compose.yml`; **no fue modificado** ni se crearon nuevas bases.
+Compose declara Game en la red interna, sin publicar el puerto 8084. Monta la clave pública en solo lectura y proporciona MongoDB, Redis, Eureka y la credencial de Lobby. Ver [manual de instalación](../../docs/MANUAL_INSTALACION.md).
 
 Si se necesita conservar cada última jugada tras reinicio Redis, verificar AOF/RDB externamente. No se agregó Log Aggregator, puerto5000, Player Service, logging adicional ni código Godot.
 

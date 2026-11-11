@@ -16,6 +16,7 @@
 | [`SecurityConfig`](../src/main/kotlin/com/pixelchiss/auth/security/SecurityConfig.kt) | Construye la cadena de filtros, permisos públicos, OAuth login y resource server JWT. No se modifica. |
 | [`TestController`](../src/main/kotlin/com/pixelchiss/auth/controller/TestController.kt) | Conserva `GET /api/test/protected`, que responde con mensaje e identidad autenticada. |
 | [`OpenApiConfig`](../src/main/kotlin/com/pixelchiss/auth/config/OpenApiConfig.kt) | Metadatos de la documentación API. Las operaciones se describen en el controlador. |
+| [`UserAccounts`](../src/main/kotlin/com/pixelchiss/auth/application/UserAccounts.kt) y [`JpaUserAccounts`](../src/main/kotlin/com/pixelchiss/auth/repository/JpaUserAccounts.kt) | Puerto de consultas y guardado de cuentas; el adaptador delega en el repositorio Spring Data. |
 | [`UserRepository`](../src/main/kotlin/com/pixelchiss/auth/repository/UserRepository.kt) | `JpaRepository<User, Long>`; búsquedas por id, Google id y email. |
 | [`RefreshTokenRepository`](../src/main/kotlin/com/pixelchiss/auth/repository/RefreshTokenRepository.kt) | `JpaRepository<RefreshToken, Long>`; búsqueda por token. |
 
@@ -33,16 +34,17 @@ flowchart LR
   Auth --> Users
   Auth --> JWT
   Auth --> Refresh
-  Users --> UR[UserRepository]
+  Users --> Accounts[UserAccounts]
+  JPA[JpaUserAccounts] -. implementa .-> Accounts
+  JPA --> UR[UserRepository]
   Refresh --> RR[RefreshTokenRepository]
   UR --> DB[(PostgreSQL)]
   RR --> DB
 ```
 
-Se usa composición e inyección por constructor. Spring Data ya ofrece los
+Se usa composición e inyección por constructor. El segundo corte agregó `AccessTokenIssuer` para desacoplar la firma y las políticas puras `DisplayName` y `RefreshValidity`; ver [arquitectura del sistema](../../docs/second-cut/architecture.md). Spring Data ya ofrece los
 contratos de repositorio; no se crean interfaces sin otra implementación o una
-necesidad concreta. Los servicios siguen siendo componentes Spring sencillos,
-sin introducir una arquitectura de puertos/adaptadores completa.
+necesidad concreta. La revisión SOLID separa el acceso a cuentas mediante `UserAccounts`. Se conserva la entidad JPA compartida y el repositorio de refresh existente; no cambian tablas, emisión de tokens ni callback.
 
 ## Persistencia e Hibernate
 

@@ -16,7 +16,7 @@ estado de las salas y se registra en Eureka como `LOBBY-SERVICE`.
 | Game Service | Creación de la partida al iniciar una sala |
 
 Las salas admiten hasta cuatro participantes, contando bots. Para iniciar una
-partida deben quedar al menos dos participantes y todos deben estar listos.
+partida deben quedar al menos dos participantes; los demás humanos deben estar listos. Los bots cuentan como listos.
 Solo el anfitrión puede añadir o retirar bots, expulsar participantes e iniciar
 la partida. Los mapas disponibles se consultan mediante la API.
 
@@ -121,3 +121,6 @@ export SERVICE_PORT=8083
 
 Los comandos usan los ejecutables del entorno virtual directamente y no
 requieren activarlo. El endpoint Swagger queda en <http://localhost:8083/docs>.
+
+
+[Arquitectura y puertos](../docs/second-cut/architecture.md) · [SAGA, Stream y recuperación](../docs/second-cut/start-saga.md). Lobby consume confirmaciones desde la base Redis de Game y conserva sus salas en una base separada.

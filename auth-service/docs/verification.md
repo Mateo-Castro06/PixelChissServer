@@ -1,5 +1,7 @@
 # Verificación de la refactorización
 
+> Registro histórico de la entrega anterior. Los componentes y resultados vigentes se consultan en la [evidencia del segundo corte](../../docs/second-cut/evidence.md).
+
 ## Entorno y reproducción
 
 Se conserva Maven Wrapper 3.9.16, Spring Boot 4.1.1, Kotlin 2.3.21 y Java 21.

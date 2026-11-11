@@ -69,7 +69,7 @@ Resolver carta:
 {"type":"CARD_TARGET","gameId":"game-123","requestId":"card-1","expectedVersion":3,"challengeId":"<card.id>","pieceId":"seat-0-piece-0","targetPieceId":"seat-1-piece-2","targetPosition":28}
 ```
 
-Copiar una opción de `card.choices`: pieceId, targetPieceId, targetPlayerId y targetPosition. Los campos irrelevantes se omiten o son null. Refugio usa ficha propia/destino; captura además ficha rival. El motor recalcula opciones. `card` incluye nombre, descripción y código para mostrar la selección inmediata al usuario.
+Copiar una opción de `card.choices`: pieceId, targetPieceId, targetPlayerId y targetPosition. Los campos irrelevantes se omiten o son null. `advance-safe` usa ficha propia y destino. `kill-chosen` usa **solo `targetPosition`**; los otros campos de objetivo se omiten o se envían como `null`. El ejemplo anterior también sigue válido para un desafío legado que identifica la ficha rival. El motor recalcula opciones. `card` incluye nombre, descripción y código para mostrar la selección inmediata al usuario.
 
 Terminar voluntariamente:
 
@@ -99,7 +99,10 @@ Todos los participantes unidos reciben un lote atómico:
 }
 ```
 
-Eventos: `GAME_STARTED`, `DICE_ROLLED`, `DICE_SELECTION_REQUIRED`, `PIECE_MOVED`, `PIECE_CAPTURED`, `TURN_CHANGED`, `TURN_EXPIRED`, `TRIVIA_QUESTION`, `TRIVIA_RESOLVED`, `CARD_TARGET_REQUIRED`, `CARD_DISCARDED`, `EFFECT_APPLIED`, `EFFECT_CONSUMED`, `EFFECT_UPDATED`, `EFFECT_EXPIRED`, `PLAYER_DISCONNECTED`, `PLAYER_RECONNECTED`, `PLAYER_RETIRED`, `GAME_FINISHED`, `GAME_ABANDONED`.
+Eventos: `GAME_STARTED`, `DICE_ROLLED`, `DICE_SELECTION_REQUIRED`, `PIECE_MOVED`, `PIECE_CAPTURED`, `CARD_PIECE_RETURNED`, `TURN_CHANGED`, `TURN_EXPIRED`, `TRIVIA_QUESTION`, `TRIVIA_RESOLVED`, `CARD_TARGET_REQUIRED`, `CARD_DISCARDED`, `EFFECT_APPLIED`, `EFFECT_CONSUMED`, `EFFECT_UPDATED`, `EFFECT_EXPIRED`, `PLAYER_DISCONNECTED`, `PLAYER_RECONNECTED`, `PLAYER_RETIRED`, `GAME_FINISHED`, `GAME_ABANDONED`.
+
+**Extensión compatible:** `CARD_PIECE_RETURNED` aparece dentro de `GAME_UPDATED.events` para una devolución sin ficha atacante. Su `data` trae `pieceId`, `playerId`, `from`, `effectCode` y `cardId` (`null` si la devolución viene del efecto periódico de dobles). No cambia `PIECE_CAPTURED`. Godot debe renderizar opciones de casilla cuando venga solo `targetPosition` y usar el snapshot para actualizar la ficha a `HOME`; puede añadir una animación al reconocer el nuevo evento. Al perder turno recibe `EFFECT_CONSUMED` seguido de `TURN_CHANGED` para el jugador que sí puede actuar. No hay nueva acción cliente ni cambios en los esquemas de Streams.
+
 
 `requestId=null` indica transición interna. ACK y Pub/Sub pueden llegar en diferente orden: ignorar snapshots antiguos, deduplicar eventos por `(gameId,version)` y sincronizar ante huecos. Si ACK ya instaló el estado de igual versión, la animación del evento aún puede ejecutarse una vez. También puede dibujarse directamente el snapshot final sin animación incremental.
 
@@ -113,7 +116,7 @@ Un rechazo no confirma cambios. Ante almacenamiento/concurrencia, sincronizar: p
 
 ## Orden de turnos y compatibilidad
 
-El formato de acciones, ACK, publicaciones, errores y `GameView` se conserva. El snapshot ya incluye el `seat` fijo de cada jugador y `turn.playerId`. `JOIN_GAME`, `SYNC_REQUEST`, reconexiones y el orden de llegada de mensajes no asignan asientos ni escogen el primer turno. El creador original inicia y `TURN_CHANGED` sigue la secuencia horaria definida por Lobby; dobles repiten el mismo asiento y los retirados se omiten. Godot no envía `creatorPlayerId` ni cambios de asientos por este canal. Estos datos pertenecen exclusivamente al inicio autorizado de Lobby: [INTEGRATIONS.md](INTEGRATIONS.md).
+El formato de acciones, ACK, publicaciones, errores y `GameView` se conserva. El snapshot ya incluye el `seat` fijo de cada jugador y `turn.playerId`. `JOIN_GAME`, `SYNC_REQUEST`, reconexiones y el orden de llegada de mensajes no asignan asientos ni escogen el primer turno. Inicia el participante indicado en `creatorPlayerId` por Lobby y `TURN_CHANGED` sigue la secuencia horaria definida por Lobby; dobles repiten el mismo asiento y los retirados se omiten. Godot no envía `creatorPlayerId` ni cambios de asientos por este canal. Estos datos pertenecen exclusivamente al inicio autorizado de Lobby: [INTEGRATIONS.md](INTEGRATIONS.md).
 
 ## Consumo mediante Gateway
 
@@ -129,4 +132,4 @@ Ejemplo secuencial de mensajes hacia `ws://localhost:8080/api/game/ws`:
 
 Cada mensaje es un frame JSON separado, enviando el último solo si ese jugador es el activo y la versión coincide. No se incluye `/api/game` dos veces; `/ws/game` es el destino interno y no una ruta pública del Gateway. Usar pings/pongs de la biblioteca WebSocket; el puente cierra clientes sin pong durante30 segundos. Las consultas REST requieren Bearer por separado. Origin del cliente web debe estar permitido en Gateway y Game. Rechazos de handshake (400 query,403 Origin,503 sin instancia) ocurren antes del protocolo JSON.
 
-No existe petición pública para disparar bots: el servidor los ejecuta y publica sus movimientos automáticamente. La validación operativa observó estos eventos por Gateway con un cliente que solo envió AUTH/JOIN_GAME. Inicio de Lobby real y consumo desde una ejecución de Godot siguen pendientes.
+No existe petición pública para disparar bots: el servidor los ejecuta y publica sus movimientos automáticamente. La validación operativa observó estos eventos por Gateway con un cliente que solo envió AUTH/JOIN_GAME. El recorrido de inicio desde Lobby se prueba en el segundo corte. La ejecución del cliente Godot sigue pendiente.

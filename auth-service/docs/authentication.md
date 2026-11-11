@@ -183,3 +183,7 @@ HTTP de OAuth debe acompañar el navegador en inicio y callback. No se modifica
 Gateway, forwarding, cookies, discovery ni la URI configurada para Google. La
 prueba local de Auth no equivale a una ejecución de la cadena completa de
 Gateway/Eureka/Google/Godot.
+
+## Verificación en dos pasos
+
+El proveedor puede pedir un segundo factor a una cuenta que lo tenga habilitado. PixelChiss recibe el éxito de OAuth, pero no exige ni comprueba el nivel de autenticación de la cuenta antes de emitir tokens. `state`, PKCE, JWT y refresh tienen otras funciones y no cuentan como factores. Ver [alcance de la revisión y demostración de MFA](../../docs/revision-solid-mfa.md).

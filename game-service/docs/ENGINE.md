@@ -4,24 +4,22 @@
 
 Colecciones `game_cards` y `game_questions`. Cada carta incluye ID estable, nombre, descripción, tipo BUFF/DEBUFF, código, parámetros, condiciones, necesidad de objetivo y mapa (`*` significa todas las temáticas). Cada pregunta incluye mapa, texto, opciones e índice correcto; no existe endpoint público de banco de respuestas.
 
-`seed/catalog.json` contiene **4 cartas y 8 preguntas**, cuatro para `classic` y cuatro para `science`. `CatalogSeeder` hace upsert por `_id` con `$setOnInsert`, sin duplicar ni sobrescribir modificaciones administrativas. Agregar un ID nuevo lo carga; cambiar una definición sembrada requiere una migración intencional. No modificar preguntas mientras haya desafíos activos que las referencien.
+`seed/catalog.json` contiene **6 cartas y 32 preguntas**: 16 de cultura general en `classic` y 16 de ciencia en `science`. `CatalogSeeder` inserta por `_id` con `$setOnInsert`. Para bases existentes usa la [migración con copia previa](../../docs/GUIA_ACTUALIZACION.md#migrar-mongodb). Las definiciones retiradas de `legacy-challenges.json` nunca se siembran ni se sortean; solo permiten resolver por ID un desafío pendiente antes de actualizar.
 
-Las cartas se leen de MongoDB. Los parámetros controlan alcance y duración. `conditions` describe las restricciones que verifica cada código; no es un intérprete de reglas arbitrarias. No hay inventario ni petición cliente para obtener una carta concreta.
+## Cartas y resolución
 
-## Catálogo y resolución
+| Carta / código | Tipo | Condiciones y efecto |
+|---|---|---|
+| `kill-next` / `CAPTURE_NEAREST_CELL` | BUFF | Para cada ficha propia en tablero, busca hacia delante hasta el fin de su recorrido común. Gana la menor distancia de progreso; si empatan, el menor número de ficha propia. Captura **todas** las fichas rivales de esa casilla común, incluso en seguro. La ficha atacante no se mueve. |
+| `kill-chosen` / `CAPTURE_CHOSEN_CELL` | BUFF | Elige una casilla común ocupada por rivales mediante `targetPosition`. Devuelve todas las fichas rivales de esa casilla a casa, incluso en seguro. No afecta fichas propias ni carriles privados. |
+| `advance-safe` / `MOVE_SAFE` | BUFF | Elige una ficha propia en tablero. Avanza al primer seguro con cupo por delante en su ruta común. No retrocede ni sale del tramo final. |
+| `skip-turn` / `SKIP_NEXT_TURN` | DEBUFF | Consume una vez el siguiente turno que se le asigne al afectado, incluido un turno extra si corresponde. El servidor emite `EFFECT_CONSUMED` y pasa al siguiente asiento activo. El número de turno cuenta el turno omitido. |
+| `instant-death` / `LOSE_LEADING_PIECE` | DEBUFF | Devuelve a casa una ficha propia no coronada con el mayor progreso; en empate, el menor número. Puede afectar una ficha propia en el carril final. |
+| `doubles-death` / `DOUBLES_PENALTY` | DEBUFF | Desde que se aplica hasta el fin del siguiente turno asignado al afectado, cada tirada con **dos dados iguales** de cualquier participante devuelve una ficha propia del afectado a casa. Incluye sus propios dobles. Se elige uniformemente entre fichas en tablero mediante `DiceSource`; si no hay candidatas no se hace sorteo. El efecto expira también si ese turno vence o se omite. |
 
-| Carta / código | Condiciones y efecto |
-|---|---|
-| `capture-next` / `CAPTURE_NEXT` | Selecciona ficha propia `BOARD`. En su recorrido hacia delante, máximo 6 pasos dentro del tramo común, calcula **el primer rival no protegido**. Es el único rival autorizado para esa ficha. Ignora rivales protegidos; excluye casa, coronados y carriles privados. Devuelve el rival a casa; la propia permanece donde estaba. No consume un dado adicional. |
-| `move-safe` / `MOVE_SAFE` | Selecciona ficha propia `BOARD`. Calcula **el primer seguro con espacio** hacia delante hasta el final del tramo común. No admite seguros anteriores, otro recorrido ni fichas de casa. Actualiza posición y progreso al seguro. |
-| `dice-limit` / `DICE_MAX_LIMIT` | Fallo de trivia: máximo 3 por dado durante los siguientes 3 turnos completos del afectado. `remainingTurns=3`, `startsAtTurn=turnsStarted+1`. |
-| `choose-dice` / `CHOOSE_DICE` | Derecho de un uso para elegir ambos dados del siguiente turno propio. Al comenzar publica `DICE_SELECTION_REQUIRED`. Valida y consume al lanzar. Si ese turno vence sin lanzar, expira. |
+Acierto: BUFF; fallo o timeout: DEBUFF. Las cartas se sortean entre las del tipo y mapa. Los dos efectos programados no se acumulan al reaplicarlos. No hay inventario ni acción cliente para solicitar un premio concreto.
 
-Un acierto obtiene buff y un fallo/timeout debuff, elegidos aleatoriamente entre documentos del tipo y mapa. Las cartas de dados se aplican inmediatamente como efectos programados; no cambian los resultados actuales. Reaplicar el mismo código reemplaza la programación para los próximos turnos, sin acumulación. Al finalizar cada turno afectado se descuenta uno, con `EFFECT_UPDATED` o `EFFECT_EXPIRED`. Turnos extra por dobles también cuentan.
-
-**Precedencia:** el límite de3 restringe la elección del buff a `1–3` por dado. Elegir 4–6 se rechaza sin consumir el derecho; sin debuff admite 1–6. No se recortan valores silenciosamente.
-
-Las cartas con objetivo se resuelven inmediatamente mediante `card.choices`, plazo máximo15 segundos y pausa de movimientos ordinarios. El motor recalcula las opciones al recibir `CARD_TARGET`. Una carta imposible o vencida se descarta. Esta espera de selección no permite guardarla para otro turno. Tras ejecutar se elimina `card`; solo permanecen efectos temporales ya aplicados.
+La selección se realiza con las opciones de `card.choices` y se revalida al recibir `CARD_TARGET`. Si no hay objetivo válido, se publica `CARD_DISCARDED`; un objetivo pendiente también se descarta al vencer su plazo. Las devoluciones a casa dejan la ficha en `HOME`, con `position=null` y `progress=-1`. Las cartas no consumen dados adicionales. Ver [protocolo](WEBSOCKET.md).
 
 ## Trivia
 
@@ -35,7 +33,7 @@ Movimiento ordinario a 8,24,40,56 selecciona pregunta temática. `TRIVIA_QUESTIO
 
 Puntuación: progreso+10, corona+1000, captura+400, seguro+250, liberación+140; exposición a un rival entre 1 y6 posiciones detrás resta100. Se eligen aleatoriamente opciones dentro de 180 puntos de la mejor, con pesos positivos crecientes según puntuación. Es una heurística local, sin búsqueda de futuros turnos.
 
-Reevalúa después de cada dado confirmado, pudiendo combinar captura con otro dado y seguridad de otra ficha. No mueve siempre la primera. Si no hay movimientos, el motor avanza; el fallback termina turno. Para cartas elige solo opciones autorizadas; para buff de dados elige los máximos permitidos. Trivia simula acierto con probabilidad configurable 0.65 y, en fallo, elige otra opción. El servidor conoce la respuesta para simular la probabilidad, pero no la publica antes de resolver.
+Reevalúa después de cada dado confirmado, pudiendo combinar captura con otro dado y seguridad de otra ficha. No mueve siempre la primera. Si no hay movimientos, el motor avanza; el fallback termina turno. Para cartas elige solo opciones autorizadas; si recupera un efecto de elección de dados de una partida anterior, elige los máximos permitidos. Trivia simula acierto con probabilidad configurable 0.65 y, en fallo, elige otra opción. El servidor conoce la respuesta para simular la probabilidad, pero no la publica antes de resolver.
 
 ## Estado y concurrencia
 
@@ -54,7 +52,7 @@ Se guardan los últimos 256 recibos por actor/requestId, con hash del payload y 
 
 Al reiniciar Game se recuperan snapshots, deadlines e índice desde Redis. Pub/Sub no es un historial durable: Godot detecta huecos de versión y pide sincronización. Los eventos incluyen snapshot público compacto, sin el mapa de96 casillas.
 
-Durabilidad ante pérdida/reinicio de **Redis** depende de AOF/RDB externos. El volumen de Compose no garantiza guardar la última acción; no se modificó esa configuración. No hay TTL de partidas finalizadas ni copia histórica en MongoDB. La futura retención debe definirse explícitamente. Los scripts están diseñados para Redis standalone existente, no para Cluster.
+Durabilidad ante pérdida/reinicio de **Redis** depende de AOF/RDB externos. Compose usa AOF cada segundo para instalaciones nuevas. Si el volumen existente contiene solo RDB, el arranque conserva ese formato hasta la [conversión controlada](../../docs/GUIA_ACTUALIZACION.md#conservar-redis-al-activar-aof). Ninguno de los dos garantiza conservar la última acción tras un fallo abrupto. No hay TTL de partidas finalizadas ni copia histórica en MongoDB. La futura retención debe definirse explícitamente. Los scripts están diseñados para Redis standalone existente, no para Cluster.
 
 ## Desconexiones
 
