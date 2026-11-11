@@ -9,12 +9,15 @@ import com.pixelchiss.gameservice.domain.GameState.PendingCard;
 import com.pixelchiss.gameservice.domain.GameState.Piece;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import static com.pixelchiss.gameservice.engine.GameException.require;
 import static com.pixelchiss.gameservice.engine.RuleEngine.Event.of;
 
 /** Immediate card targeting/application; no inventory or client-controlled grants. */
 public class CardRules {
+    static final String SKIP_NEXT_TURN = "SKIP_NEXT_TURN";
+    static final String DOUBLES_PENALTY = "DOUBLES_PENALTY";
     private static final int DEFAULT_CAPTURE_DISTANCE = 6;
     private static final int DEFAULT_LIMITED_TURNS = 3;
     private static final int DEFAULT_LIMITED_MAXIMUM = 3;
@@ -32,6 +35,11 @@ public class CardRules {
         if (card == null) {
             return List.of();
         }
+        if (card.effectCode().equals("CAPTURE_CHOSEN_CELL")) {
+            return game.pieces.stream().filter(piece -> !actor.equals(piece.ownerId) && onCommonTrack(piece))
+                    .map(piece -> piece.position).distinct().sorted()
+                    .map(position -> new CardChoice(null, null, null, position)).toList();
+        }
         var choices = new ArrayList<CardChoice>();
         for (Piece piece : game.pieces) {
             if (!piece.ownerId.equals(actor) || !piece.status.equals("BOARD")) {
@@ -47,6 +55,39 @@ public class CardRules {
             }
         }
         return choices;
+    }
+
+    private record CaptureCell(Piece origin, int distance, int position) {}
+
+    private CaptureCell nearestRivalCell(GameState game, String actor) {
+        CaptureCell best = null;
+        int seat = game.player(actor).seat;
+        for (Piece piece : ownBoardPieces(game, actor)) {
+            for (int progress = piece.progress + 1; progress <= Board.TRACK_CELL_COUNT; progress++) {
+                int distance = progress - piece.progress;
+                if (best != null && distance >= best.distance()) break;
+                int position = board.position(seat, piece.number, progress);
+                if (!rivalsAt(game, actor, position).isEmpty()) {
+                    best = new CaptureCell(piece, distance, position);
+                    break;
+                }
+            }
+        }
+        return best;
+    }
+
+    private List<Piece> ownBoardPieces(GameState game, String actor) {
+        return game.pieces.stream().filter(piece -> actor.equals(piece.ownerId) && piece.status.equals("BOARD"))
+                .sorted(Comparator.comparingInt(piece -> piece.number)).toList();
+    }
+
+    private static boolean onCommonTrack(Piece piece) {
+        return piece.status.equals("BOARD") && piece.position != null
+                && piece.position >= 0 && piece.position < Board.TRACK_CELL_COUNT;
+    }
+
+    private List<Piece> rivalsAt(GameState game, String actor, int position) {
+        return game.occupants(position, null).stream().filter(piece -> !actor.equals(piece.ownerId)).toList();
     }
 
     private CardChoice nextCapture(GameState game, Piece own, CardDefinition card) {
@@ -81,7 +122,9 @@ public class CardRules {
         require(card != null && (card.mapId().equals("*") || card.mapId().equals(game.mapId)),
                 "INVALID_CARD", "Card unavailable for map");
         if (!card.targetRequired()) {
-            apply(game, card, actor, null, events);
+            if (!apply(game, card, actor, null, events)) {
+                events.add(of("CARD_DISCARDED", "cardId", card.id(), "reason", "NO_LEGAL_TARGET"));
+            }
             return;
         }
         var options = choices(game, card, actor);
@@ -110,7 +153,7 @@ public class CardRules {
         game.card = null;
     }
 
-    private void apply(GameState game, CardDefinition card, String actor,
+    private boolean apply(GameState game, CardDefinition card, String actor,
                        CardChoice choice, List<RuleEngine.Event> events) {
         switch (card.effectCode()) {
             case "CAPTURE_NEXT" -> {
@@ -120,12 +163,58 @@ public class CardRules {
                         "byPieceId", choice.pieceId(), "cardId", card.id()));
             }
             case "MOVE_SAFE" -> moveToSafe(game, card, choice, events);
+            case "CAPTURE_NEAREST_CELL" -> {
+                var nearest = nearestRivalCell(game, actor);
+                if (nearest == null) return false;
+                for (Piece victim : rivalsAt(game, actor, nearest.position())) {
+                    victim.home();
+                    events.add(of("PIECE_CAPTURED", "pieceId", victim.id,
+                            "byPieceId", nearest.origin().id, "cardId", card.id()));
+                }
+            }
+            case "CAPTURE_CHOSEN_CELL" -> {
+                for (Piece victim : rivalsAt(game, actor, choice.targetPosition())) {
+                    returnByCard(victim, card.id(), card.effectCode(), events);
+                }
+            }
+            case "LOSE_LEADING_PIECE" -> {
+                var leading = ownBoardPieces(game, actor).stream()
+                        .min(Comparator.comparingInt((Piece piece) -> piece.progress).reversed()
+                                .thenComparingInt(piece -> piece.number)).orElse(null);
+                if (leading == null) return false;
+                returnByCard(leading, card.id(), card.effectCode(), events);
+            }
+            case SKIP_NEXT_TURN, DOUBLES_PENALTY -> replaceEffect(game, actor,
+                    new Effect(card.effectCode(), 1, game.player(actor).turnsStarted + 1, 0));
             case DiceRules.LIMIT_EFFECT -> applyLimit(game, card, actor);
             case DiceRules.SELECTION_EFFECT -> replaceEffect(game, actor,
                     new Effect(DiceRules.SELECTION_EFFECT, 1, game.player(actor).turnsStarted + 1, DiceRules.NORMAL_MAXIMUM));
             default -> throw new GameException("INVALID_CARD", "Unknown effect code");
         }
         events.add(of("EFFECT_APPLIED", "cardId", card.id(), "playerId", actor, "effectCode", card.effectCode()));
+        return true;
+    }
+
+    void onDoubles(GameState game, DiceSource random, List<RuleEngine.Event> events) {
+        if (!game.turn.doubles) return;
+        for (var player : game.players) {
+            if (player.retired || player.effects.stream().noneMatch(effect -> DOUBLES_PENALTY.equals(effect.code))) {
+                continue;
+            }
+            var eligible = ownBoardPieces(game, player.id);
+            if (!eligible.isEmpty()) {
+                int pick = random.roll(eligible.size());
+                require(pick >= 1 && pick <= eligible.size(), "INVALID_RANDOM_SOURCE", "Piece selection outside range");
+                returnByCard(eligible.get(pick - 1), null, DOUBLES_PENALTY, events);
+            }
+        }
+    }
+
+    private void returnByCard(Piece victim, String cardId, String effectCode, List<RuleEngine.Event> events) {
+        Integer from = victim.position;
+        victim.home();
+        events.add(of("CARD_PIECE_RETURNED", "pieceId", victim.id, "playerId", victim.ownerId,
+                "from", from, "cardId", cardId, "effectCode", effectCode));
     }
 
     private void moveToSafe(GameState game, CardDefinition card, CardChoice choice, List<RuleEngine.Event> events) {

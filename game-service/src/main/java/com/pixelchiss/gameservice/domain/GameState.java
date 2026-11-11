@@ -1,6 +1,5 @@
 package com.pixelchiss.gameservice.domain;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
 import java.util.*;
 
 /** Mutable aggregate, only mutated on an isolated copy before an atomic repository commit. */
@@ -65,10 +64,8 @@ public class GameState {
         public int startsAtTurn;
         public int maxValue;
         public Effect() {}
-        // Persisted field names differ from this convenience constructor's parameters.
-        @JsonCreator(mode = JsonCreator.Mode.DISABLED)
-        public Effect(String code, int turns, int start, int max) {
-            this.code = code; remainingTurns = turns; startsAtTurn = start; maxValue = max;
+        public Effect(String code, int remainingTurns, int startsAtTurn, int maxValue) {
+            this.code = code; this.remainingTurns = remainingTurns; this.startsAtTurn = startsAtTurn; this.maxValue = maxValue;
         }
     }
     public static class PendingTrivia {

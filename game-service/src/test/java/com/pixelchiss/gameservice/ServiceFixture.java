@@ -1,4 +1,6 @@
 package com.pixelchiss.gameservice;
+import com.pixelchiss.gameservice.persistence.JsonPayloadFingerprints;
+
 
 import com.pixelchiss.gameservice.dto.*;
 import com.pixelchiss.gameservice.engine.*;
@@ -11,5 +13,5 @@ import static org.junit.jupiter.api.Assertions.*;
 abstract class ServiceFixture extends EngineFixture {
     MemoryGames repo;
     GameService service;
-    @BeforeEach void setupService(){repo=new MemoryGames();service=new GameService(repo,engine,repo.json);repo.create(game,"{}");}
+    @BeforeEach void setupService(){repo=new MemoryGames();service=new GameService(repo, engine, new JsonPayloadFingerprints(repo.json));repo.create(game,null);}
 }

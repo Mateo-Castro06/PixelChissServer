@@ -40,7 +40,7 @@ public class GameController {
     })
     public GameView state(@Parameter(description = "Game ID, 1–80 letters, digits, underscores or hyphens", required = true)
                           @PathVariable String gameId, @AuthenticationPrincipal Jwt jwt) {
-        return games.snapshot(gameId, jwt.getSubject());
+        return GameView.of(games.snapshot(gameId, jwt.getSubject()));
     }
 
     @GetMapping("/board")

@@ -6,9 +6,9 @@ import com.pixelchiss.gameservice.domain.GameState;
 import com.pixelchiss.gameservice.domain.GameState.CardChoice;
 import com.pixelchiss.gameservice.domain.GameState.PendingTrivia;
 import com.pixelchiss.gameservice.domain.GameState.Piece;
-import com.pixelchiss.gameservice.dto.Action;
-import com.pixelchiss.gameservice.dto.CreateGame;
-import com.pixelchiss.gameservice.persistence.GameCatalog;
+import com.pixelchiss.gameservice.domain.GameAction;
+import com.pixelchiss.gameservice.domain.GameSetup;
+import com.pixelchiss.gameservice.domain.GameCatalog;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,12 +30,12 @@ public class TriviaRules extends RuleEngine {
         cards = new CardRules(board, clock, cardMillis);
     }
 
-    @Override public GameState create(CreateGame input) {
+    @Override public GameState create(GameSetup input) {
         require(!catalog.questions(input.mapId()).isEmpty(), "UNKNOWN_MAP", "Map requires a question bank");
         return super.create(input);
     }
 
-    @Override public List<Event> act(GameState game, String actor, Action action) {
+    @Override public List<Event> act(GameState game, String actor, GameAction action) {
         active(game, actor);
         return switch (action.type()) {
             case "TRIVIA_ANSWER" -> answer(game, actor, action);
@@ -44,7 +44,7 @@ public class TriviaRules extends RuleEngine {
         };
     }
 
-    private List<Event> answer(GameState game, String actor, Action action) {
+    private List<Event> answer(GameState game, String actor, GameAction action) {
         require(game.trivia != null && game.trivia.playerId.equals(actor)
                         && Objects.equals(game.trivia.id, action.challengeId()),
                 "INVALID_CHALLENGE", "Question not active");
@@ -58,7 +58,7 @@ public class TriviaRules extends RuleEngine {
         return events;
     }
 
-    private List<Event> target(GameState game, String actor, Action action) {
+    private List<Event> target(GameState game, String actor, GameAction action) {
         require(game.card != null && game.card.playerId.equals(actor)
                         && Objects.equals(game.card.id, action.challengeId()),
                 "INVALID_CHALLENGE", "Card not active");
@@ -68,6 +68,10 @@ public class TriviaRules extends RuleEngine {
         cards.resolveTarget(game, catalog.card(game.card.cardId), actor, choice, events);
         continueTurn(game, events);
         return events;
+    }
+
+    @Override protected void afterRoll(GameState game, List<Event> events) {
+        cards.onDoubles(game, dice, events);
     }
 
     @Override protected void afterLanding(GameState game, Piece piece, List<Event> events) {

@@ -2,10 +2,10 @@ package com.pixelchiss.gameservice.bot;
 
 import com.pixelchiss.gameservice.domain.Board;
 import com.pixelchiss.gameservice.domain.GameState;
-import com.pixelchiss.gameservice.dto.Action;
+import com.pixelchiss.gameservice.domain.GameAction;
 import com.pixelchiss.gameservice.engine.DiceRules;
 import com.pixelchiss.gameservice.engine.RuleEngine;
-import com.pixelchiss.gameservice.persistence.GameCatalog;
+import com.pixelchiss.gameservice.domain.GameCatalog;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -37,7 +37,7 @@ public class BotPolicy {
         this.triviaAccuracy = triviaAccuracy;
     }
 
-    public Action next(GameState game) {
+    public GameAction next(GameState game) {
         var player = game.player(game.turn.playerId);
         if (!game.status.equals("ACTIVE") || !player.bot || player.retired) {
             return null;
@@ -47,42 +47,42 @@ public class BotPolicy {
         if (!game.turn.rolled) return roll(game);
         var moves = rules.legalMoves(game, player.id);
         if (moves.isEmpty()) {
-            return new Action("END_TURN", game.id, requestId(), game.version,
+            return new GameAction("END_TURN", game.id, requestId(), game.version,
                     null, null, null, null, null, null, null, null, null, null);
         }
         var selected = weightedMove(game, moves);
-        return new Action("MOVE_REQUEST", game.id, requestId(), game.version,
+        return new GameAction("MOVE_REQUEST", game.id, requestId(), game.version,
                 selected.pieceId(), selected.dieIndex(), selected.dieValue(), selected.from(), selected.to(),
                 null, null, null, null, null);
     }
 
-    private Action answerTrivia(GameState game) {
+    private GameAction answerTrivia(GameState game) {
         var question = catalog.question(game.trivia.questionId);
         int answer = question.correctIndex();
         if (random.getAsDouble() >= triviaAccuracy) {
             answer = (answer + 1 + (int) (random.getAsDouble() * (question.options().size() - 1))) % question.options().size();
         }
-        return new Action("TRIVIA_ANSWER", game.id, requestId(), game.version,
+        return new GameAction("TRIVIA_ANSWER", game.id, requestId(), game.version,
                 null, null, null, null, null, null, game.trivia.id, answer, null, null);
     }
 
-    private Action selectCardTarget(GameState game) {
+    private GameAction selectCardTarget(GameState game) {
         var choices = game.card.choices;
         if (choices.isEmpty()) {
             return null;
         }
         int index = Math.min(choices.size() - 1, (int) (random.getAsDouble() * choices.size()));
         var choice = choices.get(index);
-        return new Action("CARD_TARGET", game.id, requestId(), game.version,
+        return new GameAction("CARD_TARGET", game.id, requestId(), game.version,
                 choice.pieceId(), null, null, null, choice.targetPosition(), null, game.card.id, null,
                 choice.targetPieceId(), choice.targetPlayerId());
     }
 
-    private Action roll(GameState game) {
+    private GameAction roll(GameState game) {
         var player = game.player(game.turn.playerId);
         int maximum = DiceRules.maximumValue(player);
         List<Integer> chosen = DiceRules.selectionEffect(player).isPresent() ? List.of(maximum, maximum) : null;
-        return new Action("ROLL_DICE", game.id, requestId(), game.version,
+        return new GameAction("ROLL_DICE", game.id, requestId(), game.version,
                 null, null, null, null, null, chosen, null, null, null, null);
     }
 

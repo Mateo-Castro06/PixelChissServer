@@ -2,6 +2,7 @@ package com.pixelchiss.gameservice.persistence;
 
 import com.pixelchiss.gameservice.domain.*;
 import java.util.*;
+import static com.pixelchiss.gameservice.persistence.CatalogDocuments.*;
 import org.bson.Document;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -23,8 +24,8 @@ public class CatalogSeeder implements ApplicationRunner {
     @Override public void run(ApplicationArguments args) throws Exception {
         try(var stream=new ClassPathResource("seed/catalog.json").getInputStream()) {
             Seed seed=json.readValue(stream,Seed.class);
-            for(var card:seed.cards()) insert(card,card.id(),CardDefinition.class);
-            for(var question:seed.questions()) insert(question,question.id(),QuestionDefinition.class);
+            for(var card:seed.cards()) insert(CardDocument.of(card),card.id(),CardDocument.class);
+            for(var question:seed.questions()) insert(QuestionDocument.of(question),question.id(),QuestionDocument.class);
         }
     }
     private <T> void insert(T value,String id,Class<T> type) {

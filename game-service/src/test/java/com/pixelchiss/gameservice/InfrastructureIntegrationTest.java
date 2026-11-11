@@ -1,4 +1,6 @@
 package com.pixelchiss.gameservice;
+import com.pixelchiss.gameservice.application.GameRepository;
+
 
 import com.pixelchiss.gameservice.domain.*;
 import com.pixelchiss.gameservice.dto.*;
@@ -22,17 +24,17 @@ import org.springframework.boot.test.context.*;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.*;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.*;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.*;
 import org.springframework.test.annotation.DirtiesContext;
 import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-/** Opt-in tests use existing Redis/MongoDB, a test Redis prefix, and the existing pixelchiss DB. */
+/** Opt-in tests require isolated Redis/MongoDB. A preloaded catalog can be tested with seeding disabled. */
 @EnabledIfSystemProperty(named="game.integration",matches="true")
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
-        "REDIS_URL=redis://localhost:6379/0","MONGODB_URI=mongodb://localhost:27017/pixelchiss",
+
         "EUREKA_URL=http://localhost:8761/eureka/","eureka.client.enabled=false","game.scheduling.enabled=false",
         "game.lobby-token=integration-credential-32-characters"})
 @Import(InfrastructureIntegrationTest.FixedDice.class)
@@ -46,42 +48,60 @@ class InfrastructureIntegrationTest {
         Files.writeString(path,"-----BEGIN PUBLIC KEY-----\n"+Base64.getMimeEncoder(64,new byte[]{10}).encodeToString(KEYS.getPublic().getEncoded())+"\n-----END PUBLIC KEY-----\n");
         r.add("spring.security.oauth2.resourceserver.jwt.public-key-location",()->"file:"+path);
         r.add("game.redis-prefix",()->PREFIX);
+        r.add("REDIS_URL", () -> Objects.requireNonNull(System.getenv("GAME_TEST_REDIS_URL"),
+                "Set GAME_TEST_REDIS_URL to an isolated Redis"));
+        r.add("MONGODB_URI", () -> Objects.requireNonNull(System.getenv("GAME_TEST_MONGO_URI"),
+                "Set GAME_TEST_MONGO_URI to an isolated MongoDB"));
     }
     @TestConfiguration static class FixedDice {@Bean @Primary DiceSource integrationDice(){return max->Math.min(4,max);}}
     @LocalServerPort int port;
     @Autowired GameService games;
     @Autowired GameRepository repository;
-    @Autowired CatalogSeeder seeder;
+    @Autowired(required=false) CatalogSeeder seeder;
     @Autowired MongoTemplate mongo;
+    @Autowired MongoGameCatalog catalog;
     @Autowired StringRedisTemplate redis;
     @Autowired ObjectMapper json;
     @Autowired RuleEngine rules;
     @Autowired PresenceService presence;
     final List<String> ids=new ArrayList<>();
     CreateGame input(String id){return new CreateGame(id,"test-lobby","classic",List.of(new CreateGame.Participant("test-a",false,0),new CreateGame.Participant("test-b",false,1)),"test-a");}
-    String create(){String id="it-"+UUID.randomUUID();ids.add(id);games.create(input(id));return id;}
+    String create(){String id="it-"+UUID.randomUUID();ids.add(id);games.create(input(id).command());return id;}
     @AfterEach void cleanup(){for(String id:ids){redis.delete(PREFIX+":state:"+id);redis.opsForSet().remove(PREFIX+":active",id);
         redis.delete("pixelchiss:game:presence:"+id+":test-a");redis.delete("pixelchiss:game:presence:"+id+":test-b");}}
     @Test void seedsAreIdempotentAndDefinitionsRoundTripFromMongo() throws Exception {
-        seeder.run(null);seeder.run(null);var catalog=new MongoGameCatalog(mongo);
-        assertEquals(4,mongo.count(Query.query(Criteria.where("_id").in("capture-next","move-safe","dice-limit","choose-dice")),CardDefinition.class));
-        assertEquals(8,mongo.count(Query.query(Criteria.where("_id").in(new SeedCatalog().seed.questions().stream().map(QuestionDefinition::id).toList())),QuestionDefinition.class));
-        assertEquals(3,catalog.card("dice-limit").parameters().get("turns"));assertEquals(4,catalog.questions("science").size());
+        assumeTrue(seeder != null, "Catalog seeding explicitly disabled for this run");
+        seeder.run(null);seeder.run(null);
+        assertEquals(6,mongo.getCollection("game_cards").countDocuments());
+        assertEquals(32,mongo.getCollection("game_questions").countDocuments());
+        for (String map : List.of("classic","science")) {
+            assertEquals(16,catalog.questions(map).size());
+            assertEquals(3,catalog.cards(map,"BUFF").size());
+            assertEquals(3,catalog.cards(map,"DEBUFF").size());
+        }
+        assertEquals("CAPTURE_CHOSEN_CELL",catalog.card("kill-chosen").effectCode());
+        assertNotNull(catalog.card("capture-next"));
+        assertNotNull(catalog.question("classic-1"));
+        assertNull(mongo.getCollection("game_cards").find(new org.bson.Document("_id","capture-next")).first());
+        assertNull(mongo.getCollection("game_questions").find(new org.bson.Document("_id","classic-1")).first());
     }
     @Test void realRedisRejectsStaleCasAndRecoversCompleteState() {
         String id=create();GameState first=repository.find(id),second=repository.find(id);
         first.version=1;second.version=1;
-        assertTrue(repository.commit(first,0,"{}"));assertFalse(repository.commit(second,0,"{}"));
+        assertTrue(repository.commit(first,0,null));assertFalse(repository.commit(second,0,null));
         assertEquals(1,repository.find(id).version);assertEquals(8,repository.find(id).pieces.size());
-        assertEquals(1,games.create(input(id)).version());
-        assertThrows(GameException.class,()->games.create(new CreateGame(id,"different-lobby","classic",input(id).participants(),"test-a")));
+        assertEquals(1,games.create(input(id).command()).version());
+        assertThrows(GameException.class,()->games.create(new CreateGame(id,"different-lobby","classic",input(id).participants(),"test-a").command()));
+    }
+    @Test void realRedisRejectsCommitOfUnknownGame() {
+        GameRepositoryContractTest.verifyMissingCommit(repository, "absent-" + UUID.randomUUID());
     }
     @Test void realRedisRecoversAppliedDiceEffectsWithoutLosingDuration() {
         String id=create();GameState working=repository.find(id);
         working.player("test-a").effects.add(new GameState.Effect("DICE_MAX_LIMIT",3,2,3));
         working.player("test-a").effects.add(new GameState.Effect("CHOOSE_DICE",1,2,6));
         working.version=1;
-        assertTrue(repository.commit(working,0,"{}"));
+        assertTrue(repository.commit(working,0,null));
         var effects=repository.find(id).player("test-a").effects;
         assertEquals(2,effects.size());
         assertEquals(3,effects.getFirst().remainingTurns);
@@ -89,6 +109,60 @@ class InfrastructureIntegrationTest {
         assertEquals(3,effects.getFirst().maxValue);
         assertEquals("CHOOSE_DICE",effects.getLast().code);
         assertEquals(1,effects.getLast().remainingTurns);
+    }
+    @Test void eachPublishedCardResolvesAgainstMongoAndPersistsInRedis() {
+        for (String cardId : List.of("kill-next","kill-chosen","advance-safe","instant-death","skip-turn","doubles-death")) {
+            String id=create();
+            assertTrue(games.system(id, state -> {
+                var own = state.piece("seat-0-piece-0");
+                own.progress=5;own.position=4;own.status="BOARD";
+                var rival = state.piece("seat-1-piece-0");
+                rival.progress=54;rival.position=5;rival.status="BOARD";
+                var events = new ArrayList<RuleEngine.Event>();
+                ((TriviaRules) rules).grant(state,catalog.card(cardId),"test-a",events);
+                return events;
+            }),cardId);
+            var state = repository.find(id);
+            switch (cardId) {
+                case "kill-next" -> assertEquals("HOME",state.piece("seat-1-piece-0").status);
+                case "instant-death" -> assertEquals("HOME",state.piece("seat-0-piece-0").status);
+                case "kill-chosen", "advance-safe" -> {
+                    var choice=state.card.choices.getFirst();
+                    var request=new Action("CARD_TARGET",id,"resolve",state.version,
+                            choice.pieceId(),null,null,null,choice.targetPosition(),null,state.card.id,null,
+                            choice.targetPieceId(),choice.targetPlayerId());
+                    assertFalse(games.action("test-a",request.command()).duplicate());
+                    var result=repository.find(id);
+                    assertNull(result.card);
+                    if (cardId.equals("kill-chosen")) assertEquals("HOME",result.piece("seat-1-piece-0").status);
+                    else assertEquals(5,result.piece("seat-0-piece-0").position);
+                    assertTrue(games.action("test-a",request.command()).duplicate());
+                }
+                case "skip-turn" -> {
+                    assertEquals("SKIP_NEXT_TURN",state.player("test-a").effects.getFirst().code);
+                    advanceByExpiry(id);
+                    assertEquals("test-b",repository.find(id).turn.playerId);
+                    advanceByExpiry(id);
+                    var after=repository.find(id);
+                    assertEquals("test-b",after.turn.playerId);
+                    assertTrue(after.player("test-a").effects.isEmpty());
+                }
+                case "doubles-death" -> {
+                    assertEquals("DOUBLES_PENALTY",state.player("test-a").effects.getFirst().code);
+                    advanceByExpiry(id);
+                    var waiting=repository.find(id);
+                    games.action("test-b",new Action("ROLL_DICE",id,"doubles",waiting.version,
+                            null,null,null,null,null,null,null,null,null,null).command());
+                    assertEquals("HOME",repository.find(id).piece("seat-0-piece-0").status);
+                }
+            }
+        }
+    }
+    private void advanceByExpiry(String id) {
+        assertTrue(games.system(id, state -> {
+            state.turn.deadline = 0;
+            return rules.tick(state);
+        }));
     }
     String token(String actor) throws Exception {
         var jwt=new SignedJWT(new JWSHeader(JWSAlgorithm.RS256),new JWTClaimsSet.Builder().subject(actor).issueTime(new Date()).expirationTime(Date.from(Instant.now().plusSeconds(900))).build());

@@ -4,8 +4,8 @@ import com.pixelchiss.gameservice.domain.Board;
 import com.pixelchiss.gameservice.domain.GameState;
 import com.pixelchiss.gameservice.domain.GameState.Piece;
 import com.pixelchiss.gameservice.domain.GameState.Player;
-import com.pixelchiss.gameservice.dto.Action;
-import com.pixelchiss.gameservice.dto.CreateGame;
+import com.pixelchiss.gameservice.domain.GameAction;
+import com.pixelchiss.gameservice.domain.GameSetup;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -51,7 +51,7 @@ public class RuleEngine {
         return Event.of(type, pairs);
     }
 
-    public GameState create(CreateGame input) {
+    public GameState create(GameSetup input) {
         validateInitialization(input);
         var game = new GameState();
         game.id = input.gameId();
@@ -63,7 +63,7 @@ public class RuleEngine {
         return game;
     }
 
-    private void validateInitialization(CreateGame input) {
+    private void validateInitialization(GameSetup input) {
         require(input != null && input.participants() != null && input.participants().size() >= 2
                         && input.participants().size() <= Board.SEAT_COUNT,
                 "INVALID_PARTICIPANTS", "Requires two to four participants");
@@ -85,9 +85,9 @@ public class RuleEngine {
                 "INVALID_FIRST_PLAYER", "firstPlayerId must equal the original room creator");
     }
 
-    private void createPlayersAndPieces(GameState game, List<CreateGame.Participant> participants) {
+    private void createPlayersAndPieces(GameState game, List<GameSetup.Participant> participants) {
         var clockwise = participants.stream()
-                .sorted(Comparator.comparingInt(CreateGame.Participant::seat)).toList();
+                .sorted(Comparator.comparingInt(GameSetup.Participant::seat)).toList();
         for (var participant : clockwise) {
             game.players.add(new Player(participant.playerId(), participant.seat(), participant.bot()));
             for (int number = 0; number < Board.PIECES_PER_PLAYER; number++) {
@@ -113,7 +113,7 @@ public class RuleEngine {
         return player;
     }
 
-    public List<Event> act(GameState game, String actor, Action action) {
+    public List<Event> act(GameState game, String actor, GameAction action) {
         active(game, actor);
         require(game.trivia == null && game.card == null, "PENDING_CHALLENGE", "Resolve current challenge first");
         var events = new ArrayList<Event>();
@@ -129,10 +129,13 @@ public class RuleEngine {
         return events;
     }
 
-    protected void roll(GameState game, String actor, Action action, List<Event> events) {
+    protected void roll(GameState game, String actor, GameAction action, List<Event> events) {
         diceRules.roll(game, actor, action.chosenDice(), events);
+        afterRoll(game, events);
         continueTurn(game, events);
     }
+
+    protected void afterRoll(GameState game, List<Event> events) {}
 
     public Move calculate(GameState game, String actor, String pieceId, int dieIndex) {
         int dieValue = DiceRules.authorizedValue(game.turn, dieIndex);
@@ -193,7 +196,7 @@ public class RuleEngine {
         return moves;
     }
 
-    protected void move(GameState game, String actor, Action action, List<Event> events) {
+    protected void move(GameState game, String actor, GameAction action, List<Event> events) {
         require(action.dieIndex() != null && action.dieValue() != null && action.targetPosition() != null,
                 "INVALID_ACTION", "Die index, value and destination required");
         Move movement = calculate(game, actor, action.pieceId(), action.dieIndex());

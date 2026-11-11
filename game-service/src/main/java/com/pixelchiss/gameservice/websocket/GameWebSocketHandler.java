@@ -1,9 +1,9 @@
 package com.pixelchiss.gameservice.websocket;
 
+import com.pixelchiss.gameservice.application.Presence;
 import com.pixelchiss.gameservice.dto.Action;
 import com.pixelchiss.gameservice.engine.GameException;
 import com.pixelchiss.gameservice.service.GameService;
-import com.pixelchiss.gameservice.service.PresenceService;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -42,7 +42,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     private final ObjectMapper json;
     private final JwtDecoder jwt;
     private final GameService games;
-    private final PresenceService presence;
+    private final Presence presence;
     private final Clock clock;
 
     private static class Connection {
@@ -61,7 +61,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     }
 
     public GameWebSocketHandler(ObjectMapper json, JwtDecoder jwt, GameService games,
-                                PresenceService presence, Clock clock) {
+                                Presence presence, Clock clock) {
         this.json = json;
         this.jwt = jwt;
         this.games = games;
@@ -126,7 +126,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         }
         require(connection.gameId != null && connection.gameId.equals(action.gameId()),
                 "JOIN_REQUIRED", "Join the game before acting");
-        send(connection, games.action(connection.actor, action));
+        send(connection, games.action(connection.actor, action.command()));
     }
 
     private void join(Connection connection, String gameId) throws IOException {

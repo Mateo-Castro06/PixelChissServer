@@ -1,4 +1,6 @@
 package com.pixelchiss.gameservice.dto;
+import com.pixelchiss.gameservice.domain.GameSetup;
+
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -17,6 +19,12 @@ public record CreateGame(@NotBlank @Size(max=80) String gameId,
     public CreateGame(String gameId, String lobbyId, String mapId,
                       List<Participant> participants, String creatorPlayerId) {
         this(gameId, lobbyId, mapId, participants, creatorPlayerId, null);
+    }
+
+    public GameSetup command() {
+        return new GameSetup(gameId, lobbyId, mapId, participants == null ? null : participants.stream()
+                .map(p -> p == null ? null : new GameSetup.Participant(p.playerId(), p.bot(), p.seat())).toList(),
+                creatorPlayerId, firstPlayerId);
     }
 
     public record Participant(@NotBlank @Size(max=80) String playerId, boolean bot,

@@ -1,6 +1,5 @@
-package com.pixelchiss.gameservice.persistence;
+package com.pixelchiss.gameservice.domain;
 
-import com.pixelchiss.gameservice.domain.*;
 import java.util.List;
 
 public interface GameCatalog {

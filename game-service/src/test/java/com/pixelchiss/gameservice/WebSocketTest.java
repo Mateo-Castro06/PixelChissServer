@@ -1,7 +1,11 @@
 package com.pixelchiss.gameservice;
+import com.pixelchiss.gameservice.persistence.JsonPayloadFingerprints;
+
+import com.pixelchiss.gameservice.domain.GameAction;
+
 
 import com.pixelchiss.gameservice.service.*;
-import com.pixelchiss.gameservice.dto.CreateGame;
+import com.pixelchiss.gameservice.domain.GameSetup;
 import com.pixelchiss.gameservice.websocket.GameWebSocketHandler;
 import org.junit.jupiter.api.*;
 import org.springframework.security.oauth2.jwt.*;
@@ -37,10 +41,10 @@ class WebSocketTest extends ServiceFixture {
     }
     @Test void connectionAndMessageArrivalCannotChooseCreatorOrRotateSeats() throws Exception {
         for(var arrival:List.of(List.of("d","a","b","c"),List.of("b","c","d","a"))) {
-            game=engine.create(new CreateGame("g","l","classic",List.of(
-                    new CreateGame.Participant("b",false,1),new CreateGame.Participant("d",false,3),
-                    new CreateGame.Participant("a",false,0),new CreateGame.Participant("c",false,2)),"c"));
-            repo=new MemoryGames();repo.create(game,"{}");service=new GameService(repo,engine,repo.json);
+            game=engine.create(new GameSetup("g","l","classic",List.of(
+                    new GameSetup.Participant("b",false,1),new GameSetup.Participant("d",false,3),
+                    new GameSetup.Participant("a",false,0),new GameSetup.Participant("c",false,2)),"c"));
+            repo=new MemoryGames();repo.create(game,null);service=new GameService(repo, engine, new JsonPayloadFingerprints(repo.json));
             var decoder=mock(JwtDecoder.class);
             var handler=new GameWebSocketHandler(repo.json,decoder,service,mock(PresenceService.class),clock);
             for(String actor:arrival) {

@@ -32,3 +32,9 @@ game:
   disconnect-grace-millis: ${GAME_DISCONNECT_GRACE_MILLIS:60000}
   lobby-token: ${GAME_LOBBY_TOKEN:}
   allowed-origins: ${GAME_ALLOWED_ORIGINS:http://localhost:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus

@@ -1,4 +1,7 @@
 package com.pixelchiss.gameservice;
+import com.pixelchiss.gameservice.domain.GameAction;
+import com.pixelchiss.gameservice.domain.GameSetup;
+
 
 import com.pixelchiss.gameservice.domain.*;
 import com.pixelchiss.gameservice.dto.*;
@@ -14,10 +17,10 @@ abstract class EngineFixture {
     protected RuleEngine engine=new RuleEngine(board,m->Math.min(4,m),clock,60_000);
     protected GameState game;
     @BeforeEach void create() {
-        game=engine.create(new CreateGame("g","l","classic",List.of(new CreateGame.Participant("a",false,0),new CreateGame.Participant("b",false,1),new CreateGame.Participant("c",false,2)),"a"));
+        game=engine.create(new GameSetup("g","l","classic",List.of(new GameSetup.Participant("a",false,0),new GameSetup.Participant("b",false,1),new GameSetup.Participant("c",false,2)),"a"));
     }
-    protected Action action(String type,String piece,Integer index,Integer value,Integer from,Integer to,List<Integer> choose) {
-        return new Action(type,"g",UUID.randomUUID().toString(),game.version,piece,index,value,from,to,choose,null,null,null,null);
+    protected GameAction action(String type,String piece,Integer index,Integer value,Integer from,Integer to,List<Integer> choose) {
+        return new GameAction(type,"g",UUID.randomUUID().toString(),game.version,piece,index,value,from,to,choose,null,null,null,null);
     }
     protected void roll() { engine.act(game,"a",action("ROLL_DICE",null,null,null,null,null,null)); }
     protected void place(String piece,int progress) {

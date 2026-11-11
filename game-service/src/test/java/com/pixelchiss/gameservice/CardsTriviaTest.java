@@ -1,4 +1,6 @@
 package com.pixelchiss.gameservice;
+import com.pixelchiss.gameservice.domain.GameAction;
+
 
 import com.pixelchiss.gameservice.domain.*;
 import com.pixelchiss.gameservice.domain.GameState.*;
@@ -13,7 +15,7 @@ class CardsTriviaTest extends EngineFixture {
     TriviaRules cards;
     @BeforeEach void setupCards(){cards=new TriviaRules(board,m->Math.min(4,m),clock,60_000,catalog,15_000,15_000);engine=cards;}
     void grant(String id){cards.grant(game,catalog.card(id),"a",new ArrayList<>());}
-    Action target(CardChoice choice){return new Action("CARD_TARGET","g","target",game.version,choice.pieceId(),null,null,null,choice.targetPosition(),null,game.card.id,null,choice.targetPieceId(),choice.targetPlayerId());}
+    GameAction target(CardChoice choice){return new GameAction("CARD_TARGET","g","target",game.version,choice.pieceId(),null,null,null,choice.targetPosition(),null,game.card.id,null,choice.targetPieceId(),choice.targetPlayerId());}
     @Test void captureCardOnlyAcceptsNearestReachableUnprotectedOpponent() {
         place("seat-0-piece-0",3);place("seat-1-piece-0",53); // physical 4 nearest
         place("seat-1-piece-1",55); // physical 6 farther
@@ -71,14 +73,14 @@ class CardsTriviaTest extends EngineFixture {
         assertFalse(publicState.contains("correctIndex"));
         assertThrows(GameException.class,()->cards.act(game,"a",action("END_TURN",null,null,null,null,null,null)));
         var q=catalog.question(game.trivia.questionId);
-        var answer=new Action("TRIVIA_ANSWER","g","answer",0L,null,null,null,null,null,null,game.trivia.id,q.correctIndex(),null,null);
+        var answer=new GameAction("TRIVIA_ANSWER","g","answer",0L,null,null,null,null,null,null,game.trivia.id,q.correctIndex(),null,null);
         var events=cards.act(game,"a",answer);assertEquals("TRIVIA_RESOLVED",events.getFirst().type());assertNull(game.trivia);
         assertThrows(GameException.class,()->cards.act(game,"a",answer));
     }
     @Test void triviaAndCardTimeoutAreControlledByServer() {
         place("seat-0-piece-0",5);roll();move(cards.calculate(game,"a","seat-0-piece-0",0));
         clock.now=game.trivia.deadline;cards.tick(game);assertNull(game.trivia);
-        assertEquals("DICE_MAX_LIMIT",game.player("a").effects.getFirst().code);
+        assertEquals("DOUBLES_PENALTY",game.player("a").effects.getFirst().code);
         place("seat-0-piece-1",4);grant("move-safe");clock.now=game.card.deadline;cards.tick(game);assertNull(game.card);
     }
     @Test void catalogFailureCannotKeepAnExpiredTurnBlocked() {

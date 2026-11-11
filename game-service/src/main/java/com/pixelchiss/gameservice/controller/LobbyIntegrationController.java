@@ -32,6 +32,6 @@ public class LobbyIntegrationController {
         require(secret.length()>=32,"INTEGRATION_DISABLED","Configure a Lobby token of at least 32 characters");
         require(supplied!=null && MessageDigest.isEqual(secret.getBytes(StandardCharsets.UTF_8),supplied.getBytes(StandardCharsets.UTF_8)),
                 "FORBIDDEN","Lobby service credential required");
-        return games.create(input);
+        return GameView.of(games.create(input.command()));
     }
 }

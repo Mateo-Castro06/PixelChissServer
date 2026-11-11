@@ -1,8 +1,10 @@
 package com.pixelchiss.gameservice;
+import com.pixelchiss.gameservice.persistence.JsonPayloadFingerprints;
+
 
 import com.pixelchiss.gameservice.bot.BotPolicy;
 import com.pixelchiss.gameservice.domain.GameState;
-import com.pixelchiss.gameservice.dto.CreateGame;
+import com.pixelchiss.gameservice.domain.GameSetup;
 import com.pixelchiss.gameservice.engine.GameException;
 import com.pixelchiss.gameservice.service.GameService;
 import java.util.ArrayList;
@@ -12,16 +14,16 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TurnOrderTest extends EngineFixture {
-    private List<CreateGame.Participant> participants(int count) {
-        var players = new ArrayList<CreateGame.Participant>();
+    private List<GameSetup.Participant> participants(int count) {
+        var players = new ArrayList<GameSetup.Participant>();
         for (int seat = 0; seat < count; seat++) {
-            players.add(new CreateGame.Participant("player-" + seat, false, seat));
+            players.add(new GameSetup.Participant("player-" + seat, false, seat));
         }
         return players;
     }
 
-    private void initialize(List<CreateGame.Participant> players, String creator) {
-        game = engine.create(new CreateGame("g", "l", "classic", players, creator));
+    private void initialize(List<GameSetup.Participant> players, String creator) {
+        game = engine.create(new GameSetup("g", "l", "classic", players, creator));
     }
 
     private void expire() {
@@ -59,9 +61,9 @@ class TurnOrderTest extends EngineFixture {
     }
 
     @Test void sparseSeatsAndReorderedStoredCollectionsStillRotateClockwise() {
-        initialize(List.of(new CreateGame.Participant("uuid-z", false, 3),
-                new CreateGame.Participant("uuid-a", false, 0),
-                new CreateGame.Participant("uuid-m", false, 2)), "uuid-m");
+        initialize(List.of(new GameSetup.Participant("uuid-z", false, 3),
+                new GameSetup.Participant("uuid-a", false, 0),
+                new GameSetup.Participant("uuid-m", false, 2)), "uuid-m");
         Collections.reverse(game.players);
         expire(); assertEquals("uuid-z", game.turn.playerId);
         expire(); assertEquals("uuid-a", game.turn.playerId);
@@ -72,7 +74,7 @@ class TurnOrderTest extends EngineFixture {
 
     @Test void botsUseTheirClockwiseSeatAndTheSameTurnRules() {
         var players = participants(4);
-        players.set(3, new CreateGame.Participant("player-3", true, 3));
+        players.set(3, new GameSetup.Participant("player-3", true, 3));
         initialize(players, "player-2");
         expire(); assertEquals("player-3", game.turn.playerId);
         var bot = new BotPolicy(engine, new SeedCatalog(), () -> 0.0, 0.65);
@@ -122,8 +124,8 @@ class TurnOrderTest extends EngineFixture {
         initialize(participants(4), "player-2");
         game.player("player-3").disconnectedAt = clock.millis();
         var repository = new MemoryGames();
-        repository.create(game, "{}");
-        var service = new GameService(repository, engine, repository.json);
+        repository.create(game, null);
+        var service = new GameService(repository, engine, new JsonPayloadFingerprints(repository.json));
         service.reconnect("g", "player-3");
         game = repository.find("g");
         assertEquals("player-2", game.turn.playerId);
@@ -136,26 +138,26 @@ class TurnOrderTest extends EngineFixture {
     @Test void missingCreatorCannotFallBackToLegacyFirstPlayerOrFirstListEntry() {
         for (String missing : new String[]{null, "", " "}) {
             var error = assertThrows(GameException.class, () -> engine.create(
-                    new CreateGame("g", "l", "classic", participants(2), missing, "player-0")));
+                    new GameSetup("g", "l", "classic", participants(2), missing, "player-0")));
             assertEquals("MISSING_CREATOR", error.code());
         }
     }
 
     @Test void creatorMustBeMemberAndLegacyFirstPlayerCannotOverrideCreator() {
         var outsider = assertThrows(GameException.class, () -> engine.create(
-                new CreateGame("g", "l", "classic", participants(4), "outsider")));
+                new GameSetup("g", "l", "classic", participants(4), "outsider")));
         assertEquals("INVALID_CREATOR", outsider.code());
         var conflict = assertThrows(GameException.class, () -> engine.create(
-                new CreateGame("g", "l", "classic", participants(4), "player-2", "player-0")));
+                new GameSetup("g", "l", "classic", participants(4), "player-2", "player-0")));
         assertEquals("INVALID_FIRST_PLAYER", conflict.code());
-        game = engine.create(new CreateGame("g", "l", "classic", participants(4), "player-2", "player-2"));
+        game = engine.create(new GameSetup("g", "l", "classic", participants(4), "player-2", "player-2"));
         assertEquals("player-2", game.turn.playerId);
     }
 
     @Test void seatsMustBeExplicitUniqueAndWithinTheExistingBoard() {
         for (Integer invalid : new Integer[]{null, -1, 4, 0}) {
-            var players = List.of(new CreateGame.Participant("a", false, 0),
-                    new CreateGame.Participant("b", false, invalid));
+            var players = List.of(new GameSetup.Participant("a", false, 0),
+                    new GameSetup.Participant("b", false, invalid));
             var error = assertThrows(GameException.class, () -> initialize(players, "a"));
             assertEquals("INVALID_SEATS", error.code());
         }

@@ -1,12 +1,13 @@
 package com.pixelchiss.gameservice.service;
 
+import com.pixelchiss.gameservice.application.Presence;
 import java.time.Clock;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 /** Renewable per-connection leases support multiple tabs and multiple Game instances. */
 @Service
-public class PresenceService {
+public class PresenceService implements Presence {
     private final StringRedisTemplate redis;
     private final Clock clock;
     public PresenceService(StringRedisTemplate redis,Clock clock){this.redis=redis;this.clock=clock;}

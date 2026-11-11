@@ -1,4 +1,10 @@
 package com.pixelchiss.gameservice;
+import com.pixelchiss.gameservice.application.GameUpdate;
+
+import com.pixelchiss.gameservice.persistence.JsonPayloadFingerprints;
+
+import com.pixelchiss.gameservice.domain.GameAction;
+
 
 import com.pixelchiss.gameservice.dto.*;
 import com.pixelchiss.gameservice.engine.*;
@@ -10,11 +16,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class GameServiceTest extends ServiceFixture {
     @Test void duplicateActionIsIdempotentAndReuseOrOldVersionIsRejected() {
-        Action a=action("ROLL_DICE",null,null,null,null,null,null);
+        GameAction a=action("ROLL_DICE",null,null,null,null,null,null);
         var first=service.action("a",a); var duplicate=service.action("a",a);
         assertEquals(1,first.committedVersion()); assertTrue(duplicate.duplicate());
         assertEquals(2,repo.notifications.size());
-        assertThrows(GameException.class,()->service.action("a",new Action("END_TURN","g",a.requestId(),0L,null,null,null,null,null,null,null,null,null,null)));
+        assertThrows(GameException.class,()->service.action("a",new GameAction("END_TURN","g",a.requestId(),0L,null,null,null,null,null,null,null,null,null,null)));
         assertThrows(GameException.class,()->service.action("a",action("END_TURN",null,null,null,null,null,null)));
     }
     @Test void invalidMutationNeverChangesPersistedState() {
@@ -31,14 +37,14 @@ class GameServiceTest extends ServiceFixture {
                 if(Thread.currentThread().getName().startsWith("race")) try{gate.await(5,TimeUnit.SECONDS);}catch(Exception e){throw new RuntimeException(e);}
                 return state;
             }
-            @Override public synchronized boolean commit(com.pixelchiss.gameservice.domain.GameState g,long v,String e) {
+            @Override public synchronized boolean commit(com.pixelchiss.gameservice.domain.GameState g,long v,GameUpdate e) {
                 // Avoid the read barrier during CAS itself.
                 var current=json.readValue(states.get(g.id),com.pixelchiss.gameservice.domain.GameState.class);
-                if(current.version!=v)return false;states.put(g.id,json.writeValueAsString(g));notifications.add(e);return true;
+                if(current.version!=v)return false;states.put(g.id,json.writeValueAsString(g));notifications.add(json.writeValueAsString(e));return true;
             }
         };
-        concurrentRepo.create(game,"{}");
-        var app=new GameService(concurrentRepo,engine,concurrentRepo.json);
+        concurrentRepo.create(game,null);
+        var app=new GameService(concurrentRepo, engine, new JsonPayloadFingerprints(concurrentRepo.json));
         try(var pool=Executors.newFixedThreadPool(2,r->new Thread(r,"race-worker"))) {
             List<Future<Boolean>> results=new ArrayList<>();
             for(int i=0;i<2;i++) results.add(pool.submit(()->{try{app.action("a",action("ROLL_DICE",null,null,null,null,null,null));return true;}catch(GameException e){assertEquals("CONCURRENT_UPDATE",e.code());return false;}}));

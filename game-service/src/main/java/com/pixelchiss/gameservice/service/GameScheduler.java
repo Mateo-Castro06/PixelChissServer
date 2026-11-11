@@ -1,8 +1,9 @@
 package com.pixelchiss.gameservice.service;
 
+import com.pixelchiss.gameservice.application.Presence;
 import com.pixelchiss.gameservice.domain.GameState;
 import com.pixelchiss.gameservice.engine.RuleEngine;
-import com.pixelchiss.gameservice.persistence.GameRepository;
+import com.pixelchiss.gameservice.application.ActiveGames;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,17 +19,17 @@ import org.springframework.stereotype.Component;
 public class GameScheduler {
     private static final Logger log = LoggerFactory.getLogger(GameScheduler.class);
     private final GameService games;
-    private final GameRepository repository;
+    private final ActiveGames activeGames;
     private final RuleEngine rules;
-    private final PresenceService presence;
+    private final Presence presence;
     private final Clock clock;
     private final long disconnectGraceMillis;
 
-    public GameScheduler(GameService games, GameRepository repository, RuleEngine rules,
-                         PresenceService presence, Clock clock,
+    public GameScheduler(GameService games, ActiveGames activeGames, RuleEngine rules,
+                         Presence presence, Clock clock,
                          @Value("${game.disconnect-grace-millis:60000}") long disconnectGraceMillis) {
         this.games = games;
-        this.repository = repository;
+        this.activeGames = activeGames;
         this.rules = rules;
         this.presence = presence;
         this.clock = clock;
@@ -38,7 +39,7 @@ public class GameScheduler {
     @Scheduled(fixedDelayString = "${game.scheduler-millis:1000}")
     public void tick() {
         try {
-            for (String id : repository.activeIds()) maintainGame(id);
+            for (String id : activeGames.activeIds()) maintainGame(id);
         } catch (RuntimeException error) {
             log.warn("Game index unavailable ({})", error.getClass().getSimpleName());
         }

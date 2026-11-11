@@ -38,8 +38,17 @@ public class TurnManager {
         String next = TurnOrder.nextPlayer(game, extraTurn);
         game.trivia = null;
         game.card = null;
-        game.turn.number++;
-        start(game, next);
+        while (true) {
+            game.turn.number++;
+            start(game, next);
+            Player scheduled = game.player(next);
+            boolean skipped = scheduled.effects.removeIf(effect -> CardRules.SKIP_NEXT_TURN.equals(effect.code)
+                    && effect.startsAtTurn <= scheduled.turnsStarted);
+            if (!skipped) break;
+            events.add(of("EFFECT_CONSUMED", "playerId", next, "effectCode", CardRules.SKIP_NEXT_TURN));
+            expireOwnEffects(scheduled, events);
+            next = TurnOrder.nextPlayer(game, false);
+        }
         events.add(of("TURN_CHANGED", "playerId", next, "turnNumber", game.turn.number,
                 "deadline", game.turn.deadline));
         if (game.turn.diceSelectionRequired) {

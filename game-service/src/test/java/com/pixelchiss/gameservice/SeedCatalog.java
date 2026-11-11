@@ -6,13 +6,17 @@ import java.util.List;
 
 class SeedCatalog implements GameCatalog {
     final CatalogSeeder.Seed seed;
+    final CatalogSeeder.Seed legacy;
     SeedCatalog() {
-        try(var input=getClass().getResourceAsStream("/seed/catalog.json")) {
-            seed=tools.jackson.databind.json.JsonMapper.builder().build().readValue(input,CatalogSeeder.Seed.class);
+        try(var input=getClass().getResourceAsStream("/seed/catalog.json");
+            var archive=getClass().getResourceAsStream("/seed/legacy-challenges.json")) {
+            var json=tools.jackson.databind.json.JsonMapper.builder().build();
+            seed=json.readValue(input,CatalogSeeder.Seed.class);
+            legacy=json.readValue(archive,CatalogSeeder.Seed.class);
         } catch(Exception e){throw new RuntimeException(e);}
     }
     public List<CardDefinition> cards(String map,String type){return seed.cards().stream().filter(c->c.type().equals(type)&&(c.mapId().equals(map)||c.mapId().equals("*"))).toList();}
-    public CardDefinition card(String id){return seed.cards().stream().filter(c->c.id().equals(id)).findFirst().orElse(null);}
+    public CardDefinition card(String id){return java.util.stream.Stream.concat(seed.cards().stream(),legacy.cards().stream()).filter(c->c.id().equals(id)).findFirst().orElse(null);}
     public List<QuestionDefinition> questions(String map){return seed.questions().stream().filter(q->q.mapId().equals(map)).toList();}
-    public QuestionDefinition question(String id){return seed.questions().stream().filter(q->q.id().equals(id)).findFirst().orElse(null);}
+    public QuestionDefinition question(String id){return java.util.stream.Stream.concat(seed.questions().stream(),legacy.questions().stream()).filter(q->q.id().equals(id)).findFirst().orElse(null);}
 }

@@ -1,4 +1,8 @@
 package com.pixelchiss.gameservice;
+import com.pixelchiss.gameservice.persistence.RedisGameRepository;
+
+import com.pixelchiss.gameservice.domain.GameCatalog;
+
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class GameServiceApplicationTests {
     @MockitoBean MongoTemplate mongo;
     @MockitoBean org.springframework.data.mongodb.gridfs.GridFsOperations gridFs;
-    @MockitoBean GameRepository repository;
+    @MockitoBean RedisGameRepository repository;
     @MockitoBean GameCatalog catalog;
     @MockitoBean JwtDecoder decoder;
     @MockitoBean(name="gameEvents") RedisMessageListenerContainer events;

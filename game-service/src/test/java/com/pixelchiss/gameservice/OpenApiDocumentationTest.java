@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @EnabledIfSystemProperty(named = "game.integration", matches = "true")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
-        "REDIS_URL=redis://localhost:6379/0", "MONGODB_URI=mongodb://localhost:27017/pixelchiss",
+
         "EUREKA_URL=http://localhost:8761/eureka/", "eureka.client.enabled=false",
         "game.scheduling.enabled=false", "game.diagnostics.enabled=true"})
 @DirtiesContext

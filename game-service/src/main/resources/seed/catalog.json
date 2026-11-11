@@ -1,18 +1,44 @@
 {
   "cards": [
-    {"id":"capture-next","name":"Alcance rival","description":"Captura al siguiente rival no protegido hasta seis pasos por delante de una ficha propia.","type":"BUFF","effectCode":"CAPTURE_NEXT","parameters":{"maxDistance":6},"conditions":["OWN_BOARD_PIECE","NEAREST_UNPROTECTED_RIVAL_ON_ROUTE"],"targetRequired":true,"mapId":"*"},
-    {"id":"move-safe","name":"Refugio","description":"Mueve una ficha propia al primer seguro disponible hacia delante de su recorrido común.","type":"BUFF","effectCode":"MOVE_SAFE","parameters":{"capacity":2},"conditions":["OWN_BOARD_PIECE","FORWARD_SAFE_CELL","AVAILABLE_CAPACITY"],"targetRequired":true,"mapId":"*"},
-    {"id":"dice-limit","name":"Dados reducidos","description":"Cada dado tiene máximo tres durante los próximos tres turnos propios.","type":"DEBUFF","effectCode":"DICE_MAX_LIMIT","parameters":{"maxValue":3,"turns":3},"conditions":["SELF_NEXT_THREE_TURNS"],"targetRequired":false,"mapId":"*"},
-    {"id":"choose-dice","name":"Elección","description":"Elige los dos dados del próximo turno propio, respetando el límite activo.","type":"BUFF","effectCode":"CHOOSE_DICE","parameters":{"turns":1},"conditions":["SELF_NEXT_TURN","RESPECT_DICE_LIMIT"],"targetRequired":false,"mapId":"*"}
+    {"id":"kill-next","name":"Matar al siguiente","description":"Captura todas las fichas rivales en la casilla común más cercana hacia delante en tu recorrido, aunque sea segura.","type":"BUFF","effectCode":"CAPTURE_NEAREST_CELL","parameters":{},"conditions":["FORWARD_COMMON_TRACK","OPPONENT_IN_CELL"],"targetRequired":false,"mapId":"*"},
+    {"id":"kill-chosen","name":"Matar a tu elección","description":"Elige una casilla común con fichas rivales para capturarlas, aunque sea segura.","type":"BUFF","effectCode":"CAPTURE_CHOSEN_CELL","parameters":{},"conditions":["OPPONENT_IN_COMMON_CELL"],"targetRequired":true,"mapId":"*"},
+    {"id":"advance-safe","name":"Avanza al siguiente seguro","description":"La ficha propia elegida avanza al siguiente seguro de su ruta que tenga espacio.","type":"BUFF","effectCode":"MOVE_SAFE","parameters":{},"conditions":["OWN_BOARD_PIECE","FORWARD_SAFE_CELL","AVAILABLE_CAPACITY"],"targetRequired":true,"mapId":"*"},
+    {"id":"skip-turn","name":"Pierde un turno","description":"Pierdes tu próximo turno programado.","type":"DEBUFF","effectCode":"SKIP_NEXT_TURN","parameters":{},"conditions":[],"targetRequired":false,"mapId":"*"},
+    {"id":"instant-death","name":"Muerte instantánea","description":"La ficha propia sin coronar con mayor progreso vuelve a casa.","type":"DEBUFF","effectCode":"LOSE_LEADING_PIECE","parameters":{},"conditions":["OWN_BOARD_PIECE"],"targetRequired":false,"mapId":"*"},
+    {"id":"doubles-death","name":"Si alguno saca par muerte a una ficha","description":"Hasta que acabe tu próximo turno, cada tirada de dobles devuelve al azar una ficha tuya del tablero a casa.","type":"DEBUFF","effectCode":"DOUBLES_PENALTY","parameters":{},"conditions":[],"targetRequired":false,"mapId":"*"}
   ],
   "questions": [
-    {"id":"classic-1","mapId":"classic","prompt":"¿Cuántas caras tiene un dado del juego?","options":["4","6","8"],"correctIndex":1},
-    {"id":"classic-2","mapId":"classic","prompt":"¿Cuántas fichas tiene cada jugador?","options":["2","3","4"],"correctIndex":2},
-    {"id":"classic-3","mapId":"classic","prompt":"¿Cuántas casillas tiene el tablero?","options":["96","100","64"],"correctIndex":0},
-    {"id":"classic-4","mapId":"classic","prompt":"¿Qué protege una casilla segura?","options":["El dado","Las fichas frente a captura normal","El reloj"],"correctIndex":1},
+    {"id":"classic-general-01","mapId":"classic","prompt":"¿Cuál es la capital de Canadá?","options":["Toronto","Ottawa","Vancouver"],"correctIndex":1},
+    {"id":"classic-general-02","mapId":"classic","prompt":"¿En qué país se encuentra Machu Picchu?","options":["Perú","Bolivia","Ecuador"],"correctIndex":0},
+    {"id":"classic-general-03","mapId":"classic","prompt":"¿Qué océano separa a África de Australia?","options":["Atlántico","Pacífico","Índico"],"correctIndex":2},
+    {"id":"classic-general-04","mapId":"classic","prompt":"¿En qué año cayó el Muro de Berlín?","options":["1979","1989","1999"],"correctIndex":1},
+    {"id":"classic-general-05","mapId":"classic","prompt":"¿En qué año alunizó por primera vez una misión tripulada?","options":["1959","1965","1969"],"correctIndex":2},
+    {"id":"classic-general-06","mapId":"classic","prompt":"¿Quién escribió Don Quijote de la Mancha?","options":["Miguel de Cervantes","Lope de Vega","Federico García Lorca"],"correctIndex":0},
+    {"id":"classic-general-07","mapId":"classic","prompt":"¿Quién pintó el Guernica?","options":["Salvador Dalí","Pablo Picasso","Diego Velázquez"],"correctIndex":1},
+    {"id":"classic-general-08","mapId":"classic","prompt":"¿En qué idioma se publicó originalmente El principito?","options":["Inglés","Español","Francés"],"correctIndex":2},
+    {"id":"classic-general-09","mapId":"classic","prompt":"¿Qué instrumento tiene teclas que accionan martillos para golpear cuerdas?","options":["Piano","Órgano de tubos","Acordeón"],"correctIndex":0},
+    {"id":"classic-general-10","mapId":"classic","prompt":"¿Qué valor representa la letra L en números romanos?","options":["10","50","100"],"correctIndex":1},
+    {"id":"classic-general-11","mapId":"classic","prompt":"¿En qué ciudad se celebraron los primeros Juegos Olímpicos modernos en 1896?","options":["Roma","París","Atenas"],"correctIndex":2},
+    {"id":"classic-general-12","mapId":"classic","prompt":"¿Qué selección ganó la primera Copa Mundial masculina de fútbol en 1930?","options":["Uruguay","Brasil","Italia"],"correctIndex":0},
+    {"id":"classic-general-13","mapId":"classic","prompt":"¿Cuántos puntos vale una canasta de baloncesto anotada desde detrás de la línea de tres puntos?","options":["Dos","Tres","Cuatro"],"correctIndex":1},
+    {"id":"classic-general-14","mapId":"classic","prompt":"¿En qué ciudad está la Torre Eiffel?","options":["Lyon","Bruselas","París"],"correctIndex":2},
+    {"id":"classic-general-15","mapId":"classic","prompt":"¿En qué continente se encuentra la cordillera de los Andes?","options":["América del Sur","África","Asia"],"correctIndex":0},
+    {"id":"classic-general-16","mapId":"classic","prompt":"¿Quién compuso la Novena Sinfonía que incluye la Oda a la alegría?","options":["Johann Sebastian Bach","Ludwig van Beethoven","Frédéric Chopin"],"correctIndex":1},
     {"id":"science-1","mapId":"science","prompt":"¿Cuál es la fórmula del agua?","options":["CO2","H2O","O2"],"correctIndex":1},
     {"id":"science-2","mapId":"science","prompt":"¿Qué planeta está más cerca del Sol?","options":["Mercurio","Marte","Júpiter"],"correctIndex":0},
     {"id":"science-3","mapId":"science","prompt":"¿Qué órgano bombea sangre?","options":["Pulmón","Cerebro","Corazón"],"correctIndex":2},
-    {"id":"science-4","mapId":"science","prompt":"¿Cuántos lados tiene un triángulo?","options":["3","4","5"],"correctIndex":0}
+    {"id":"science-4","mapId":"science","prompt":"¿Cuántos lados tiene un triángulo?","options":["3","4","5"],"correctIndex":0},
+    {"id":"science-5","mapId":"science","prompt":"¿Qué gas absorben las plantas como fuente de carbono en la fotosíntesis?","options":["Oxígeno","Dióxido de carbono","Helio"],"correctIndex":1},
+    {"id":"science-6","mapId":"science","prompt":"¿Cuál es el número atómico del oxígeno?","options":["8","6","16"],"correctIndex":0},
+    {"id":"science-7","mapId":"science","prompt":"¿Cuál es la unidad de fuerza en el Sistema Internacional?","options":["Pascal","Julio","Newton"],"correctIndex":2},
+    {"id":"science-8","mapId":"science","prompt":"¿Qué planeta es el más grande del sistema solar?","options":["Saturno","Júpiter","Neptuno"],"correctIndex":1},
+    {"id":"science-9","mapId":"science","prompt":"¿Cuál es la estrella más cercana a la Tierra?","options":["El Sol","Sirio","Próxima Centauri"],"correctIndex":0},
+    {"id":"science-10","mapId":"science","prompt":"¿Qué mineral tiene dureza 10 en la escala de Mohs?","options":["Cuarzo","Corindón","Diamante"],"correctIndex":2},
+    {"id":"science-11","mapId":"science","prompt":"¿Cómo se llaman las rocas formadas por la solidificación del magma o la lava?","options":["Sedimentarias","Ígneas","Metamórficas"],"correctIndex":1},
+    {"id":"science-12","mapId":"science","prompt":"¿A qué grupo de vertebrados pertenecen las ranas?","options":["Anfibios","Reptiles","Mamíferos"],"correctIndex":0},
+    {"id":"science-13","mapId":"science","prompt":"¿Cuál es el gas más abundante en la atmósfera terrestre seca?","options":["Oxígeno","Argón","Nitrógeno"],"correctIndex":2},
+    {"id":"science-14","mapId":"science","prompt":"¿Cuál es la unidad de corriente eléctrica en el Sistema Internacional?","options":["Voltio","Amperio","Ohmio"],"correctIndex":1},
+    {"id":"science-15","mapId":"science","prompt":"¿En qué orgánulos de una célula animal se produce la mayor parte del ATP durante la respiración aeróbica?","options":["Mitocondrias","Ribosomas","Lisosomas"],"correctIndex":0},
+    {"id":"science-16","mapId":"science","prompt":"¿Cuál es aproximadamente el pH del agua pura a 25 °C?","options":["2","12","7"],"correctIndex":2}
   ]
 }

@@ -3,7 +3,7 @@ package com.pixelchiss.gameservice;
 import com.pixelchiss.gameservice.bot.*;
 import com.pixelchiss.gameservice.domain.GameState;
 import com.pixelchiss.gameservice.engine.*;
-import com.pixelchiss.gameservice.dto.Action;
+import com.pixelchiss.gameservice.domain.GameAction;
 import org.junit.jupiter.api.*;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -42,7 +42,7 @@ class BotTest extends EngineFixture {
         var pending=new GameState.PendingTrivia();pending.id="q";pending.playerId="a";pending.questionId="classic-1";
         pending.options=catalog.question("classic-1").options();pending.deadline=clock.millis()+15000;
         game.turn.playerId="a";game.trivia=pending;
-        Action answer=bot.next(game);assertEquals(1,answer.answerIndex());rules.act(game,"a",answer);assertNull(game.trivia);
+        GameAction answer=bot.next(game);assertEquals(1,answer.answerIndex());rules.act(game,"a",answer);assertNull(game.trivia);
         game.card=null;game.turn.rolled=false;game.turn.playerId="a";
         game.player("a").effects.add(new GameState.Effect("CHOOSE_DICE",1,game.player("a").turnsStarted,6));
         game.player("a").effects.add(new GameState.Effect("DICE_MAX_LIMIT",3,game.player("a").turnsStarted,3));
