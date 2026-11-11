@@ -1,6 +1,6 @@
 # Tablero v1 y decisiones explícitas
 
-La inspección no encontró diseños o reglas previos. Esta distribución admite **2–4 jugadores** y cuatro fichas por participante. Las plazas libres conservan sus casillas: el tablero siempre tiene96.
+Esta distribución admite **2–4 jugadores** y cuatro fichas por participante. El tablero conserva sus 96 casillas aunque haya asientos libres.
 
 | IDs inclusivos | Cantidad | Función |
 |---|---:|---|
@@ -23,7 +23,7 @@ Lobby envía `seat` explícito: rojo 0, azul 1, verde 2, amarillo 3, en sentido 
 
 | Progreso relativo | Posición física y estado |
 |---|---|
-| `-1` | `HOME`, posiciónnull, casa fuera de las 96 casillas |
+| `-1` | `HOME`, posición `null`, casa fuera de las 96 casillas |
 | `0` | Salida propia `64 + 4*seat + number`, estado `BOARD` |
 | `1–64` | `(16*seat + progress - 1) % 64` |
 | `65–68` | Carril privado `80 + 4*seat + progress - 65` |
@@ -35,7 +35,7 @@ Dos fichas coinciden únicamente por **ID físico**, no por progreso. Rojo progr
 
 ## Capacidad y protección
 
-- Seguro: capacidad 2, permite coexistencia de colores; protege de captura normal y carta de captura.
+- Seguro: capacidad 2 y coexistencia de colores. Protege de la captura normal. `kill-next` y `kill-chosen` ignoran esta protección en el recorrido común.
 - Salida: capacidad 1, reservada a la ficha asignada, protegida. No coincide con los 12 seguros ni aumenta su cantidad.
 - Carril final: capacidad 1 por casilla intermedia, privado del color.
 - Meta: admite las 4 fichas coronadas propias, excluidas de bloqueo y movimiento ordinario; conservan su posición física final.
