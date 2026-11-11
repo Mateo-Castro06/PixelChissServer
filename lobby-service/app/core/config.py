@@ -1,5 +1,7 @@
 import os
 
+from app.domain.capacity import MIN_PLAYERS, MAX_PLAYERS
+
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 EUREKA_URL = os.getenv("EUREKA_URL", "http://localhost:8761/eureka/")
 
@@ -11,11 +13,8 @@ SERVICE_PORT = int(os.getenv("SERVICE_PORT", 8083))
 
 AUTH_SERVICE_NAME = "AUTH-SERVICE"
 
-MIN_PLAYERS = 2
-MAX_PLAYERS = 4
 LOBBY_TIMEOUT = 2*60*60
 
 GAME_SERVICE_NAME = "GAME-SERVICE"
 GAME_LOBBY_TOKEN = os.getenv("GAME_LOBBY_TOKEN", "")
 GAME_TIMEOUT = 10
-SEATS_BY_COUNT = {2: [0, 2], 3: [0, 1, 2], 4: [0, 1, 2, 3]}

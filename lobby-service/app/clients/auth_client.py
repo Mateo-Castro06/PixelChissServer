@@ -3,13 +3,13 @@ import logging
 import py_eureka_client.eureka_client as eureka_client
 
 from app.core import config
-from app.core.security import CurrentUser
+from app.application.ports import Actor
 
 logger = logging.getLogger(__name__)
 
 
 class AuthClient:
-    async def get_display_name(self, user: CurrentUser):
+    async def get_display_name(self, user: Actor):
         fallback = f"Jugador {user.id}"
         try:
             profile = await eureka_client.do_service_async(

@@ -1,0 +1,293 @@
+{
+  "uid": "pixelchiss-services",
+  "title": "PixelChiss — Microservicios e inicio de partida",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Servicios accesibles",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pixelchiss-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{service=~\"gateway|auth|game|eureka|lobby\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "pixelchiss-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Solicitudes por segundo",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pixelchiss-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(service) (rate(http_server_requests_seconds_count{uri!~\"/actuator/.*\"}[2m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "pixelchiss-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum by(service) (rate(pixelchiss_lobby_http_request_seconds_count[2m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "pixelchiss-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Latencia HTTP media",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pixelchiss-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(service) (rate(http_server_requests_seconds_sum{uri!~\"/actuator/.*\"}[2m])) / sum by(service) (rate(http_server_requests_seconds_count{uri!~\"/actuator/.*\"}[2m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "pixelchiss-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(pixelchiss_lobby_http_request_seconds_sum[2m])) / sum(rate(pixelchiss_lobby_http_request_seconds_count[2m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "pixelchiss-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Errores HTTP 5xx",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pixelchiss-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(service) (rate(http_server_requests_seconds_count{status=~\"5..\"}[2m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "pixelchiss-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum by(service) (rate(pixelchiss_lobby_http_request_seconds_count{status=~\"5..\"}[2m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "pixelchiss-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Inicializaciones publicadas",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pixelchiss-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(type) (pixelchiss_game_integration_events_total)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "pixelchiss-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Eventos procesados por Lobby",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pixelchiss-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(outcome) (pixelchiss_lobby_integration_events_total)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "pixelchiss-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Transiciones de SAGA",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pixelchiss-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(operation,outcome) (pixelchiss_lobby_start_operations_total)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "pixelchiss-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Trabajo pendiente",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pixelchiss-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "pixelchiss_lobby_events_pending",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "pixelchiss-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "pixelchiss_lobby_starts_unresolved",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "pixelchiss-prometheus"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,40 +1,37 @@
-import code
+import json
 import time
-from unittest import result
+from dataclasses import asdict
+from uuid import uuid4
 
 import redis.asyncio as redis
 
+from app.application.ports import (
+    ADDED, ALREADY_IN, FULL, ALREADY_STARTED, NOT_FOUND, NOT_IN_LOBBY, LEFT,
+    LOBBY_DELETED, CHANGED, UNCHANGED, NOT_HOST, BOT_ADDED, BOT_REMOVED, BOT_NOT_FOUND,
+    BANNED, KICKED, PLAYER_NOT_FOUND, IS_BOT, SELF_KICK, NOT_ENOUGH_PLAYERS,
+    NOT_ALL_READY, START_BEGUN, RETRY_SNAPSHOT,
+)
 from app.core import config
+from app.domain.start import GameInitialization, Seat
 from app.models.enums import LobbyStatus, PlayerRole
 from app.models.game_map import MAP_IDS
 from app.models.lobby import Lobby, Player
+from app.observability.metrics import START, START_DUE
 
-ADDED = "ADDED"
-ALREADY_IN = "ALREADY_IN"
-FULL = "FULL"
-ALREADY_STARTED = "ALREADY_STARTED"
-NOT_FOUND = "NOT_FOUND"
+_SAGA_INDEX = "pixelchiss:lobby:start-due"
+_SAGA_DELAY = 30
+_SAGA_ATTEMPTS = 7
+_SAGA_MIN_TTL = 300
 
-NOT_IN_LOBBY = "NOT_IN_LOBBY"
-LEFT = "LEFT"
-LOBBY_DELETED = "LOBBY_DELETED"
-CHANGED = "CHANGED"
-UNCHANGED = "UNCHANGED"
-
-NOT_HOST = "NOT_HOST"
-BOT_ADDED = "BOT_ADDED"
-BOT_REMOVED = "BOT_REMOVED"
-BOT_NOT_FOUND = "BOT_NOT_FOUND"
-
-BANNED = "BANNED"
-KICKED = "KICKED"
-PLAYER_NOT_FOUND = "PLAYER_NOT_FOUND"
-IS_BOT = "IS_BOT"
-SELF_KICK = "SELF_KICK"
-
-NOT_ENOUGH_PLAYERS = "NOT_ENOUGH_PLAYERS"
-NOT_ALL_READY = "NOT_ALL_READY"
-START_BEGUN = "START_BEGUN"
+_CREATE_LUA = """
+if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+redis.call('HSET', KEYS[1], 'host_id', ARGV[1], 'creator_id', ARGV[1],
+  'status', 'WAITING', 'version', '1', 'generation', ARGV[5])
+redis.call('ZADD', KEYS[2], ARGV[3], ARGV[1])
+redis.call('HSET', KEYS[3], ARGV[1], ARGV[2])
+for _, key in ipairs(KEYS) do redis.call('EXPIRE', key, ARGV[4]) end
+return 1
+"""
 
 _ADD_PLAYER_LUA = """
 local status = redis.call('HGET', KEYS[2], 'status')
@@ -178,25 +175,69 @@ for _, id in ipairs(members) do
     return -6
   end
 end
-redis.call('HSET', KEYS[2], 'status', 'STARTING')
+if (redis.call('HGET', KEYS[2], 'version') or '1') ~= ARGV[3]
+    or (redis.call('HGET', KEYS[2], 'generation') or '') ~= ARGV[4]
+    or ARGV[5] == '' then return -7 end
+local now = redis.call('TIME')
+redis.call('ZADD', KEYS[8], tonumber(now[1]) + tonumber(ARGV[7]), ARGV[5])
+redis.call('HSET', KEYS[2], 'status', 'STARTING', 'start_member', ARGV[5],
+  'start_plan', ARGV[6], 'start_dispatches', '1', 'start_state', 'PENDING')
 redis.call('HINCRBY', KEYS[2], 'version', 1)
+for i = 1, 7 do
+  local ttl = redis.call('TTL', KEYS[i])
+  if ttl >= 0 and ttl < tonumber(ARGV[8]) then redis.call('EXPIRE', KEYS[i], ARGV[8]) end
+end
 return 1
 """
 _BEGIN_START_RESULTS = {1: START_BEGUN, -6: NOT_ALL_READY, -5: NOT_ENOUGH_PLAYERS, -4: NOT_HOST,
-                        -3: NOT_IN_LOBBY, -1: ALREADY_STARTED, -2: NOT_FOUND}
+                        -3: NOT_IN_LOBBY, -1: ALREADY_STARTED, -2: NOT_FOUND, -7: RETRY_SNAPSHOT}
 
 _FINISH_START_LUA = """
-if redis.call('HGET', KEYS[1], 'status') ~= 'STARTING' then return 0 end
+local status = redis.call('HGET', KEYS[1], 'status')
+if status == 'STARTED' and redis.call('HGET', KEYS[1], 'game_id') == ARGV[2]
+    and redis.call('HGET', KEYS[1], 'map_id') == ARGV[1] then return 'DUPLICATE' end
+if status ~= 'STARTING' or redis.call('HGET', KEYS[1], 'start_member') ~= ARGV[3] then
+  return 'IGNORED'
+end
+local plan = cjson.decode(redis.call('HGET', KEYS[1], 'start_plan'))
+if plan.map_id ~= ARGV[1] then return 'IGNORED' end
+redis.call('ZREM', KEYS[8], ARGV[3])
 redis.call('HSET', KEYS[1], 'status', 'STARTED', 'map_id', ARGV[1], 'game_id', ARGV[2])
+redis.call('HDEL', KEYS[1], 'start_member', 'start_plan', 'start_dispatches', 'start_state')
+redis.call('HINCRBY', KEYS[1], 'version', 1)
+for i = 1, 7 do redis.call('EXPIRE', KEYS[i], ARGV[4]) end
+return 'CONFIRMED'
+"""
+
+_ABORT_START_LUA = """
+if redis.call('HGET', KEYS[1], 'status') ~= 'STARTING'
+    or redis.call('HGET', KEYS[1], 'start_member') ~= ARGV[1]
+    or redis.call('HGET', KEYS[1], 'start_dispatches') ~= '1' then return 0 end
+redis.call('ZREM', KEYS[2], ARGV[1])
+redis.call('HSET', KEYS[1], 'status', 'WAITING')
+redis.call('HDEL', KEYS[1], 'start_member', 'start_plan', 'start_dispatches', 'start_state')
 redis.call('HINCRBY', KEYS[1], 'version', 1)
 return 1
 """
 
-_ABORT_START_LUA = """
-if redis.call('HGET', KEYS[1], 'status') ~= 'STARTING' then return 0 end
-redis.call('HSET', KEYS[1], 'status', 'WAITING')
-redis.call('HINCRBY', KEYS[1], 'version', 1)
-return 1
+_CLAIM_START_LUA = """
+local due = redis.call('ZSCORE', KEYS[2], ARGV[1])
+if not due or tonumber(due) > tonumber(redis.call('TIME')[1]) then return {'SKIPPED'} end
+if redis.call('HGET', KEYS[1], 'status') ~= 'STARTING'
+    or redis.call('HGET', KEYS[1], 'start_member') ~= ARGV[1] then
+  redis.call('ZREM', KEYS[2], ARGV[1])
+  return {'IGNORED'}
+end
+local count = tonumber(redis.call('HGET', KEYS[1], 'start_dispatches'))
+if count >= tonumber(ARGV[3]) then
+  redis.call('ZREM', KEYS[2], ARGV[1])
+  redis.call('HSET', KEYS[1], 'start_state', 'MANUAL')
+  return {'MANUAL'}
+end
+local now = redis.call('TIME')
+redis.call('ZADD', KEYS[2], tonumber(now[1]) + tonumber(ARGV[2]), ARGV[1])
+redis.call('HINCRBY', KEYS[1], 'start_dispatches', 1)
+return {'RETRY', redis.call('HGET', KEYS[1], 'start_plan')}
 """
 
 def _lobby_key(code: str):
@@ -220,9 +261,16 @@ def _votes_key(code: str):
 def _banned_key(code: str):
     return f"lobby:{code}:banned"
 
+def _keys(code: str):
+    return [_lobby_key(code), _players_key(code), _names_key(code), _ready_key(code),
+            _bots_key(code), _votes_key(code), _banned_key(code)]
+
+
 class LobbyRepository:
     def __init__(self, r: redis.Redis):
         self.r = r
+        self._create_script = r.register_script(_CREATE_LUA)
+        self._claim_start_script = r.register_script(_CLAIM_START_LUA)
         self._add_player_script = r.register_script(_ADD_PLAYER_LUA)
         self._leave_script = r.register_script(_LEAVE_LUA)
         self._set_ready_script = r.register_script(_SET_READY_LUA)
@@ -236,18 +284,9 @@ class LobbyRepository:
 
 
     async def create(self, code: str, host_id: str, host_name: str):
-        created = await self.r.hsetnx(_lobby_key(code), "host_id", host_id)
-        if not created:
-            return False
-        await self.r.hset(_lobby_key(code), mapping={
-            "creator_id": host_id,
-            "status": LobbyStatus.WAITING.value,
-            "version": 1,
-        })
-        await self.r.zadd(_players_key(code), {host_id: time.time()})
-        await self.r.hset(_names_key(code), host_id, host_name)
-        await self._refresh_lobby_expiration(code)
-        return True
+        return bool(await self._create_script(
+            keys=_keys(code), args=[host_id, host_name, time.time(), config.LOBBY_TIMEOUT, uuid4().hex]
+        ))
 
     async def add_player(self, code: str, user_id: str, display_name: str):
         result = await self._add_player_script(
@@ -304,15 +343,17 @@ class LobbyRepository:
         return _VOTE_RESULTS.get(result, NOT_FOUND)
     
     async def get(self, code: str):
-        data = await self.r.hgetall(_lobby_key(code))
-        if not data:
+        async with self.r.pipeline(transaction=True) as batch:
+            batch.hgetall(_lobby_key(code))
+            batch.zrange(_players_key(code), 0, -1)
+            batch.hgetall(_names_key(code))
+            batch.smembers(_ready_key(code))
+            batch.smembers(_bots_key(code))
+            batch.hgetall(_votes_key(code))
+            batch.smembers(_banned_key(code))
+            data, members, names, ready_ids, bot_ids, votes, banned = await batch.execute()
+        if not data or "status" not in data:
             return None
-        members = await self.r.zrange(_players_key(code), 0, -1)
-        names = await self.r.hgetall(_names_key(code))
-        ready_ids = await self.r.smembers(_ready_key(code))
-        bot_ids = await self.r.smembers(_bots_key(code))
-        votes = await self.r.hgetall(_votes_key(code))
-        banned = await self.r.smembers(_banned_key(code))
         players = [
             Player(
                 user_id=user_id,
@@ -335,6 +376,7 @@ class LobbyRepository:
             map_votes={map_id: list(votes.values()).count(map_id) for map_id in MAP_IDS},
             banned_players=sorted(banned),
             game_id=data.get("game_id"),
+            generation=data.get("generation", ""),
         )
 
     async def _refresh_lobby_expiration(self, code: str):
@@ -351,16 +393,51 @@ class LobbyRepository:
             await self._refresh_lobby_expiration(code)
         return _KICK_RESULTS.get(result, NOT_FOUND)
 
-    async def begin_start(self, code: str, host_id: str):
+    async def begin_start(self, code: str, host_id: str, snapshot: Lobby | None,
+                          plan: GameInitialization | None):
+        keys = [_players_key(code), _lobby_key(code), _ready_key(code), _bots_key(code),
+                _names_key(code), _votes_key(code), _banned_key(code), _SAGA_INDEX]
         result = await self._begin_start_script(
-            keys=[_players_key(code), _lobby_key(code), _ready_key(code), _bots_key(code)],
-            args=[host_id, config.MIN_PLAYERS],
+            keys=keys,
+            args=[host_id, config.MIN_PLAYERS, snapshot.version if snapshot else -1,
+                  snapshot.generation if snapshot else "", f"{code}:{plan.game_id}" if plan else "",
+                  json.dumps(asdict(plan)) if plan else "", _SAGA_DELAY, _SAGA_MIN_TTL],
         )
-        return _BEGIN_START_RESULTS.get(result, NOT_FOUND)
+        outcome = _BEGIN_START_RESULTS.get(result, NOT_FOUND)
+        START.labels("reserve", outcome).inc()
+        return outcome
 
     async def finish_start(self, code: str, map_id: str, game_id: str):
-        await self._finish_start_script(keys=[_lobby_key(code)], args=[map_id, game_id])
-        await self._refresh_lobby_expiration(code)
+        result = await self._finish_start_script(
+            keys=[*_keys(code), _SAGA_INDEX],
+            args=[map_id, game_id, f"{code}:{game_id}", config.LOBBY_TIMEOUT],
+        )
 
-    async def abort_start(self, code: str):
-        await self._abort_start_script(keys=[_lobby_key(code)])
+        START.labels("finish", result).inc()
+        return result
+
+    async def abort_start(self, plan: GameInitialization):
+        result = bool(await self._abort_start_script(
+            keys=[_lobby_key(plan.lobby_id), _SAGA_INDEX],
+            args=[f"{plan.lobby_id}:{plan.game_id}"],
+        ))
+
+        START.labels("compensate", "APPLIED" if result else "IGNORED").inc()
+        return result
+
+    async def due_starts(self):
+        START_DUE.set(await self.r.zcard(_SAGA_INDEX))
+        now, _ = await self.r.time()
+        return await self.r.zrangebyscore(_SAGA_INDEX, "-inf", now, start=0, num=16)
+
+    async def claim_start(self, member: str):
+        code, _, _ = member.partition(":")
+        outcome, *data = await self._claim_start_script(
+            keys=[_lobby_key(code), _SAGA_INDEX], args=[member, _SAGA_DELAY, _SAGA_ATTEMPTS]
+        )
+        START.labels("recovery", outcome).inc()
+        if not data:
+            return outcome, None
+        payload = json.loads(data[0])
+        payload["seats"] = tuple(Seat(**seat) for seat in payload["seats"])
+        return outcome, GameInitialization(**payload)

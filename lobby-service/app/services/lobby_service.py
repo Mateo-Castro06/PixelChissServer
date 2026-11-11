@@ -1,15 +1,12 @@
 import secrets
 
-from app.clients.auth_client import AuthClient
-from app.clients.game_client import GameClient
-from app.core import config
+from app.application import ports as repo_results
+from app.application.ports import Actor, LobbyStore, PlayerNames
+from app.application.start_game import StartGame
 from app.core.exceptions import (NotEnoughPlayersError, NotAllReadyError, BannedError, PlayerNotFoundError, BotNotFoundError, GameAlreadyStartedError,
                                  InvalidMapError, LobbyError, LobbyFullError,
                                  LobbyNotFoundError, NotHostError, NotInLobbyError)
-from app.core.security import CurrentUser
 from app.models.game_map import MAP_IDS
-from app.repositories import lobby_repository as repo_results
-from app.repositories.lobby_repository import LobbyRepository
 
 ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 CODE_LENGTH = 6
@@ -22,31 +19,13 @@ def _normalize(code: str):
 def _new_code():
     return "".join(secrets.choice(ALPHABET) for _ in range(CODE_LENGTH))
 
-def _pick_map(map_votes: dict[str, int]):
-    best = max(map_votes.values())
-    return secrets.choice([m for m, votes in map_votes.items() if votes == best])
-
-
-def _game_payload(lobby, map_id: str, game_id: str):
-    seats = config.SEATS_BY_COUNT[len(lobby.players)]
-    ids = [p.user_id for p in lobby.players]
-    creator = lobby.creator_id if lobby.creator_id in ids else lobby.host_id
-    return {
-        "gameId": game_id,
-        "lobbyId": lobby.code,
-        "mapId": map_id,
-        "creatorPlayerId": creator,
-        "participants": [{"playerId": p.user_id, "bot": p.is_bot, "seat": s}
-                         for p, s in zip(lobby.players, seats)],
-    }
-
 class LobbyService:
-    def __init__(self, repo: LobbyRepository, auth_client: AuthClient, game_client: GameClient):
+    def __init__(self, repo: LobbyStore, auth_client: PlayerNames, start: StartGame):
         self.repo = repo
         self.auth_client = auth_client
-        self.game_client = game_client
+        self.start = start
 
-    async def create_lobby(self, user: CurrentUser):
+    async def create_lobby(self, user: Actor):
         name = await self.auth_client.get_display_name(user)
         for _ in range(10):
             code = _new_code()
@@ -54,7 +33,7 @@ class LobbyService:
                 return await self.repo.get(code)
         raise LobbyError(500, "No se pudo generar un código único para la sala")
 
-    async def join_lobby(self, code: str, user: CurrentUser):
+    async def join_lobby(self, code: str, user: Actor):
         lobby = await self._find(code)
         if user.id in [p.user_id for p in lobby.players]:
             return lobby
@@ -76,35 +55,35 @@ class LobbyService:
             raise NotInLobbyError()
         return lobby
 
-    async def leave_lobby(self, code: str, user: CurrentUser):
+    async def leave_lobby(self, code: str, user: Actor):
         result = await self.repo.leave(_normalize(code), user.id)
         self._raise_if_failed(result)
 
-    async def set_ready(self, code: str, user: CurrentUser, ready: bool):
+    async def set_ready(self, code: str, user: Actor, ready: bool):
         code = _normalize(code)
         result = await self.repo.set_ready(code, user.id, ready)
         self._raise_if_failed(result)
         return await self.repo.get(code)
 
-    async def add_bot(self, code: str, user: CurrentUser):
+    async def add_bot(self, code: str, user: Actor):
         code = _normalize(code)
         result = await self.repo.add_bot(code, user.id)
         self._raise_if_failed(result)
         return await self.repo.get(code)
 
-    async def remove_bot(self, code: str, user: CurrentUser, bot_id: str):
+    async def remove_bot(self, code: str, user: Actor, bot_id: str):
         code = _normalize(code)
         result = await self.repo.remove_bot(code, user.id, bot_id)
         self._raise_if_failed(result)
         return await self.repo.get(code)
 
-    async def kick_player(self, code: str, user: CurrentUser, target_id: str):
+    async def kick_player(self, code: str, user: Actor, target_id: str):
         code = _normalize(code)
         result = await self.repo.kick(code, user.id, target_id)
         self._raise_if_failed(result)
         return await self.repo.get(code)
 
-    async def vote_map(self, code: str, user: CurrentUser, map_id: str):
+    async def vote_map(self, code: str, user: Actor, map_id: str):
         if map_id not in MAP_IDS:
             raise InvalidMapError()
         code = _normalize(code)
@@ -118,20 +97,12 @@ class LobbyService:
             raise LobbyNotFoundError()
         return lobby
 
-    async def start_game(self, code: str, user: CurrentUser):
+    async def start_game(self, code: str, user: Actor):
         code = _normalize(code)
-        self._raise_if_failed(await self.repo.begin_start(code, user.id))
-        lobby = await self.repo.get(code)
-        map_id = _pick_map(lobby.map_votes)
-        game_id = f"game-{code}-{secrets.token_hex(4)}"
-        try:
-            await self.game_client.create_game(_game_payload(lobby, map_id, game_id))
-        except Exception:
-            await self.repo.abort_start(code)
-            raise
-        await self.repo.finish_start(code, map_id, game_id)
-        return await self.repo.get(code)
-    
+        result, plan = await self.start.reserve(code, user.id)
+        self._raise_if_failed(result)
+        return await self.start.start_reserved(plan)
+
     def _raise_if_failed(self, result: str):
         """Traduce los resultados de error del repositorio a su excepción."""
         if result == repo_results.NOT_FOUND:

@@ -1,7 +1,5 @@
 from app.core import config
 
-from fastapi import Request
-from fastapi.responses import JSONResponse
 
 class LobbyError(Exception):
     def __init__(self, status_code: int, detail: str):
@@ -53,8 +51,7 @@ class NotAllReadyError(LobbyError):
     def __init__(self):
         super().__init__(409, "Debes esperar a que todos los jugadores estén listos")
 
-async def lobby_error_handler(request: Request, exc: LobbyError):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail},
-    )
+class GameStartError(LobbyError):
+    def __init__(self, status_code: int, detail: str, *, definite: bool = False):
+        super().__init__(status_code, detail)
+        self.definite = definite

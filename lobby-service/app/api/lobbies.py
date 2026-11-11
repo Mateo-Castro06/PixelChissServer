@@ -1,6 +1,7 @@
 import redis.asyncio as redis
 from fastapi import APIRouter, Depends, Response
 
+from app.application.start_game import StartGame
 from app.clients.auth_client import AuthClient
 from app.clients.game_client import GameClient
 from app.core.redis import get_redis
@@ -28,7 +29,8 @@ def get_lobby_service(
     auth_client: AuthClient = Depends(get_auth_client),
     game_client: GameClient = Depends(get_game_client),
 ):
-    return LobbyService(LobbyRepository(r), auth_client, game_client)
+    repo = LobbyRepository(r)
+    return LobbyService(repo, auth_client, StartGame(repo, game_client))
 
 
 @router.post(
@@ -222,8 +224,15 @@ async def kick_player(code: str, player_id: str,
     return await service.kick_player(code, user, player_id)
 
 @router.post("/{code}/start", response_model=LobbyResponse, summary="Iniciar la partida",
-             description="Solo el anfitrión. Mínimo 2 participantes y todos listos.",
-             responses={**UNAUTHORIZED, **NOT_FOUND})
+             description="Solo el anfitrión. Mínimo dos participantes; los demás humanos deben estar listos. "
+                         "Si Game confirma pero se pierde la respuesta, la sala puede recuperarse mediante su consulta habitual.",
+             responses={
+                 **UNAUTHORIZED, **NOT_FOUND,
+                 403: {"model": ErrorResponse, "description": "Se requiere pertenecer a la sala y ser anfitrión"},
+                 409: {"model": ErrorResponse, "description": "Inicio en curso, partida iniciada o preparación insuficiente"},
+                 502: {"model": ErrorResponse, "description": "Game rechazó la solicitud de creación"},
+                 503: {"model": ErrorResponse, "description": "Game no está disponible o la configuración de inicio falta"},
+             })
 async def start_game(code: str, user: CurrentUser = Depends(get_current_user),
                      service: LobbyService = Depends(get_lobby_service)):
     return await service.start_game(code, user)

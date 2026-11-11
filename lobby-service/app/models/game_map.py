@@ -13,8 +13,8 @@ MAPS = [
     GameMap(
         id="classic",
         name="Clásico",
-        theme="El juego",
-        description="Preguntas sobre el propio juego: el tablero, las fichas, el dado y las casillas seguras.",
+        theme="Cultura general",
+        description="Preguntas de geografía, historia, arte, literatura, cultura y deportes.",
     ),
     GameMap(
         id="science",

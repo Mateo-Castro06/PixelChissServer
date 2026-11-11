@@ -1,0 +1,26 @@
+global:
+  scrape_interval: 10s
+  scrape_timeout: 5s
+
+scrape_configs:
+  - job_name: spring
+    metrics_path: /actuator/prometheus
+    http_headers: &metrics_headers
+      X-Metrics-Key:
+        files: [/run/secrets/metrics_key]
+    static_configs:
+      - targets: [api-gateway:8080]
+        labels: {service: gateway}
+      - targets: [auth-service:8081]
+        labels: {service: auth}
+      - targets: [game-service:8084]
+        labels: {service: game}
+      - targets: [eureka-server:8761]
+        labels: {service: eureka}
+
+  - job_name: fastapi
+    metrics_path: /internal/metrics
+    http_headers: *metrics_headers
+    static_configs:
+      - targets: [lobby-service:8083]
+        labels: {service: lobby}

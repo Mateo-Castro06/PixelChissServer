@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
-from app.core import config
+from app.domain.capacity import MAX_PLAYERS
 from app.models.enums import LobbyStatus, PlayerRole
 
 @dataclass
@@ -21,8 +21,10 @@ class Lobby:
     status: LobbyStatus
     version: int
     players: list[Player]
-    max_players: int = config.MAX_PLAYERS
+    max_players: int = MAX_PLAYERS
     map_id: Optional[str] = None
     map_votes: dict[str, int] = field(default_factory=dict)
     banned_players: list[str] = field(default_factory=list)
     game_id: Optional[str] = None
+
+    generation: str = field(default="", repr=False)
