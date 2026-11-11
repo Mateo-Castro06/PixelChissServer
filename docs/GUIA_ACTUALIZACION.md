@@ -85,7 +85,7 @@ python3 infrastructure/catalog/update_catalog.py --project docker --apply \
   --backup "$backup_dir/catalog-before.ejson"
 ```
 
-La primera ejecución solo revisa. La segunda guarda Extended JSON antes de escribir, comprueba que no haya cambios concurrentes, inserta IDs nuevos sin sobreescribir documentos y retira solo las cartas y preguntas antiguas identificadas. Si encuentra IDs ajenos o definiciones editadas, se detiene para revisión. No borra colecciones. En caso de interrupción, conserva Game detenido y repite con **un nombre de respaldo nuevo**: los pasos se pueden repetir. No cargues un respaldo completo encima de una base activa. No arranques un Game antiguo contra el catálogo nuevo: desconoce los efectos nuevos y su semilla podría reinsertar IDs retirados.
+La primera ejecución solo revisa. La segunda guarda Extended JSON antes de escribir, comprueba que no haya cambios concurrentes, inserta IDs nuevos y retira solo las cartas y preguntas antiguas identificadas. Si `classic-general-08` contiene el enunciado exacto de la primera entrega, actualiza solo ese campo. Si encuentra IDs ajenos o definiciones editadas, se detiene para revisión. No borra colecciones. En caso de interrupción, conserva Game detenido y repite con **un nombre de respaldo nuevo**. No cargues un respaldo completo encima de una base activa. No arranques un Game antiguo contra el catálogo nuevo: desconoce los efectos nuevos y su semilla podría reinsertar IDs retirados.
 
 Verifica que la salida indique 32 preguntas, 16 por mapa, y 6 cartas (3 BUFF, 3 DEBUFF). Conserva intactos los cuatro documentos `science-1` a `science-4`. Las definiciones antiguas del JAR solo resuelven desafíos pendientes; no se reinsertan ni se sortean.
 

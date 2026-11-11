@@ -20,6 +20,8 @@ El [recorrido de servicios](../infrastructure/tests/smoke_second_cut.py) comprob
 
 La migración se ensayó dos veces en un MongoDB aislado, primero desde el catálogo anterior y luego desde el catálogo actualizado; los cuatro documentos originales de Science resultaron idénticos. Redis también se probó en un volumen separado: arranque de datos RDB antiguos, conversión en caliente, recreación con AOF y confirmación de los datos de DB 0 y DB 1.
 
+Se repitieron las 102 pruebas de Game tras precisar el enunciado de `classic-general-08`. La corrección se aplicó con respaldo y se repitió en MongoDB aislado. Una lectura independiente de desarrollo confirmó el enunciado nuevo, el mismo índice correcto y los mismos totales.
+
 ## Desarrollo
 
 Se abrió únicamente MongoDB de desarrollo en mantenimiento, sin conectar Game. La copia anterior a la escritura se guardó en `game-service/.build/catalog-backups/catalog-development-before-v1.ejson` (ignorada por Git). Se observaron 8 preguntas y 0 cartas antes de la migración; después, una lectura independiente confirmó:

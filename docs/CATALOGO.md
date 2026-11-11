@@ -13,7 +13,7 @@ Fuente: [catalog.json](../game-service/src/main/resources/seed/catalog.json). Lo
 | `classic-general-05` | ¿En qué año alunizó por primera vez una misión tripulada? | 1959 · 1965 · 1969 | 1969 (`2`) |
 | `classic-general-06` | ¿Quién escribió Don Quijote de la Mancha? | Miguel de Cervantes · Lope de Vega · Federico García Lorca | Miguel de Cervantes (`0`) |
 | `classic-general-07` | ¿Quién pintó el Guernica? | Salvador Dalí · Pablo Picasso · Diego Velázquez | Pablo Picasso (`1`) |
-| `classic-general-08` | ¿En qué idioma se publicó originalmente El principito? | Inglés · Español · Francés | Francés (`2`) |
+| `classic-general-08` | ¿En qué idioma escribió Antoine de Saint-Exupéry el manuscrito de El principito? | Inglés · Español · Francés | Francés (`2`) |
 | `classic-general-09` | ¿Qué instrumento tiene teclas que accionan martillos para golpear cuerdas? | Piano · Órgano de tubos · Acordeón | Piano (`0`) |
 | `classic-general-10` | ¿Qué valor representa la letra L en números romanos? | 10 · 50 · 100 | 50 (`1`) |
 | `classic-general-11` | ¿En qué ciudad se celebraron los primeros Juegos Olímpicos modernos en 1896? | Roma · París · Atenas | Atenas (`2`) |

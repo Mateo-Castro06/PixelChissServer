@@ -15,7 +15,7 @@
     {"id":"classic-general-05","mapId":"classic","prompt":"¿En qué año alunizó por primera vez una misión tripulada?","options":["1959","1965","1969"],"correctIndex":2},
     {"id":"classic-general-06","mapId":"classic","prompt":"¿Quién escribió Don Quijote de la Mancha?","options":["Miguel de Cervantes","Lope de Vega","Federico García Lorca"],"correctIndex":0},
     {"id":"classic-general-07","mapId":"classic","prompt":"¿Quién pintó el Guernica?","options":["Salvador Dalí","Pablo Picasso","Diego Velázquez"],"correctIndex":1},
-    {"id":"classic-general-08","mapId":"classic","prompt":"¿En qué idioma se publicó originalmente El principito?","options":["Inglés","Español","Francés"],"correctIndex":2},
+    {"id":"classic-general-08","mapId":"classic","prompt":"¿En qué idioma escribió Antoine de Saint-Exupéry el manuscrito de El principito?","options":["Inglés","Español","Francés"],"correctIndex":2},
     {"id":"classic-general-09","mapId":"classic","prompt":"¿Qué instrumento tiene teclas que accionan martillos para golpear cuerdas?","options":["Piano","Órgano de tubos","Acordeón"],"correctIndex":0},
     {"id":"classic-general-10","mapId":"classic","prompt":"¿Qué valor representa la letra L en números romanos?","options":["10","50","100"],"correctIndex":1},
     {"id":"classic-general-11","mapId":"classic","prompt":"¿En qué ciudad se celebraron los primeros Juegos Olímpicos modernos en 1896?","options":["Roma","París","Atenas"],"correctIndex":2},

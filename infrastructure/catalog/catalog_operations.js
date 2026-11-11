@@ -3,6 +3,8 @@ const database = db.getSiblingDB(input.database);
 const names = ["game_cards", "game_questions"];
 const catalog = {game_cards: input.current.cards, game_questions: input.current.questions};
 const retired = {game_cards: input.retired.cards, game_questions: input.retired.questions};
+const revisedQuestionId = "classic-general-08";
+const previousPrompt = "¿En qué idioma se publicó originalmente El principito?";
 
 function snapshot() {
     const hashes = database.runCommand({dbHash: 1});
@@ -29,14 +31,16 @@ function same(left, right) {
     return JSON.stringify(comparable(left)) === JSON.stringify(comparable(right));
 }
 
-function checkExisting(rows, name) {
+function checkExisting(rows, name, allowPreviousPrompt = false) {
     const definitions = new Map([...catalog[name], ...retired[name]].map(value => [value.id, value]));
     for (const document of rows) {
         const expected = definitions.get(document._id);
         if (!expected) throw Error("Documento no gestionado en " + name + "; no se modificó la base");
         const {id, ...fields} = expected;
         for (const [key, value] of Object.entries(fields)) {
-            if (!same(document[key], value)) {
+            const recognizedPrompt = allowPreviousPrompt && name === "game_questions"
+                && id === revisedQuestionId && key === "prompt" && document.prompt === previousPrompt;
+            if (!recognizedPrompt && !same(document[key], value)) {
                 throw Error("El documento " + id + " difiere del esperado en " + key + "; no se modificó la base");
             }
         }
@@ -44,7 +48,7 @@ function checkExisting(rows, name) {
 }
 
 const before = snapshot();
-for (const name of names) checkExisting(before[name], name);
+for (const name of names) checkExisting(before[name], name, true);
 if (!input.apply) {
     print(EJSON.stringify(before, {relaxed: false}));
     quit(0);
@@ -59,6 +63,9 @@ for (const name of names) {
         database.getCollection(name).updateOne({_id: id}, {$setOnInsert: fields}, {...options, upsert: true});
     }
 }
+const revisedQuestion = catalog.game_questions.find(({id}) => id === revisedQuestionId);
+database.game_questions.updateOne({_id: revisedQuestionId, prompt: previousPrompt},
+    {$set: {prompt: revisedQuestion.prompt}}, options);
 for (const name of names) {
     const collection = database.getCollection(name);
     const activeIds = catalog[name].map(value => value.id);
