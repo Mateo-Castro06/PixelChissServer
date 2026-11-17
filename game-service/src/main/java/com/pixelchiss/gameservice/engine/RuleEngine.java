@@ -54,6 +54,7 @@ public class RuleEngine {
     public GameState create(GameSetup input) {
         validateInitialization(input);
         var game = new GameState();
+        game.boardLayout = Board.LAYOUT;
         game.id = input.gameId();
         game.lobbyId = input.lobbyId();
         game.mapId = input.mapId();

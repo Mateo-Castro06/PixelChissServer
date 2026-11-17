@@ -36,6 +36,7 @@ public class GameController {
             @ApiResponse(responseCode = "401", description = "Missing, invalid or expired Bearer JWT", content = @Content),
             @ApiResponse(responseCode = "403", description = "NOT_MEMBER", content = @Content(schema = @Schema(implementation = GameErrorHandler.Error.class))),
             @ApiResponse(responseCode = "404", description = "GAME_NOT_FOUND", content = @Content(schema = @Schema(implementation = GameErrorHandler.Error.class))),
+            @ApiResponse(responseCode = "409", description = "UNSUPPORTED_BOARD_LAYOUT: preserve legacy game and use its original server", content = @Content(schema = @Schema(implementation = GameErrorHandler.Error.class))),
             @ApiResponse(responseCode = "503", description = "SERVICE_UNAVAILABLE", content = @Content(schema = @Schema(implementation = GameErrorHandler.Error.class)))
     })
     public GameView state(@Parameter(description = "Game ID, 1–80 letters, digits, underscores or hyphens", required = true)
@@ -44,7 +45,7 @@ public class GameController {
     }
 
     @GetMapping("/board")
-    @Operation(summary = "Get layout v1: all 96 cells, safe cells, exits and piece routes",
+    @Operation(summary = "Get layout v3-100: all 100 cells, safe cells and piece routes",
             description = "Public Gateway path equals service path. Returns the existing map-shaped board definition.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Board layout and routes", content = @Content(schema = @Schema(implementation = BoardLayout.class))),

@@ -4,6 +4,8 @@ import java.util.*;
 
 /** Mutable aggregate, only mutated on an isolated copy before an atomic repository commit. */
 public class GameState {
+    // Null is deliberate: unversioned persisted states must never inherit a new geometry.
+    public String boardLayout;
     public String id;
     public String lobbyId;
     public String creatorPlayerId;

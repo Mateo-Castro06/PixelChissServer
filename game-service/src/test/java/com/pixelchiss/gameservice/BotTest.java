@@ -2,6 +2,7 @@ package com.pixelchiss.gameservice;
 
 import com.pixelchiss.gameservice.bot.*;
 import com.pixelchiss.gameservice.domain.GameState;
+import com.pixelchiss.gameservice.domain.Board;
 import com.pixelchiss.gameservice.engine.*;
 import com.pixelchiss.gameservice.domain.GameAction;
 import org.junit.jupiter.api.*;
@@ -13,8 +14,8 @@ class BotTest extends EngineFixture {
     SeedCatalog catalog=new SeedCatalog();
     @BeforeEach void setupBot(){game.player("a").bot=true;bot=new BotPolicy(engine,catalog,()->0.0,0.65);}
     @Test void botCombinesCaptureAndSafetyUsingBothAuthorizedDice() {
-        place("seat-0-piece-0",3);place("seat-0-piece-1",2);place("seat-1-piece-0",55);
-        place("seat-2-piece-0",43);place("seat-2-piece-1",43); // safe10 full
+        placeAt("seat-0-piece-0",2);placeAt("seat-0-piece-1",1);placeAt("seat-1-piece-0",6);
+        placeAt("seat-0-piece-2",10);place("seat-0-piece-3",Board.FINISH); // prevent a second move by the capturing piece
         roll();var first=bot.next(game);assertEquals("seat-0-piece-0",first.pieceId());
         engine.act(game,"a",first);assertEquals("HOME",game.piece("seat-1-piece-0").status);
         var second=bot.next(game);assertEquals("seat-0-piece-1",second.pieceId());assertEquals(5,second.targetPosition());
@@ -22,7 +23,8 @@ class BotTest extends EngineFixture {
         assertEquals(5,game.piece("seat-0-piece-1").position);
     }
     @Test void botPrefersCrownThenSafeAndCanReleaseDifferentPieces() {
-        place("seat-0-piece-0",64);place("seat-0-piece-1",2);roll();
+        place("seat-0-piece-0",Board.FINISH-4);placeAt("seat-0-piece-1",1);roll();
+        place("seat-0-piece-2",Board.FINISH);place("seat-0-piece-3",Board.FINISH);
         assertEquals("seat-0-piece-0",bot.next(game).pieceId());engine.act(game,"a",bot.next(game));
         assertEquals(5,bot.next(game).targetPosition());
         create();game.player("a").bot=true;roll();var first=bot.next(game);engine.act(game,"a",first);

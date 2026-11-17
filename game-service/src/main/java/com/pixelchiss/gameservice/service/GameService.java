@@ -5,6 +5,7 @@ import com.pixelchiss.gameservice.application.PayloadFingerprints;
 
 
 import com.pixelchiss.gameservice.domain.GameState;
+import com.pixelchiss.gameservice.domain.Board;
 import com.pixelchiss.gameservice.domain.GameAction;
 import com.pixelchiss.gameservice.domain.GameSetup;
 import com.pixelchiss.gameservice.engine.RuleEngine;
@@ -36,6 +37,7 @@ public class GameService {
         validateGameId(id);
         GameState game = repository.find(id);
         require(game != null, "GAME_NOT_FOUND", "Game not found");
+        requireSupportedLayout(game);
         return game;
     }
 
@@ -43,6 +45,7 @@ public class GameService {
         validateGameId(input.gameId());
         String creationFingerprint = fingerprints.fingerprint(input);
         GameState previous = repository.find(input.gameId());
+        if (previous != null) requireSupportedLayout(previous);
         if (previous != null && Objects.equals(previous.creationFingerprint, creationFingerprint)) {
             return GameSnapshot.of(previous);
         }
@@ -152,6 +155,11 @@ public class GameService {
 
     private void validateGameId(String id) {
         require(validIdentifier(id), "INVALID_GAME_ID", "Invalid game ID");
+    }
+
+    private void requireSupportedLayout(GameState game) {
+        require(Board.LAYOUT.equals(game.boardLayout), "UNSUPPORTED_BOARD_LAYOUT",
+                "Stored board geometry is incompatible; preserve this game and create a new game ID");
     }
 
     private void validateAction(GameAction action) {

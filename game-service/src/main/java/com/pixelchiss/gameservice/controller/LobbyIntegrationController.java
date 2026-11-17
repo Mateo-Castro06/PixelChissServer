@@ -25,7 +25,7 @@ public class LobbyIntegrationController {
     @ApiResponses({@ApiResponse(responseCode="200",description="Created or identical retry",content=@Content(schema=@Schema(implementation=GameView.class))),
             @ApiResponse(responseCode="400",description="INVALID_REQUEST, MISSING_CREATOR, INVALID_CREATOR, INVALID_SEATS, INVALID_FIRST_PLAYER or UNKNOWN_MAP",content=@Content(schema=@Schema(implementation=GameErrorHandler.Error.class))),
             @ApiResponse(responseCode="403",description="FORBIDDEN: invalid service token",content=@Content(schema=@Schema(implementation=GameErrorHandler.Error.class))),
-            @ApiResponse(responseCode="409",description="GAME_EXISTS: ID already used",content=@Content(schema=@Schema(implementation=GameErrorHandler.Error.class))),
+            @ApiResponse(responseCode="409",description="GAME_EXISTS: ID already used; UNSUPPORTED_BOARD_LAYOUT: stored geometry is incompatible",content=@Content(schema=@Schema(implementation=GameErrorHandler.Error.class))),
             @ApiResponse(responseCode="503",description="INTEGRATION_DISABLED or SERVICE_UNAVAILABLE",content=@Content(schema=@Schema(implementation=GameErrorHandler.Error.class)))})
     public GameView create(@Parameter(description="Private Lobby service credential, at least 32 characters; never routed publicly",required=true)
                           @RequestHeader(value="X-Lobby-Token",required=false) String supplied,@Valid @RequestBody CreateGame input) {

@@ -63,7 +63,7 @@ public class CardRules {
         CaptureCell best = null;
         int seat = game.player(actor).seat;
         for (Piece piece : ownBoardPieces(game, actor)) {
-            for (int progress = piece.progress + 1; progress <= Board.TRACK_CELL_COUNT; progress++) {
+            for (int progress = piece.progress + 1; progress <= Board.LAST_COMMON_PROGRESS; progress++) {
                 int distance = progress - piece.progress;
                 if (best != null && distance >= best.distance()) break;
                 int position = board.position(seat, piece.number, progress);
@@ -92,7 +92,7 @@ public class CardRules {
 
     private CardChoice nextCapture(GameState game, Piece own, CardDefinition card) {
         int distance = card.parameters().getOrDefault("maxDistance", DEFAULT_CAPTURE_DISTANCE);
-        int lastProgress = Math.min(Board.TRACK_CELL_COUNT, own.progress + distance);
+        int lastProgress = Math.min(Board.LAST_COMMON_PROGRESS, own.progress + distance);
         for (int progress = own.progress + 1; progress <= lastProgress; progress++) {
             int position = board.position(game.player(own.ownerId).seat, own.number, progress);
             if (board.protectedCell(position)) {
@@ -108,7 +108,7 @@ public class CardRules {
     }
 
     private CardChoice nextSafe(GameState game, Piece own) {
-        for (int progress = own.progress + 1; progress <= Board.TRACK_CELL_COUNT; progress++) {
+        for (int progress = own.progress + 1; progress <= Board.LAST_COMMON_PROGRESS; progress++) {
             int position = board.position(game.player(own.ownerId).seat, own.number, progress);
             if (Board.SAFE.contains(position) && game.occupants(position, own.id).size() < board.capacity(position)) {
                 return new CardChoice(own.id, null, null, position);
@@ -220,7 +220,7 @@ public class CardRules {
     private void moveToSafe(GameState game, CardDefinition card, CardChoice choice, List<RuleEngine.Event> events) {
         Piece piece = game.piece(choice.pieceId());
         Integer from = piece.position;
-        for (int progress = piece.progress + 1; progress <= Board.TRACK_CELL_COUNT; progress++) {
+        for (int progress = piece.progress + 1; progress <= Board.LAST_COMMON_PROGRESS; progress++) {
             if (board.position(game.player(piece.ownerId).seat, piece.number, progress) == choice.targetPosition()) {
                 piece.progress = progress;
                 piece.position = choice.targetPosition();

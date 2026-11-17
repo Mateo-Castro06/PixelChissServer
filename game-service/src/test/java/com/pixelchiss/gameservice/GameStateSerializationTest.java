@@ -8,6 +8,17 @@ import static org.junit.jupiter.api.Assertions.*;
 class GameStateSerializationTest {
     private final JsonMapper json = JsonMapper.builder().findAndAddModules().build();
 
+    @Test void boardVersionAndHomeArePreservedButMissingLayoutIsNeverDefaulted() {
+        var game = new GameState();
+        game.boardLayout = com.pixelchiss.gameservice.domain.Board.LAYOUT;
+        game.pieces.add(new GameState.Piece("piece","owner",0));
+        var restored = json.readValue(json.writeValueAsString(game), GameState.class);
+        assertEquals("v3-100",restored.boardLayout);
+        var piece = restored.pieces.getFirst();
+        assertEquals("HOME",piece.status);assertNull(piece.position);assertEquals(-1,piece.progress);
+        assertNull(json.readValue("{\"id\":\"old\"}", GameState.class).boardLayout);
+    }
+
     @Test void creatorAndSparseClockwiseSeatsSurvivePersistence() {
         var game = new GameState();
         game.creatorPlayerId = "creator";

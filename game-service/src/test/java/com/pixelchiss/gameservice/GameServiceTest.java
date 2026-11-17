@@ -15,6 +15,34 @@ import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GameServiceTest extends ServiceFixture {
+    @Test void incompatibleGeometryRejectsReadsReconnectActionsAndInitializationWithoutMutation() {
+        var setup = new com.pixelchiss.gameservice.domain.GameSetup("g", "l", "classic", List.of(
+                new com.pixelchiss.gameservice.domain.GameSetup.Participant("a", false, 0),
+                new com.pixelchiss.gameservice.domain.GameSetup.Participant("b", false, 1)), "a");
+        for (String layout : Arrays.asList(null, "v1", "v1-96", "v2-100", "unknown")) {
+            game.boardLayout = layout;
+            game.creationFingerprint = new JsonPayloadFingerprints(repo.json).fingerprint(setup);
+            var legacyAction = action("ROLL_DICE",null,null,null,null,null,null);
+            game.receipts.put("a:"+legacyAction.requestId(),
+                    new com.pixelchiss.gameservice.domain.GameState.Receipt("legacy-fingerprint",7));
+            repo.states.put("g", repo.json.writeValueAsString(game));
+            String before = repo.states.get("g");
+            List<Runnable> attempts = List.of(
+                    () -> service.snapshot("g", "a"),
+                    () -> service.synchronization("g", "a"),
+                    () -> service.authorizeConnection("g", "a"),
+                    () -> service.reconnect("g", "a"),
+                    () -> service.action("a", legacyAction),
+                    () -> service.botAction("a", legacyAction),
+                    () -> service.moves("g", "a"),
+                    () -> service.create(setup),
+                    () -> service.system("g", state -> { fail("Must not mutate legacy state"); return List.of(); }));
+            for (Runnable attempt : attempts) {
+                assertEquals("UNSUPPORTED_BOARD_LAYOUT", assertThrows(GameException.class, attempt::run).code());
+                assertEquals(before, repo.states.get("g"));
+            }
+        }
+    }
     @Test void duplicateActionIsIdempotentAndReuseOrOldVersionIsRejected() {
         GameAction a=action("ROLL_DICE",null,null,null,null,null,null);
         var first=service.action("a",a); var duplicate=service.action("a",a);

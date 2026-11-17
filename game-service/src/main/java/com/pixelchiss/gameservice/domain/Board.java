@@ -7,35 +7,37 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-/** Layout v1: 64 common cells + 16 individual exits + 16 private finish cells. */
+/** Layout v3: 68 common cells, return to the start safe, then eight private cells. HOME is a state. */
 public class Board {
-    public static final int CELL_COUNT = 96;
+    public static final String LAYOUT = "v3-100";
+    public static final int CELL_COUNT = 100;
     public static final int SEAT_COUNT = 4;
     public static final int PIECES_PER_PLAYER = 4;
-    public static final int TRACK_CELL_COUNT = 64;
-    public static final int FINISH_CELLS_PER_PLAYER = 4;
-    public static final int EXIT_START = TRACK_CELL_COUNT;
-    public static final int FINISH_START = EXIT_START + SEAT_COUNT * PIECES_PER_PLAYER;
-    public static final int FINISH = TRACK_CELL_COUNT + FINISH_CELLS_PER_PLAYER;
-    public static final Set<Integer> SAFE = Set.of(0, 5, 10, 16, 21, 26, 32, 37, 42, 48, 53, 58);
-    public static final Set<Integer> TRIVIA = Set.of(8, 24, 40, 56);
+    public static final int TRACK_CELL_COUNT = 68;
+    public static final int SECTOR_CELL_COUNT = TRACK_CELL_COUNT / SEAT_COUNT;
+    public static final int FINISH_CELLS_PER_PLAYER = 8;
+    public static final int FINISH_START = TRACK_CELL_COUNT;
+    // Returning to the physical start completes the lap; it is not an extra cell.
+    public static final int LAST_COMMON_PROGRESS = TRACK_CELL_COUNT;
+    public static final int FIRST_FINISH_PROGRESS = LAST_COMMON_PROGRESS + 1;
+    public static final int FINISH = FIRST_FINISH_PROGRESS + FINISH_CELLS_PER_PLAYER - 1;
+    public static final Set<Integer> SAFE = Set.of(0, 5, 12, 17, 22, 29, 34, 39, 46, 51, 56, 63);
+    // Preserve one trivia cell per sector, at the original relative offset eight.
+    public static final Set<Integer> TRIVIA = Set.of(8, 25, 42, 59);
 
     public int position(int seat, int pieceNumber, int progress) {
         if (seat < 0 || seat >= SEAT_COUNT || pieceNumber < 0 || pieceNumber >= PIECES_PER_PLAYER
                 || progress < 0 || progress > FINISH) {
             throw new IllegalArgumentException("Invalid route coordinate");
         }
-        if (progress == 0) {
-            return EXIT_START + seat * PIECES_PER_PLAYER + pieceNumber;
+        if (progress <= LAST_COMMON_PROGRESS) {
+            return (seat * SECTOR_CELL_COUNT + progress) % TRACK_CELL_COUNT;
         }
-        if (progress <= TRACK_CELL_COUNT) {
-            return (seat * (TRACK_CELL_COUNT / SEAT_COUNT) + progress - 1) % TRACK_CELL_COUNT;
-        }
-        return FINISH_START + seat * FINISH_CELLS_PER_PLAYER + progress - TRACK_CELL_COUNT - 1;
+        return FINISH_START + seat * FINISH_CELLS_PER_PLAYER + progress - FIRST_FINISH_PROGRESS;
     }
 
     public boolean protectedCell(int position) {
-        return SAFE.contains(position) || position >= EXIT_START;
+        return SAFE.contains(position) || (position >= FINISH_START && position < CELL_COUNT);
     }
 
     public int capacity(int position) {
@@ -46,7 +48,8 @@ public class Board {
     }
 
     private boolean isCrown(int position) {
-        return position >= FINISH_START && (position - FINISH_START) % FINISH_CELLS_PER_PLAYER == FINISH_CELLS_PER_PLAYER - 1;
+        return position >= FINISH_START && position < CELL_COUNT
+                && (position - FINISH_START) % FINISH_CELLS_PER_PLAYER == FINISH_CELLS_PER_PLAYER - 1;
     }
 
     public List<Integer> route(int seat, int piece) {
@@ -63,13 +66,12 @@ public class Board {
         var routes = IntStream.range(0, SEAT_COUNT).boxed().collect(Collectors.toMap(
                 seat -> seat.toString(), seat -> IntStream.range(0, PIECES_PER_PLAYER)
                         .mapToObj(piece -> route(seat, piece)).toList()));
-        return Map.of("layout", "v1", "cellCount", CELL_COUNT, "safe", SAFE,
+        return Map.of("layout", LAYOUT, "cellCount", CELL_COUNT, "safe", SAFE,
                 "trivia", TRIVIA, "cells", cells, "routes", routes);
     }
 
     private String kind(int id) {
-        if (id < EXIT_START) return "TRACK";
-        if (id < FINISH_START) return "EXIT";
+        if (id < FINISH_START) return "TRACK";
         return isCrown(id) ? "CROWN" : "FINISH_LANE";
     }
 

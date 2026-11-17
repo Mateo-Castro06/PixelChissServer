@@ -62,7 +62,7 @@ def start_gateway(port, public_key):
 
 def rest_and_docs(tokens):
     status, board = probe.http(GATEWAY + "/api/game/board", token=tokens["900001"])
-    assert status == 200 and board["cellCount"] == 96
+    assert status == 200 and board["cellCount"] == 100
     assert probe.http(GATEWAY + "/api/game/board")[0] == 401
     assert probe.http(GATEWAY + "/api/game/board", token="invalid")[0] == 401
     for path in ["/api/game/api/game/board", "/internal/games", "/api/game/internal/games"]:

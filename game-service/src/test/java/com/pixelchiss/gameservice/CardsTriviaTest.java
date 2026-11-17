@@ -17,8 +17,8 @@ class CardsTriviaTest extends EngineFixture {
     void grant(String id){cards.grant(game,catalog.card(id),"a",new ArrayList<>());}
     GameAction target(CardChoice choice){return new GameAction("CARD_TARGET","g","target",game.version,choice.pieceId(),null,null,null,choice.targetPosition(),null,game.card.id,null,choice.targetPieceId(),choice.targetPlayerId());}
     @Test void captureCardOnlyAcceptsNearestReachableUnprotectedOpponent() {
-        place("seat-0-piece-0",3);place("seat-1-piece-0",53); // physical 4 nearest
-        place("seat-1-piece-1",55); // physical 6 farther
+        placeAt("seat-0-piece-0",2);placeAt("seat-1-piece-0",4); // physical 4 nearest
+        placeAt("seat-1-piece-1",6); // physical 6 farther
         grant("capture-next");assertEquals(1,game.card.choices.size());
         var valid=game.card.choices.getFirst();assertEquals("seat-1-piece-0",valid.targetPieceId());
         assertThrows(GameException.class,()->cards.act(game,"a",target(new CardChoice(valid.pieceId(),"seat-1-piece-1",null,6))));
@@ -27,10 +27,10 @@ class CardsTriviaTest extends EngineFixture {
         assertThrows(GameException.class,()->cards.act(game,"a",request));
     }
     @Test void moveSafeFindsFirstAvailableSafeAndRejectsArbitraryPosition() {
-        place("seat-0-piece-0",4);place("seat-1-piece-0",54);place("seat-1-piece-1",54); // safe5 full
-        grant("move-safe");var choice=game.card.choices.getFirst();assertEquals(10,choice.targetPosition());
+        place("seat-0-piece-0",4);placeAt("seat-1-piece-0",5);placeAt("seat-1-piece-1",5); // safe5 full
+        grant("move-safe");var choice=game.card.choices.getFirst();assertEquals(12,choice.targetPosition());
         assertThrows(GameException.class,()->cards.act(game,"a",target(new CardChoice(choice.pieceId(),null,null,5))));
-        cards.act(game,"a",target(choice));assertEquals(10,game.piece(choice.pieceId()).position);
+        cards.act(game,"a",target(choice));assertEquals(12,game.piece(choice.pieceId()).position);
     }
     @Test void impossibleCardIsDiscardedAndNotStored() {
         var events=new ArrayList<RuleEngine.Event>();cards.grant(game,catalog.card("capture-next"),"a",events);
@@ -67,7 +67,7 @@ class CardsTriviaTest extends EngineFixture {
         assertThrows(GameException.class,()->cards.act(game,"a",action("ROLL_DICE",null,null,null,null,null,List.of(1,6))));
     }
     @Test void triviaHidesAnswerUntilResolvedAndPausesMoves() {
-        place("seat-0-piece-0",5);roll();move(cards.calculate(game,"a","seat-0-piece-0",0)); // cell8
+        place("seat-0-piece-0",4);roll();move(cards.calculate(game,"a","seat-0-piece-0",0)); // cell8
         assertNotNull(game.trivia);
         String publicState=tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(GameView.of(game));
         assertFalse(publicState.contains("correctIndex"));
@@ -78,13 +78,13 @@ class CardsTriviaTest extends EngineFixture {
         assertThrows(GameException.class,()->cards.act(game,"a",answer));
     }
     @Test void triviaAndCardTimeoutAreControlledByServer() {
-        place("seat-0-piece-0",5);roll();move(cards.calculate(game,"a","seat-0-piece-0",0));
+        place("seat-0-piece-0",4);roll();move(cards.calculate(game,"a","seat-0-piece-0",0));
         clock.now=game.trivia.deadline;cards.tick(game);assertNull(game.trivia);
         assertEquals("DOUBLES_PENALTY",game.player("a").effects.getFirst().code);
         place("seat-0-piece-1",4);grant("move-safe");clock.now=game.card.deadline;cards.tick(game);assertNull(game.card);
     }
     @Test void catalogFailureCannotKeepAnExpiredTurnBlocked() {
-        place("seat-0-piece-0",5);roll();move(cards.calculate(game,"a","seat-0-piece-0",0));
+        place("seat-0-piece-0",4);roll();move(cards.calculate(game,"a","seat-0-piece-0",0));
         var unavailable=new SeedCatalog(){@Override public QuestionDefinition question(String id){throw new GameException("CATALOG_UNAVAILABLE","Unavailable");}};
         var timer=new TriviaRules(board,m->4,clock,60000,unavailable,15000,15000);
         clock.now=game.turn.deadline;var events=timer.tick(game);
@@ -104,6 +104,8 @@ class CardsTriviaTest extends EngineFixture {
         assertEquals("a",game.turn.playerId);assertEquals(2,game.player("a").effects.getFirst().remainingTurns);
         expireTurn();assertEquals(1,game.player("a").effects.getFirst().remainingTurns);
         nextOwnTurn();assertEquals(1,game.player("a").effects.getFirst().remainingTurns);
+        // The shared safe start holds two pieces: move both off before releasing the others.
+        place("seat-0-piece-0",3);place("seat-0-piece-1",4);
         roll();move(cards.calculate(game,"a","seat-0-piece-2",0));move(cards.calculate(game,"a","seat-0-piece-3",1));
         assertEquals("a",game.turn.playerId);assertTrue(game.player("a").effects.isEmpty());
         roll();assertArrayEquals(new int[]{4,4},game.turn.dice);

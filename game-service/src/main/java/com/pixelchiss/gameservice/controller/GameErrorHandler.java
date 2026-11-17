@@ -15,7 +15,7 @@ public class GameErrorHandler {
             case "UNAUTHENTICATED" -> HttpStatus.UNAUTHORIZED;
             case "NOT_MEMBER","FORBIDDEN","BOT_IDENTITY" -> HttpStatus.FORBIDDEN;
             case "GAME_NOT_FOUND" -> HttpStatus.NOT_FOUND;
-            case "GAME_EXISTS","STALE_VERSION","CONCURRENT_UPDATE" -> HttpStatus.CONFLICT;
+            case "GAME_EXISTS","STALE_VERSION","CONCURRENT_UPDATE","UNSUPPORTED_BOARD_LAYOUT" -> HttpStatus.CONFLICT;
             case "INTEGRATION_DISABLED","CATALOG_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
             default -> HttpStatus.BAD_REQUEST;
         };

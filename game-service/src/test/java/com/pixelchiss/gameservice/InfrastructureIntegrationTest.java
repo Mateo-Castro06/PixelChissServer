@@ -18,6 +18,8 @@ import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.*;
@@ -68,7 +70,8 @@ class InfrastructureIntegrationTest {
     CreateGame input(String id){return new CreateGame(id,"test-lobby","classic",List.of(new CreateGame.Participant("test-a",false,0),new CreateGame.Participant("test-b",false,1)),"test-a");}
     String create(){String id="it-"+UUID.randomUUID();ids.add(id);games.create(input(id).command());return id;}
     @AfterEach void cleanup(){for(String id:ids){redis.delete(PREFIX+":state:"+id);redis.opsForSet().remove(PREFIX+":active",id);
-        redis.delete("pixelchiss:game:presence:"+id+":test-a");redis.delete("pixelchiss:game:presence:"+id+":test-b");}}
+        for(String actor:List.of("test-a","test-b","human-0","human-1","human-2","human-3"))
+            redis.delete("pixelchiss:game:presence:"+id+":"+actor);}}
     @Test void seedsAreIdempotentAndDefinitionsRoundTripFromMongo() throws Exception {
         assumeTrue(seeder != null, "Catalog seeding explicitly disabled for this run");
         seeder.run(null);seeder.run(null);
@@ -93,6 +96,27 @@ class InfrastructureIntegrationTest {
         assertEquals(1,games.create(input(id).command()).version());
         assertThrows(GameException.class,()->games.create(new CreateGame(id,"different-lobby","classic",input(id).participants(),"test-a").command()));
     }
+    @Test void realRedisLegacyLayoutIsRejectedBeforeReceiptsAndWithoutWrites() {
+        String id=create();
+        String key=PREFIX+":state:"+id;
+        for(String layout:Arrays.asList(null,"v1","v2-100","unknown")) {
+            var old=repository.find(id);
+            old.boardLayout=layout;
+            old.receipts.put("test-a:old",new GameState.Receipt("legacy",7));
+            String before=json.writeValueAsString(old);
+            redis.opsForHash().put(key,"state",before);
+            assertEquals("UNSUPPORTED_BOARD_LAYOUT",assertThrows(GameException.class,
+                    ()->games.synchronization(id,"test-a")).code());
+            assertEquals("UNSUPPORTED_BOARD_LAYOUT",assertThrows(GameException.class,
+                    ()->games.action("test-a",new Action("ROLL_DICE",id,"old",0L,
+                            null,null,null,null,null,null,null,null,null,null).command())).code());
+            assertEquals("UNSUPPORTED_BOARD_LAYOUT",assertThrows(GameException.class,
+                    ()->games.create(input(id).command())).code());
+            assertEquals(before,redis.opsForHash().get(key,"state"));
+            assertEquals("0",redis.opsForHash().get(key,"version"));
+            assertTrue(redis.opsForSet().isMember(PREFIX+":active",id));
+        }
+    }
     @Test void realRedisRejectsCommitOfUnknownGame() {
         GameRepositoryContractTest.verifyMissingCommit(repository, "absent-" + UUID.randomUUID());
     }
@@ -115,9 +139,9 @@ class InfrastructureIntegrationTest {
             String id=create();
             assertTrue(games.system(id, state -> {
                 var own = state.piece("seat-0-piece-0");
-                own.progress=5;own.position=4;own.status="BOARD";
+                own.progress=4;own.position=4;own.status="BOARD";
                 var rival = state.piece("seat-1-piece-0");
-                rival.progress=54;rival.position=5;rival.status="BOARD";
+                rival.progress=56;rival.position=5;rival.status="BOARD";
                 var events = new ArrayList<RuleEngine.Event>();
                 ((TriviaRules) rules).grant(state,catalog.card(cardId),"test-a",events);
                 return events;
@@ -235,6 +259,56 @@ class InfrastructureIntegrationTest {
         }
     }
     void send(WebSocket socket,Object message){socket.sendText(json.writeValueAsString(message),true).join();}
+    @ParameterizedTest @CsvSource({"classic,2","science,2","classic,3","science,3","classic,4","science,4"})
+    void twoConcurrentHumansAlternateObserveMovesAndReconnect(String map,int count) throws Exception {
+        String id="it-"+UUID.randomUUID();ids.add(id);
+        var participants=new ArrayList<GameSetup.Participant>();
+        for(int seat=0;seat<count;seat++) participants.add(new GameSetup.Participant("human-"+seat,false,seat));
+        games.create(new GameSetup(id,"shared-room",map,participants,"human-0"));
+        try(var client=HttpClient.newHttpClient()) {
+            Inbox[] inboxes={new Inbox(),new Inbox()};
+            WebSocket[] sockets=new WebSocket[2];
+            try {
+                for(int index=0;index<2;index++) {
+                    sockets[index]=client.newWebSocketBuilder().buildAsync(URI.create("ws://localhost:"+port+"/ws/game"),inboxes[index]).join();
+                    send(sockets[index],Map.of("type","AUTH","token",token("human-"+index)));
+                    inboxes[index].await("AUTHENTICATED");
+                    send(sockets[index],Map.of("type","JOIN_GAME","gameId",id));
+                    assertTrue(inboxes[index].await("GAME_STATE").contains(id));
+                }
+                for(int index=0;index<2;index++) {
+                    String actor="human-"+index;
+                    var state=games.load(id);assertEquals(actor,state.turn.playerId);
+                    send(sockets[index],Map.of("type","ROLL_DICE","gameId",id,"requestId","roll-"+index,"expectedVersion",state.version));
+                    inboxes[index].await("ACTION_ACK");
+                    var move=rules.calculate(games.load(id),actor,"seat-"+index+"-piece-0",0);
+                    assertNull(move.from());assertEquals(index*17,move.to());
+                    send(sockets[index],new Action("MOVE_REQUEST",id,"move-"+index,games.load(id).version,
+                            move.pieceId(),0,move.dieValue(),null,move.to(),null,null,null,null,null));
+                    inboxes[index].await("ACTION_ACK");
+                    String publication;
+                    do { publication=inboxes[1-index].await("GAME_UPDATED"); } while(!publication.contains("PIECE_MOVED"));
+                    assertTrue(publication.contains(move.pieceId()));
+                    send(sockets[index],Map.of("type","END_TURN","gameId",id,"requestId","end-"+index,"expectedVersion",games.load(id).version));
+                    inboxes[index].await("ACTION_ACK");
+                    assertEquals("human-"+((index+1)%count),games.load(id).turn.playerId);
+                }
+            } finally {
+                for(var socket:sockets) if(socket!=null) socket.sendClose(1000,"reconnect").join();
+            }
+            var reconnected=new Inbox();
+            var socket=client.newWebSocketBuilder().buildAsync(URI.create("ws://localhost:"+port+"/ws/game"),reconnected).join();
+            try {
+                send(socket,Map.of("type","AUTH","token",token("human-0")));reconnected.await("AUTHENTICATED");
+                send(socket,Map.of("type","SYNC_REQUEST","gameId",id));
+                var state=json.readTree(reconnected.await("GAME_STATE")).path("state");
+                assertEquals(id,state.path("gameId").asString());assertEquals(map,state.path("mapId").asString());
+                assertEquals(count,state.path("players").size());
+                assertEquals(0,games.load(id).piece("seat-0-piece-0").position);
+                assertEquals(17,games.load(id).piece("seat-1-piece-0").position);
+            } finally {socket.sendClose(1000,"done").join();}
+        }
+    }
     @Test void rawWebSocketAuthDiceMoveDuplicatesAndRedisPublicationSynchronizeTwoPlayers() throws Exception {
         String id=create();
         try(var client=HttpClient.newHttpClient()) {
@@ -252,7 +326,7 @@ class InfrastructureIntegrationTest {
                 var m=rules.calculate(games.load(id),"test-a","seat-0-piece-0",0);
                 var move=new Action("MOVE_REQUEST",id,"move-1",1L,m.pieceId(),m.dieIndex(),m.dieValue(),m.from(),m.to(),null,null,null,null,null);
                 send(wsA,move);a.await("ACTION_ACK");assertTrue(b.await("GAME_UPDATED").contains("PIECE_MOVED"));
-                assertEquals(64,games.snapshot(id,"test-b").pieces().getFirst().position);
+                assertEquals(0,games.snapshot(id,"test-b").pieces().getFirst().position);
                 send(wsA,move);assertTrue(a.await("ACTION_ACK").contains("\"duplicate\":true"));assertEquals(2,games.load(id).version);
                 assertTrue(presence.connected(id,"test-a"));
                 send(wsB,Map.of("type","SYNC_REQUEST","gameId",id));assertTrue(b.await("GAME_STATE").contains("\"version\":2"));

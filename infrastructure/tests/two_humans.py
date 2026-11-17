@@ -82,7 +82,8 @@ async def game_probe(game_id, tokens, actors, map_id):
                                                   dieIndex=move["dieIndex"], dieValue=move["dieValue"],
                                                   fromPosition=move["from"], targetPosition=move["to"])
                     state = result["state"]
-                    assert move["release"] and move["to"] == (64 if index == 0 else 72)
+                    assert move["from"] is None
+                    assert move["release"] and move["to"] == (0 if index == 0 else 34)
                     await peer.receive(lambda m: m["type"]=="GAME_UPDATED" and m["version"]==result["committedVersion"]
                                        and any(e["type"]=="PIECE_MOVED" for e in m["events"]))
                     moved.add(actor)
@@ -99,7 +100,7 @@ async def game_probe(game_id, tokens, actors, map_id):
             state = (await client.snapshot())["state"]
             assert state["gameId"] == game_id
             assert [next(p["position"] for p in state["pieces"] if p["id"]==f"seat-{seat}-piece-0")
-                    for seat in (0, 2)] == [64, 72]
+                    for seat in (0, 2)] == [0, 34]
 
 
 def main():
@@ -109,6 +110,10 @@ def main():
     tokens = [request(GATEWAY, "/api/refresh", method="POST", body={"refreshToken": token})["accessToken"] for token in refresh]
     actors = [str(request(GATEWAY, "/api/auth/me", token=token)["id"]) for token in tokens]
     assert len(set(actors)) == 2
+    board = request(GATEWAY, "/api/game/board", token=tokens[0])
+    assert board["layout"] == "v3-100" and board["cellCount"] == 100
+    assert {cell["id"] for cell in board["cells"]} == set(range(100))
+    assert set(board["safe"]) == {0,5,12,17,22,29,34,39,46,51,56,63}
     for map_id in ("classic", "science"):
         room = request(GATEWAY, "/api/lobbies", method="POST", token=tokens[0], status=201)
         base = "/api/lobbies/" + room["code"]

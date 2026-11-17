@@ -16,6 +16,24 @@ import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class WebSocketTest extends ServiceFixture {
+    @Test void legacyLayoutJoinReturnsExplicitErrorWithoutPresenceOrMutation() throws Exception {
+        game.boardLayout=null;
+        repo.states.put("g",repo.json.writeValueAsString(game));
+        String before=repo.states.get("g");
+        var decoder=mock(JwtDecoder.class);
+        when(decoder.decode("valid")).thenReturn(Jwt.withTokenValue("valid").header("alg","RS256")
+                .subject("a").expiresAt(clock.instant().plusSeconds(900)).build());
+        var presence=mock(PresenceService.class);
+        var handler=new GameWebSocketHandler(repo.json,decoder,service,presence,clock);
+        var socket=mock(WebSocketSession.class);when(socket.getId()).thenReturn("legacy");when(socket.isOpen()).thenReturn(true);
+        handler.afterConnectionEstablished(socket);
+        handler.handleTextMessage(socket,new TextMessage("{\"type\":\"AUTH\",\"token\":\"valid\"}"));
+        handler.handleTextMessage(socket,new TextMessage("{\"type\":\"JOIN_GAME\",\"gameId\":\"g\"}"));
+        var messages=org.mockito.ArgumentCaptor.forClass(WebSocketMessage.class);
+        verify(socket,times(2)).sendMessage(messages.capture());
+        assertTrue(messages.getAllValues().getLast().getPayload().toString().contains("UNSUPPORTED_BOARD_LAYOUT"));
+        verifyNoInteractions(presence);assertEquals(before,repo.states.get("g"));
+    }
     @Test void authJoinRollAndPublicationReachOnlyJoinedParticipants() throws Exception {
         var decoder=mock(JwtDecoder.class);var presence=mock(PresenceService.class);
         when(decoder.decode("valid")).thenReturn(Jwt.withTokenValue("valid").header("alg","RS256").subject("a").issuedAt(Instant.EPOCH).expiresAt(Instant.ofEpochMilli(100000)).build());

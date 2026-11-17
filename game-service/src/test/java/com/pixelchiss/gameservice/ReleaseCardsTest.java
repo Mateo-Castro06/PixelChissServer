@@ -48,12 +48,12 @@ class ReleaseCardsTest extends EngineFixture {
     }
 
     @Test void closestCaptureTakesAllRivalsOnSafeCellAndBreaksTieByOwnPieceNumber() {
-        place("seat-0-piece-0",5);  // physical 4
-        place("seat-0-piece-1",10); // physical 9
-        place("seat-1-piece-0",54); // physical 5
-        place("seat-2-piece-0",38); // physical 5
-        place("seat-1-piece-1",59); // physical 10, equally near the other origin
-        place("seat-1-piece-2",65); // private lane
+        placeAt("seat-0-piece-0",4);
+        placeAt("seat-0-piece-1",11);
+        placeAt("seat-1-piece-0",5); // physical 5
+        placeAt("seat-2-piece-0",5); // physical 5
+        placeAt("seat-1-piece-1",12); // physical 12, equally near the other origin
+        place("seat-1-piece-2",69); // private lane
         var events = grant("kill-next");
         assertEquals(2, events.stream().filter(e -> e.type().equals("PIECE_CAPTURED")).count());
         assertEquals("HOME",game.piece("seat-1-piece-0").status);
@@ -64,10 +64,10 @@ class ReleaseCardsTest extends EngineFixture {
     }
 
     @Test void chosenCaptureUsesExistingTargetPositionAndCannotTargetOwnOrPrivateCells() {
-        place("seat-0-piece-0",6);
-        place("seat-1-piece-0",54); // shares safe 5 with own piece
-        place("seat-2-piece-0",39);
-        place("seat-1-piece-1",65);
+        placeAt("seat-0-piece-0",5);
+        placeAt("seat-1-piece-0",5); // shares safe 5 with own piece
+        placeAt("seat-2-piece-0",6);
+        place("seat-1-piece-1",69);
         grant("kill-chosen");
         assertEquals(List.of(new CardChoice(null,null,null,5),new CardChoice(null,null,null,6)), game.card.choices);
         assertEquals("INVALID_CARD_TARGET", assertThrows(GameException.class, () -> rules.act(game,"a",
@@ -82,16 +82,16 @@ class ReleaseCardsTest extends EngineFixture {
     }
 
     @Test void advanceUsesNextSafeWithCapacityAndCannotLeavePrivateLane() {
-        place("seat-0-piece-0",5);
-        place("seat-0-piece-1",65);
-        place("seat-1-piece-0",54);
-        place("seat-2-piece-0",38); // safe 5 full
+        placeAt("seat-0-piece-0",4);
+        place("seat-0-piece-1",69);
+        placeAt("seat-1-piece-0",5);
+        placeAt("seat-2-piece-0",5); // safe 5 full
         grant("advance-safe");
         var choice = game.card.choices.getFirst();
-        assertEquals(List.of(new CardChoice("seat-0-piece-0",null,null,10)),game.card.choices);
+        assertEquals(List.of(new CardChoice("seat-0-piece-0",null,null,12)),game.card.choices);
         rules.act(game,"a",select(choice));
-        assertEquals(10,game.piece("seat-0-piece-0").position);
-        assertEquals(80,game.piece("seat-0-piece-1").position);
+        assertEquals(12,game.piece("seat-0-piece-0").position);
+        assertEquals(68,game.piece("seat-0-piece-1").position);
     }
 
     @Test void missingTargetsDiscardWithoutChangingGame() {
@@ -103,9 +103,9 @@ class ReleaseCardsTest extends EngineFixture {
     }
 
     @Test void instantDeathReturnsLeadingUncrownedPieceAndBreaksTieByNumber() {
-        place("seat-0-piece-0",65);
-        place("seat-0-piece-1",65);
-        place("seat-0-piece-2",68);
+        place("seat-0-piece-0",69);
+        place("seat-0-piece-1",69);
+        place("seat-0-piece-2",com.pixelchiss.gameservice.domain.Board.FINISH);
         grant("instant-death");
         assertEquals("HOME",game.piece("seat-0-piece-0").status);
         assertEquals("BOARD",game.piece("seat-0-piece-1").status);
@@ -132,7 +132,7 @@ class ReleaseCardsTest extends EngineFixture {
     @Test void doublesReturnsOnePerRollUntilEndOfNextOwnTurnIncludingOwnDouble() {
         place("seat-0-piece-0",5);
         place("seat-0-piece-1",8);
-        place("seat-0-piece-2",68);
+        place("seat-0-piece-2",com.pixelchiss.gameservice.domain.Board.FINISH);
         grant("doubles-death");
         endByTimeout();
         rollAs("b",3,3,2); // equal odd dice also qualify; pick second board piece

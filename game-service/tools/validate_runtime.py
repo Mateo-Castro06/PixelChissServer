@@ -213,17 +213,21 @@ def recovered_game(prefix, game_id, baseline_version):
 async def websocket_probe(base, prefix, tokens):
     token = tokens["900001"]
     status, board = http(base + "/api/game/board", token=token)
-    assert status == 200 and board["cellCount"] == 96
+    assert status == 200 and board["cellCount"] == 100
+    assert board["layout"] == "v3-100"
+    assert set(board["safe"]) == {0,5,12,17,22,29,34,39,46,51,56,63}
     cells = board["cells"]
-    assert len(cells) == 96 and {c["id"] for c in cells} == set(range(96))
-    assert sum(c["safe"] for c in cells) == 12 and sum(c["kind"] == "EXIT" for c in cells) == 16
-    assert {c["id"] for c in cells if c["kind"] == "CROWN"} == {83, 87, 91, 95}
+    assert len(cells) == 100 and {c["id"] for c in cells} == set(range(100))
+    assert sum(c["safe"] for c in cells) == 12 and sum(c["kind"] == "TRACK" for c in cells) == 68
+    assert {c["id"] for c in cells if c["kind"] == "CROWN"} == {75, 83, 91, 99}
     for seat, routes in board["routes"].items():
         assert len(routes) == 4
         for piece, route in enumerate(routes):
-            assert len(route) == len(set(route)) == 69 and set(route) <= set(range(96))
-            assert route[0] == 64 + int(seat) * 4 + piece and route[-1] == 83 + int(seat) * 4
-    record("board_http", cells=96, safe=12, exits=16, crowns=[83, 87, 91, 95], routes=16)
+            assert len(route) == 77 and len(set(route)) == 76 and set(route) <= set(range(100))
+            assert route[0] == route[68]
+            assert route[69:77] == list(range(68 + int(seat)*8,76 + int(seat)*8))
+            assert route[0] == int(seat) * 17 and route[-1] == 75 + int(seat) * 8
+    record("board_http", cells=100, safe=12, sharedStarts=[0,17,34,51], crowns=[75,83,91,99], routes=16)
     assert http(base + "/api/game/board")[0] == 401
     async with websockets.connect(base.replace("http://", "ws://") + "/ws/game") as anonymous:
         await anonymous.send(json.dumps({"type": "JOIN_GAME", "gameId": "unauthenticated"}))
