@@ -1,6 +1,6 @@
 # ADR-003: Geometría física v3-100 y rechazo de estados antiguos
 
-Estado: implementación local; recorrido confirmado por el equipo de Godot y probado en dominio; pendiente de ejecución integrada. Sustituye únicamente la geometría de Board v1.
+Estado: implementado; recorrido confirmado por el equipo de Godot y verificado en dominio e integración aislada, incluidos dos clientes automatizados por Gateway. El cliente Godot real no se ejecutó. Sustituye únicamente la geometría de Board v1.
 
 El tablero del equipo tiene 100 casillas: 68 comunes y cuatro corredores finales de ocho, incluida la corona. HOME es exclusivamente estado (`position:null`, `progress:-1`), no una coordenada. Los doce seguros confirmados son 0, 5, 12, 17, 22, 29, 34, 39, 46, 51, 56, 63.
 
@@ -10,4 +10,4 @@ El tablero del equipo tiene 100 casillas: 68 comunes y cuatro corredores finales
 
 No cambian las fronteras DDD, puertos hexagonales, repositorios, transporte REST/WS, SAGA de inicio ni esquema 1 de `GameInitialized`: ese evento contiene asociación de IDs y mapa, sin coordenadas. Los eventos de movimiento conservan tipos y forma; cambia el significado geométrico de posiciones/progreso. Desplegar con pausa de escritores antiguos y cierre de conexiones, nunca mezclando ambos layouts en el mismo conjunto de partidas.
 
-La numeración y las fórmulas implementadas están en [BOARD.md](../../game-service/docs/BOARD.md). El equipo de Godot confirmó el regreso al seguro propio de salida tras una vuelta completa: progreso 68 en el mismo ID físico de progreso 0, primera final en 69 y corona exacta en 76. Las rutas contienen 77 entradas y 76 IDs distintos, sin agregar casillas físicas. `v3-100` sustituye y rechaza el borrador `v2-100`, cuyos progresos finales empezaban un paso antes. La ausencia de Docker también impide acreditar la ejecución integrada y dos humanos por Gateway. Evidencia actual en [BOARD100_VALIDACION.md](../BOARD100_VALIDACION.md).
+La numeración y las fórmulas implementadas están en [BOARD.md](../../game-service/docs/BOARD.md). El equipo de Godot confirmó el regreso al seguro propio de salida tras una vuelta completa: progreso 68 en el mismo ID físico de progreso 0, primera final en 69 y corona exacta en 76. Las rutas contienen 77 entradas y 76 IDs distintos, sin agregar casillas físicas. `v3-100` sustituye y rechaza el borrador `v2-100`, cuyos progresos finales empezaban un paso antes. La verificación con Docker pasó las cinco suites completas y los ensayos de dos identidades por Gateway, recuperación de Redis y EDA/SAGA. Evidencia actual en [BOARD100_VALIDACION.md](../BOARD100_VALIDACION.md).

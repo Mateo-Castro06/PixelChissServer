@@ -1,0 +1,178 @@
+{
+  "date": "2026-11-17",
+  "implementationCommit": "de6add4347f9ae6f14c893a4679a0899870d257a",
+  "validatedHeadBeforeEvidence": "f1ec721f9cf49737ac4522a224fb6475409e41a8",
+  "docker": {
+    "context": "default",
+    "serverVersion": "29.8.1",
+    "composeProject": "pixelchiss-board100-final",
+    "developmentUnchanged": true
+  },
+  "execution": "Maven/Python suites on host; real isolated databases and runtime services in Docker",
+  "suites": {
+    "auth": {
+      "passed": 75,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "game": {
+      "passed": 225,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "gateway": {
+      "passed": 12,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "eureka": {
+      "passed": 1,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lobby": {
+      "passed": 13,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "totals": {
+    "passed": 326,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "twoHumans": [
+    {
+      "map": "classic",
+      "humans": 2,
+      "seats": [
+        0,
+        2
+      ],
+      "outOfTurnRejected": true,
+      "bothRolledMovedAndReconnected": true,
+      "peerMoveObserved": true
+    },
+    {
+      "map": "science",
+      "humans": 2,
+      "seats": [
+        0,
+        2
+      ],
+      "outOfTurnRejected": true,
+      "bothRolledMovedAndReconnected": true,
+      "peerMoveObserved": true
+    }
+  ],
+  "gatewayPreparedScenarios": [
+    {
+      "map": "classic",
+      "seats": [
+        0,
+        2
+      ],
+      "twoJwtAndSimultaneousSockets": true,
+      "ownSafeThenLane": true,
+      "crossTransition": true,
+      "foreignLaneRejected": true,
+      "overshootRejectedWithoutMutation": true,
+      "crownedMoveRejected": true,
+      "exactCrownAndVictory": true,
+      "bothReconnected": true,
+      "persistedAndIdempotentCreation": true
+    },
+    {
+      "map": "classic",
+      "seats": [
+        1,
+        3
+      ],
+      "twoJwtAndSimultaneousSockets": true,
+      "ownSafeThenLane": true,
+      "crossTransition": true,
+      "foreignLaneRejected": true,
+      "overshootRejectedWithoutMutation": true,
+      "crownedMoveRejected": true,
+      "exactCrownAndVictory": true,
+      "bothReconnected": true,
+      "persistedAndIdempotentCreation": true
+    },
+    {
+      "map": "science",
+      "seats": [
+        0,
+        2
+      ],
+      "twoJwtAndSimultaneousSockets": true,
+      "ownSafeThenLane": true,
+      "crossTransition": true,
+      "foreignLaneRejected": true,
+      "overshootRejectedWithoutMutation": true,
+      "crownedMoveRejected": true,
+      "exactCrownAndVictory": true,
+      "bothReconnected": true,
+      "persistedAndIdempotentCreation": true
+    },
+    {
+      "map": "science",
+      "seats": [
+        1,
+        3
+      ],
+      "twoJwtAndSimultaneousSockets": true,
+      "ownSafeThenLane": true,
+      "crossTransition": true,
+      "foreignLaneRejected": true,
+      "overshootRejectedWithoutMutation": true,
+      "crownedMoveRejected": true,
+      "exactCrownAndVictory": true,
+      "bothReconnected": true,
+      "persistedAndIdempotentCreation": true
+    },
+    {
+      "legacyLayoutsRejected": 4,
+      "http409AndWebSocketError": true,
+      "originalStateAndReceiptsUnchanged": true
+    }
+  ],
+  "recovery": {
+    "result": "PASS",
+    "finishedGamesRecoveredAfterServiceRestart": 4,
+    "bothHumansReconnectedAfterRestart": true,
+    "sameLobbyGameIdForBothHumans": true,
+    "realLobbyStartedMaps": [
+      "classic",
+      "science"
+    ],
+    "gameInitializedEvents": 17,
+    "streamPending": 0,
+    "streamLag": 0
+  },
+  "catalog": {
+    "result": "PASS",
+    "questions": 32,
+    "classic": 16,
+    "science": 16,
+    "cards": 6,
+    "allSeedFieldsUnchanged": true
+  },
+  "godotClientExecuted": false,
+  "scope": "Natural lobby/dice flow tested separately from deterministic positions/dice prepared only in new isolated games; no game was manually seeded in development.",
+  "catalogSha256": {
+    "catalog.json": "6112bf1778422449b81f92125dd0f592ed5951ee85c3e7e5c233491ba19cf7cf",
+    "legacy-challenges.json": "7a34715f82c2be1d4585cf2f13fd6edc9eadc6cdc2cc087121584a4cf1fa049a"
+  },
+  "jarSha256": {
+    "game-service": "cc3032bd732781bb8fcf706f8c06bc18da1ec83e28ab574acdc044064aba005c",
+    "auth-service": "3d6950643cf8d98baa7ef0a2bad8fc0227332130e948c35481fb71f766adc49f",
+    "api-gateway": "e6f1950b934febe58265c0430a02a380f5a3020973923ff971ad2462d0c3b9ed",
+    "eureka-server": "bdae3446f317808aa02454f7dfea148888f13b1e4d2c6b8a557865a2e44f3166"
+  }
+}

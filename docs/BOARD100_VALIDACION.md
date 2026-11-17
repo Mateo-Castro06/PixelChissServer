@@ -1,6 +1,6 @@
 # Tablero de 100 casillas — recorrido confirmado y evidencia
 
-Fecha: 2026-11-17. Geometría y recorrido corregidos según la regla confirmada por el equipo de Godot y verificados en dominio para ambos mapas y los cuatro colores. **La entrega completa sigue pendiente de integración real:** Docker no está accesible, no se ejecutó Godot ni el ensayo de dos humanos por Gateway. No publicar hasta cerrar esas verificaciones de integración.
+Fecha: 2026-11-17. **Verificación del backend completada:** suites completas, bases reales aisladas, EDA/SAGA y dos identidades mediante Gateway/WebSocket pasan en ambos mapas. La geometría sigue la regla confirmada por Godot. Se usaron clientes automatizados; **no se ejecutó el cliente Godot real**. Resultados estructurados, hashes de catálogo y JARs en [board100-runtime.json](board100-runtime.json).
 
 ## Posiciones definitivas y transición
 
@@ -41,49 +41,63 @@ Las búsquedas de `kill-next`, su equivalente legado y `advance-safe` ahora incl
 
 El agregado persiste `boardLayout="v3-100"`. Se rechazan estados sin versión, v1, **el borrador v2-100** y desconocidos con `UNSUPPORTED_BOARD_LAYOUT` (HTTP 409 o WebSocket ERROR), antes de recuperar recibos, reconectar o mutar. El cambio de marcador es necesario porque el borrador empezaba el corredor un paso antes. No se deben cambiar a mano los marcadores de snapshots ni reproducir sus recibos. No se borraron datos, claves o volúmenes.
 
-Las pruebas de persistencia en memoria y reconexión comprueban que el mismo ID físico en `p=68` conserva su fase y el siguiente paso entra al corredor, en vez de volver a recorrer la pista como si fuera `p=0`. La comprobación equivalente con Redis real está preparada y pendiente.
+Las pruebas de persistencia en memoria y reconexión comprueban que el mismo ID físico en `p=68` conserva su fase y el siguiente paso entra al corredor, en vez de volver a recorrer la pista como si fuera `p=0`. La suite con Redis real también pasó; adicionalmente se rechazaron cuatro layouts antiguos a través de Gateway REST/WS conservando íntegros sus hashes y recibos, y cuatro estados nuevos se recuperaron sin cambios tras reiniciar Game aislado.
 
 REST, métodos HTTP, DTOs, autenticación, rutas WS, tipos de mensajes y contratos EDA/SAGA no se renombraron. `GameInitialized` mantiene esquema 1 y no contiene coordenadas; no se cambia la versión de evento por cambiar el layout. Pub/Sub no es historial durable. La actualización requiere detener escritores antiguos, cerrar conexiones y conservar las partidas anteriores, reanudables solo con su servidor anterior aislado. Procedimiento en [GUIA_ACTUALIZACION.md](GUIA_ACTUALIZACION.md#tablero-de-100-casillas).
 
-## Pruebas realmente ejecutadas en esta continuación
+## Pruebas realmente ejecutadas
 
-Las suites se ejecutaron en el host; **no en Docker**. Logs locales en `/tmp/pixelchiss-board100-lap/`.
+Docker `default` usa `unix:///var/run/docker.sock` y daemon **29.8.1**. `desktop-linux` continúa sin socket y no se utilizó. Se creó el proyecto independiente **pixelchiss-board100-final**, con volúmenes, red, claves e identidades exclusivos. Desarrollo y `demo-rum/` no se modificaron.
 
-| Suite / comando desde su módulo | Resultado |
-|---|---|
-| Game: `mvn -o -Dmaven.repo.local=.build/m2 verify -B` | **220 descubiertas: 207 ejecutadas sin fallos, 13 omitidas**, BUILD SUCCESS |
-| Gateway: `mvn -o -Dmaven.repo.local=.build/m2 verify -B` | **12 ejecutadas sin fallos**, BUILD SUCCESS; ejecución ampliada para sockets locales |
-| Eureka: `mvn -o -Dmaven.repo.local=../api-gateway/.build/m2 verify -B` | **1 ejecutada sin fallos**, BUILD SUCCESS |
-| Lobby: `timeout 90 .venv/bin/python -m unittest discover -s tests -v` | **13 descubiertas: 6 ejecutadas sin fallos, 7 omitidas** por requerir infraestructura |
-| Auth: `mvn -o verify -B` | **75 descubiertas: 41 sin errores y 34 errores de infraestructura**, BUILD FAILURE; PostgreSQL aislado `127.0.0.1:55432` rechaza conexión |
+Maven/Python se ejecutaron en el host con conexiones a PostgreSQL, MongoDB y Redis reales en Docker. El recorrido operativo utilizó Auth, Game, Lobby, Gateway y Eureka en contenedores aislados, con los JARs recién construidos montados de solo lectura y el código actual de Lobby. No se construyó ni sustituyó ninguna imagen de desarrollo. Logs y scripts auxiliares locales en `/tmp/pixelchiss-board100-final/`.
 
-`BoardTest` verifica las 100 casillas únicas, 68 comunes, cuatro corredores disjuntos, doce seguros y la repetición exclusiva del seguro en las rutas. `Board100RulesTest` recorre la vuelta completa y las ocho finales para los cuatro asientos y ambos mapas, y comprueba HOME, liberación, capturas, capacidad, seis cartas y trivia.
+| Suite / comando desde su módulo | Aprobadas | Fallos/errores | Omitidas |
+|---|---:|---:|---:|
+| Auth: `mvn -o verify -B`, PostgreSQL de pruebas | 75 | 0 | 0 |
+| Game: `mvn -o -Dmaven.repo.local=.build/m2 -Dgame.integration=true verify -B` | 225 | 0 | 0 |
+| Lobby: `.venv/bin/python -m unittest discover -s tests -v`, con `SAGA_TEST_*` | 13 | 0 | 0 |
+| Gateway: `mvn -o -Dmaven.repo.local=.build/m2 verify -B` | 12 | 0 | 0 |
+| Eureka: `mvn -o -Dmaven.repo.local=../api-gateway/.build/m2 verify -B` | 1 | 0 | 0 |
+| **Total** | **326** | **0** | **0** |
 
-`LapEntryTest` cubre ambos mapas y cuatro colores en 48 casos parametrizados: distinción salida/regreso con igual posición; dados 1–6 desde cada progreso 62–68; protección/capacidad al aterrizar y cruce sin parada; cartas sobre el seguro de acceso; corte de búsquedas antes del corredor; y restauración de fase mediante serialización, reconexión y acción posterior. El caso de cruce contiene 42 escenarios de dados por combinación mapa/asiento.
+Los errores previos de Auth y las omisiones anteriores se debían a infraestructura ausente; esta ejecución completa no los reproduce. No se necesitó corregir código del backend.
 
-`FinishPathsTest` verifica distancias finales 1–8 con dados 1–6, rechaza excesos, bloqueo de finales y entrada ajena, y confirma victoria para todos los colores y mapas. Las pruebas de turnos existentes cubren 2/3/4 participantes, asientos dispersos, bots, retirada y reconexión. Esas pruebas de dominio no acreditan todavía una sesión real de dos clientes humanos por Gateway.
+`BoardTest`, `Board100RulesTest`, `LapEntryTest` y `FinishPathsTest` verifican las 100 posiciones, doce seguros, vuelta completa, acceso propio, ocho finales, movimiento exacto, victoria, HOME, las seis cartas y trivia para ambos mapas y cuatro asientos. `LapEntryTest` incluye 48 casos parametrizados y 42 combinaciones de dado/origen por mapa/asiento en el caso de cruce. Las pruebas de turnos cubren 2/3/4 participantes, bots, retirada y reconexión. `InfrastructureIntegrationTest` pasó con MongoDB/Redis/WebSocket reales, incluidas cartas desde Mongo, persistencia, rechazo de layouts antiguos, CAS, recibos y dos sockets con salas de 2/3/4 participantes.
 
-## Docker, bases, EDA/SAGA y dos jugadores: pendiente
+## Bases, EDA/SAGA y dos jugadores
 
-Se volvió a comprobar `docker compose ls` con ejecución ampliada: **no existe `/var/run/docker.sock`**. El contexto `desktop-linux` tampoco dispone de su socket. No se pudo iniciar infraestructura aislada ni ejecutar las pruebas dependientes. No se tocaron volúmenes de desarrollo.
+- PostgreSQL aislado: `pg_isready` acepta conexiones. `auth_refactor_tests` se usa para la suite y `auth_runtime` para las identidades del ensayo operativo; no se usó PostgreSQL de desarrollo.
+- Redis aislado: `PING` devuelve PONG. Game vive en DB 0 y Lobby en DB 1; la suite de Game usa prefijos UUID exclusivos. No hubo FLUSHDB/FLUSHALL ni eliminación de partidas antiguas.
+- MongoDB aislado: ping correcto. Bases separadas para suite y runtime. Se verificaron **todos los campos** de las 32 preguntas (16/16) y seis cartas contra `seed/catalog.json`, sin diferencias.
+- Eureka aislado registra Auth, Game, Lobby y Gateway; los servicios alcanzaron salud UP y se utilizaron por descubrimiento, no mediante rutas estáticas sustituidas.
 
-Quedan pendientes PostgreSQL/MongoDB/Redis reales, Game con `game.integration=true`, recuperación EDA/SAGA, inicio desde Lobby y dos identidades humanas simultáneas por Gateway/WebSocket en classic y science, incluidos movimientos visibles, turnos y reconexión. Las pruebas preparadas son `InfrastructureIntegrationTest` (incluye salas de 2/3/4 humanos), `lobby-service/tests/test_start_saga_integration.py` e `infrastructure/tests/two_humans.py`. No se acredita su ejecución por el mero hecho de compilar.
+Las siete pruebas de SAGA con infraestructura pasaron: creación normal y duplicada; pérdida de respuesta HTTP recuperada por Streams; interrupción/reintento con Game temporalmente indisponible; fallo de confirmación y exclusión de reintentos concurrentes; compensación de rechazo definitivo y confirmación obsoleta; reserva concurrente; recuperación de mensajes pendientes y aislamiento de contrato inválido. El mensaje inválido deliberado fue enviado al stream de fallidos, como exige la prueba.
 
-Con Docker disponible, usar únicamente proyecto y bases aislados:
+`infrastructure/tests/two_humans.py` se ejecutó por Gateway en **classic y science** con dos usuarios distintos de la base Auth aislada. Cada JWT fue emitido por Auth usando un refresh de prueba; no se simuló OAuth con Google. Ambos se unieron a una sala, obtuvieron el mismo gameId, mantuvieron dos WebSocket simultáneos, lanzaron dados reales, liberaron fichas, observaron el movimiento del otro, alternaron turnos, rechazaron acción fuera de turno y reconectaron con estado sincronizado. Asientos del Lobby: 0 y 2. Ambos consultaron después la misma sala STARTED y su partida.
+
+Se ejecutó además un cliente auxiliar por Gateway/WS con **posiciones y dados autorizados preparados únicamente en partidas nuevas del Redis aislado**. Es distinto del flujo ordinario anterior. En cada mapa se probaron parejas de asientos [0,2] y [1,3], cubriendo todos los colores: regreso al seguro, entrada con un paso, cruce 67→69 con dado 2, rechazo del corredor ajeno, exceso rechazado sin mutación, movimiento de coronada rechazado, coronación exacta y victoria. Ambos clientes recibieron la misma actualización y pudieron reconectar. Las otras tres fichas se prepararon coronadas para el caso específico de victoria; no se afirma que estos escenarios jugaran una partida completa desde HOME.
+
+En cuatro partidas adicionales se prepararon layouts ausente, v1, v2-100 y desconocido. Gateway respondió HTTP 409 y WS ERROR `UNSUPPORTED_BOARD_LAYOUT`; el hash original, versión y recibos permanecieron idénticos. No se borraron esas partidas.
+
+El chequeo auxiliar de salas se repitió tras corregir su supuesto sobre nombres/tipos de claves de Lobby; no requirió cambios del backend. Se reinició **solo Game aislado**: cuatro partidas finalizadas se recuperaron con snapshots idénticos por REST y con ambos clientes reconectados por Gateway. Repetir la creación idéntica devolvió el estado persistido sin publicar una segunda inicialización. El stream registró **17 eventos GameInitialized esquema 1**, con **0 mensajes pendientes y lag 0** en el consumidor de Lobby. No se purgó el stream.
+
+El runtime aislado desactivó el scheduler para que los escenarios preparados no compitieran con vencimientos o bots. Las suites completas verifican por separado plazos, bots y retiradas. El proyecto de pruebas se detiene al terminar, conservando sus volúmenes; el despliegue de desarrollo permanece activo.
+
+Comandos esenciales para repetir la infraestructura de las suites:
 
 ```sh
-docker compose -p pixelchiss-board100 -f infrastructure/tests/compose.databases.yml up -d
+docker compose -p pixelchiss-board100-final -f infrastructure/tests/compose.databases.yml up -d
 ```
 
 Desde game-service:
 
 ```sh
 GAME_TEST_REDIS_URL=redis://127.0.0.1:16379/0 \
-GAME_TEST_MONGO_URI=mongodb://127.0.0.1:17017/pixelchiss_board100_tests \
+GAME_TEST_MONGO_URI=mongodb://127.0.0.1:17017/pixelchiss_board100_integration \
 mvn -o -Dmaven.repo.local=.build/m2 -Dgame.integration=true verify -B
 ```
 
-Para EDA/SAGA y dos humanos por Gateway se requiere además stack completo aislado e identidades de prueba, con las variables `SAGA_TEST_*` y `PROOF_*` descritas por esos scripts. No apuntar las pruebas a desarrollo ni usar `FLUSHDB`, `FLUSHALL` o `down -v`.
+La suite completa de Lobby requiere `SAGA_TEST_LOBBY_REDIS`, `SAGA_TEST_GAME_REDIS`, `SAGA_TEST_GAME_HTTP` y un GAME_LOBBY_TOKEN de prueba coincidente con Game. Se ejecutó antes de iniciar el worker operativo de Lobby para evitar que dos consumidores del mismo grupo compitieran por los eventos del ensayo. El flujo de dos humanos requiere el stack aislado completo y `PROOF_*` del script. Las claves, refresh y credencial interna de prueba permanecen fuera de Git. No apuntar pruebas a desarrollo ni usar `down -v`.
 
 ## Godot y documentación
 
@@ -93,4 +107,6 @@ Actualizados README raíz y Game, BOARD (tabla definitiva y diagrama), ENGINE, W
 
 ## Revisión y publicación
 
-Se revisaron el diff completo y los 41 archivos de la tarea: `git diff --check` sin errores, sintaxis de scripts Python correcta, enlaces locales resueltos, catálogo idéntico y sin coincidencias en los patrones comprobados de claves privadas/AWS/GitHub/JWT. El primer commit local es `de6add4` (`fix(game): enforce 100-cell board and full-lap safe entry`); esta documentación se organiza en el commit siguiente. El informe final indica ambos hashes y el estado de Git. El remoto comprobado sigue en `005bda88aeedfdbd15c1527974e7f67a8acf35d3`. **Push retenido:** la geometría está resuelta, pero la integración y el ensayo real de dos humanos siguen sin verificarse por falta de Docker. No se publicará ni se hará force push mientras persistan esos bloqueos.
+La implementación verificada corresponde a `de6add4`, con documentación inicial `f1ec721`. No se añadieron refactorizaciones ni correcciones de backend durante esta verificación. Esta entrega añade únicamente la evidencia de integración y actualiza las referencias que indicaban Docker pendiente.
+
+Se revisaron el diff completo y los 42 archivos a publicar, con enlaces locales resueltos, catálogo idéntico respecto de `005bda8`, sin errores en `git diff --check` y sin coincidencias en los patrones de secretos comprobados (claves privadas, AWS, GitHub y JWT). `demo-rum/` queda fuera de los commits. Las condiciones técnicas para un push normal están satisfechas; se verifica origin/main antes de publicar y se confirma después que coincide con HEAD. El resultado efectivo del push y los hashes finales se informan al cerrar la entrega. No se usa force push ni se despliega automáticamente sobre desarrollo.
