@@ -1,3 +1,5 @@
+> La evidencia histórica de este documento no acredita v3-100. Consulte [BOARD100_VALIDACION.md](../../docs/BOARD100_VALIDACION.md) para la ejecución actual y sus bloqueos.
+
 # Validación operativa — 10 de octubre de 2026
 
 > Registro histórico de la entrega anterior. Los componentes y resultados vigentes se consultan en la [evidencia del segundo corte](../../docs/second-cut/evidence.md).
@@ -21,7 +23,7 @@ Godot por Gateway y Lobby continúa pendiente.**
 | Resolución desde la red de Gateway | `docker exec pixelchiss-gateway getent hosts 999bc4a3698f` resolvió 172.19.0.8; esto comprueba DNS, no una ruta HTTP/WebSocket de Gateway |
 | Emisión y validación JWT | Se cargó el **JwtService compilado existente de Auth**, se emitieron tokens con una clave RSA aislada y se validaron con JwtDecoder de Game |
 | WebSocket directo al JAR y a Docker | AUTH, dos participantes, dados de servidor, movimiento, publicación al otro socket, reintento idempotente y sincronización; conexión sin AUTH rechazada |
-| Tablero por HTTP autenticado | IDs 0–95 sin duplicados; 12 seguros, 16 salidas, 4 metas y 16 recorridos válidos; cuatro fichas por participante |
+| Tablero por HTTP autenticado | IDs 0–99 sin duplicados; 68 comunes, 32 finales, 12 seguros, 4 salidas comunes compartidas, 4 metas y 16 recorridos válidos; cuatro fichas por participante |
 | Primer turno | Se proporcionó el segundo participante como `firstPlayerId`: Game comenzó con él y rechazó un primer jugador ajeno con INVALID_FIRST_PLAYER |
 | Temporizadores reales | Con turno configurado a 6000 ms, un turno humano expiró sin intervención del cliente y pasó al siguiente participante |
 | Bots reales | Con schedulers habilitados en el JAR y Docker, generaron dados, liberaron/movieron fichas y avanzaron turnos |

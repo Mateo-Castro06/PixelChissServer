@@ -16,3 +16,5 @@
 El Gateway descubre servicios en Eureka. Lobby llama a Auth y al endpoint privado de Game por Eureka. Game guarda las partidas y la presencia en Redis DB 0 y publica el evento de creación en un stream de esa base. Lobby conserva las salas y los intentos de inicio en DB 1, y consume la confirmación desde el stream de Game. MongoDB no guarda partidas ni entidades de mapa.
 
 Ver [diagrama y capas](../second-cut/architecture.md), [contratos HTTP](../MANUAL_INSTALACION.md#operaciones-rest) y [EDA/SAGA](../second-cut/start-saga.md). Los puertos publicados de desarrollo no constituyen una configuración de producción.
+
+Game utiliza la geometría `v3-100`, aislada en el dominio `Board`; el marcador persistido evita interpretar partidas antiguas con índices nuevos. HOME no ocupa posición física. No se modifican los puertos ni los contratos EDA/SAGA: véase [ADR-003](../decisions/ADR-003-board-layout-100.md).

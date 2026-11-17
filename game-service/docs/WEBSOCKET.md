@@ -28,7 +28,7 @@ Verifica pertenencia, rechaza bots/retirados y responde `GAME_STATE` con `state`
 
 Snapshot: gameId, version, mapId, status, winnerId, players, pieces, turn, trivia y card. Cada ficha tiene id, ownerId, number, status, progress y position. `turn`: playerId, number, deadline Unix en milisegundos, dice, consumed, rolled, doubles, maxDieValue y diceSelectionRequired. Los efectos incluyen code, remainingTurns, startsAtTurn y maxValue. No hay recibos internos ni respuesta correcta de trivia pendiente.
 
-Una reconexión puede cancelar desconexión pendiente, incrementando versión y publicando el evento. También existe consulta REST con Bearer. El mapa de96 casillas se obtiene una vez mediante `GET /api/game/board`, no en cada jugada.
+Una reconexión puede cancelar desconexión pendiente, incrementando versión y publicando el evento. También existe consulta REST con Bearer. El mapa de100 casillas se obtiene una vez mediante `GET /api/game/board`, no en cada jugada.
 
 ## Acciones
 
@@ -133,3 +133,25 @@ Ejemplo secuencial de mensajes hacia `ws://localhost:8080/api/game/ws`:
 Cada mensaje es un frame JSON separado, enviando el último solo si ese jugador es el activo y la versión coincide. No se incluye `/api/game` dos veces; `/ws/game` es el destino interno y no una ruta pública del Gateway. Usar pings/pongs de la biblioteca WebSocket; el puente cierra clientes sin pong durante30 segundos. Las consultas REST requieren Bearer por separado. Origin del cliente web debe estar permitido en Gateway y Game. Rechazos de handshake (400 query,403 Origin,503 sin instancia) ocurren antes del protocolo JSON.
 
 No existe petición pública para disparar bots: el servidor los ejecuta y publica sus movimientos automáticamente. La validación operativa observó estos eventos por Gateway con un cliente que solo envió AUTH/JOIN_GAME. El recorrido de inicio desde Lobby se prueba en el segundo corte. La ejecución del cliente Godot sigue pendiente.
+
+## Posiciones v3-100 y HOME
+
+El protocolo de mensajes conserva la versión JSON; la versión de geometría de `GET /api/game/board` pasa a `v3-100`. Sus 100 posiciones son 0–67 comunes y 68–99 finales. Las cuatro rutas de cada asiento empiezan en el mismo seguro: rojo 0, azul 17, verde 34, amarillo 51; admiten dos fichas. Los corredores son 68–75, 76–83, 84–91 y 92–99, con corona en su octava posición. No hay casillas físicas `EXIT` ni de cárcel. Fórmulas y acceso confirmado en [BOARD.md](BOARD.md).
+
+Una ficha en casa, capturada, penalizada o devuelta por carta conserva:
+
+```json
+{"id":"seat-0-piece-0","ownerId":"42","number":0,"status":"HOME","position":null,"progress":-1}
+```
+
+Con dobles y cupo en la salida, una opción legal de liberación tiene `from:null`, `to:0`, `progress:0`, `release:true` para rojo. Ejemplo de acción:
+
+```json
+{"type":"MOVE_REQUEST","gameId":"game-123","requestId":"release-1","expectedVersion":1,"pieceId":"seat-0-piece-0","dieIndex":0,"dieValue":4,"fromPosition":null,"targetPosition":0}
+```
+
+`PIECE_CAPTURED` conserva atacante y víctima; `CARD_PIECE_RETURNED` conserva `from` y el motivo. En ambos, el snapshot deja la víctima en HOME con posición nula y progreso -1. Godot debe usar el estado para dibujar casa, y la coordenada para dibujar fichas BOARD/CROWNED. El progreso de corona es 76; movimientos mayores producen `OVERSHOOT` y una coronada rechaza `CROWNED_PIECE`.
+
+Un `JOIN_GAME`/`SYNC_REQUEST` o acción sobre un estado sin `boardLayout="v3-100"` devuelve `ERROR` con código **`UNSUPPORTED_BOARD_LAYOUT`**. REST e inicialización interna usan HTTP 409 con ese código. No reintentar reinterpretando coordenadas ni regenerando recibos; conservar la partida y seguir la [guía](../../docs/GUIA_ACTUALIZACION.md#tablero-de-100-casillas). La versión de acciones `expectedVersion` sigue siendo la versión CAS, independiente del layout. El snapshot público no incorpora un campo nuevo de layout: el cliente consulta `/api/game/board` y actualiza su caché de rutas al cambiar de despliegue. No se ensayó el cliente Godot real.
+
+El seguro de acceso es el mismo de salida después de la vuelta: rojo 0, azul 17, verde 34, amarillo 51. En `routes[seat][piece]`, los índices son progresos: `[0]` y `[68]` contienen el mismo ID común; `[69]` es la primera final y `[76]` la corona. La ruta tiene 77 entradas, 76 IDs distintos; `cells` tiene exactamente 100 IDs únicos. Godot debe mantener `progress` además de `position`: en la salida (`p=0`) se sigue la pista y al regresar (`p=68`) se entra al corredor. Ejemplo rojo al terminar: `67 → 0 → 68 → 69 → … → 75`. Esto sustituye el borrador v2-100; su estado persistido se rechaza sin convertir coordenadas ni recibos. No se renombra ningún DTO o mensaje.

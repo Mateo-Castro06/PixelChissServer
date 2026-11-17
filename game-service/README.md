@@ -41,7 +41,7 @@ Los plazos de desafíos no exceden el turno. Los jobs del servidor usan un pool 
 |---|---|---|
 | `POST /internal/games` | `X-Lobby-Token` | Inicio autorizado, reintento idempotente |
 | `GET /api/game/games/{gameId}` | Bearer JWT + pertenencia | Snapshot consistente |
-| `GET /api/game/board` | Bearer JWT | Las 96 casillas y todos los recorridos |
+| `GET /api/game/board` | Bearer JWT | Las 100 casillas y todos los recorridos |
 | `GET /actuator/health` | Pública | Salud estándar |
 | `/ws/game` directo; `/api/game/ws` por Gateway | Primer mensaje `AUTH` con JWT | Ciclo interactivo |
 
@@ -72,3 +72,5 @@ GAME_TEST_MONGO_URI=mongodb://127.0.0.1:17017/pixelchiss_pruebas \
 ```
 
 La integración siembra dos veces la base MongoDB de prueba para verificar idempotencia y usa prefijo Redis aleatorio. Prueba reglas, REST, OpenAPI, WebSocket, concurrencia y resolución de las seis cartas. Las pruebas deterministas de coronación cubren los cuatro asientos y ambos mapas; el [probe de dos humanos](../infrastructure/tests/two_humans.py) prueba el flujo por Gateway. No ejecuta Godot.
+
+Geometría vigente `v3-100`: al completar 68 pasos se vuelve al seguro de salida propio (0/17/34/51); el siguiente paso entra al corredor de ocho y la corona exige progreso exacto 76. Las rutas REST tienen 77 entradas y 76 IDs distintos, porque salida y seguro de acceso son la misma casilla física. Se rechaza el borrador v2-100. Véase [BOARD.md](docs/BOARD.md) y [evidencia actual](../docs/BOARD100_VALIDACION.md).

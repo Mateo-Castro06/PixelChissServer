@@ -1,3 +1,5 @@
+> Las evidencias de ejecución y el plan de commits de este documento pertenecen a la entrega histórica. La corrección geométrica actual y sus pendientes se registran en [BOARD100_VALIDACION.md](../../docs/BOARD100_VALIDACION.md).
+
 # Informe de entrega — Game Service
 
 > Registro histórico de la entrega anterior. Los componentes y resultados vigentes se consultan en la [evidencia del segundo corte](../../docs/second-cut/evidence.md).
@@ -127,7 +129,7 @@ src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker
 
 ## 4. Tablero
 
-**64 comunes +16 salidas +16 posiciones finales =96**. Seguros:0,5,10,16,21,26,32,37,42,48,53,58. Salidas64–79, cuatro por color; coronas83,87,91,95. Casa fuera del tablero, posiciónnull. Cada ficha tiene progreso relativo y posición física. Detalles completos y fórmulas en [BOARD.md](BOARD.md).
+**68 comunes +32 posiciones finales =100**. Seguros:0,5,12,17,22,29,34,39,46,51,56,63. Salidas comunes0/17/34/51; coronas75/83/91/99. Casa fuera del tablero, posiciónnull. Cada ficha tiene progreso relativo y posición física. Detalles completos y fórmulas en [BOARD.md](BOARD.md).
 
 ## 5. Dados, turnos y movimiento
 
@@ -199,7 +201,7 @@ Reports XML y texto: `target/surefire-reports/`. La suite de integración es opt
 
 ## 14. Supuestos de reglas
 
-Máximo cuatro colores/jugadores; salida individual asignada a cada ficha; casa externa; capacidad2 en seguros y1 ordinaria; coronados excluidos de ocupación; no barreras intermedias; liberación consume un dado sin avance; dobles premian salvo timeout/renuncia; cada turno extra cuenta para efectos; cartas de captura/refugio tienen el alcance documentado; debuff de fallo se aplica a quien respondió; abandonar con menos de dos no declara victoria. Geometría v1 igual en ambas temáticas. Todos están detallados en [BOARD.md](BOARD.md) y [ENGINE.md](ENGINE.md).
+Máximo cuatro colores/jugadores; salida común segura por asiento, con capacidad dos; casa externa; capacidad2 en seguros y1 ordinaria; coronados excluidos de ocupación; no barreras intermedias; liberación consume un dado sin avance; dobles premian salvo timeout/renuncia; cada turno extra cuenta para efectos; cartas de captura/refugio tienen el alcance documentado; debuff de fallo se aplica a quien respondió; abandonar con menos de dos no declara victoria. Geometría v3-100 igual en ambas temáticas. Todos están detallados en [BOARD.md](BOARD.md) y [ENGINE.md](ENGINE.md).
 
 ## 15. Cambios externos necesarios, no aplicados
 

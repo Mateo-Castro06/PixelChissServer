@@ -1,3 +1,5 @@
+> Registro de la refactorización anterior. Las cifras de pruebas y las verificaciones operativas históricas no acreditan la migración actual del tablero: véase [BOARD100_VALIDACION.md](../../docs/BOARD100_VALIDACION.md).
+
 # Corrección de turnos y refactorización — 10 de octubre de 2026
 
 > Registro histórico de la entrega anterior. Los componentes y resultados vigentes se consultan en la [evidencia del segundo corte](../../docs/second-cut/evidence.md).
@@ -6,7 +8,7 @@
 
 El creador **original** de la sala siempre inicia cada nueva partida. `creatorPlayerId` es obligatorio, debe identificar un participante y solo se recibe por `POST /internal/games`, protegido por la credencial de servicio de Lobby. No se sortea ni se deduce del primer elemento de una lista. Los siguientes turnos siguen asientos físicos explícitos en sentido horario, incluyendo bots. Esta regla sustituye el antiguo `firstPlayerId` como elección del iniciador.
 
-No se reconstruyó Game ni se cambiaron sus demás reglas. Se conserva el tablero v1 de96 casillas, sus12 seguros, cuatro fichas, dos dados, liberación, captura, coronación exacta, victoria, cartas/trivia, bots, plazos, retiro, JWT, concurrencia, deduplicación, Redis/Mongo y eventos. Las pruebas previas se conservaron y ampliaron.
+No se reconstruyó Game ni se cambiaron sus demás reglas. La corrección posterior introduce el tablero v3-100 de100 casillas y los doce seguros confirmados (ver [BOARD.md](BOARD.md)); se conservan cuatro fichas, dos dados, liberación, captura, coronación exacta, victoria, cartas/trivia, bots, plazos, retiro, JWT, concurrencia, deduplicación, Redis/Mongo y eventos. Las pruebas previas se conservaron y ampliaron.
 
 ## Contrato obligatorio de Lobby
 
@@ -119,7 +121,7 @@ Se ejecutó `python3 tools/validate_runtime.py > .build/clean-code-runtime-final
 | Vuelta horaria real | Creador900003(seat2), array desordenado; `900003→900004→900001→900002→900003` mediante cuatro expiraciones |
 | Bots fuera de tests | Dados generados, ficha movida, turno3/version4 sin acciones cliente |
 | JWT compatible con Auth | Su clase JwtService compilada emitió tokens con clave aislada y Game los validó; no es token OAuth de producción |
-| Tablero REST |96 casillas,12 seguros,16 salidas, coronas83/87/91/95,16 recorridos |
+| Tablero REST |100 casillas,12 seguros,4 salidas comunes compartidas, coronas75/83/91/99,16 recorridos |
 | WebSocket directo18084 | Sin AUTH rechazado; dos sesiones autenticadas, dados/movimiento publicados, ACK duplicado y sincronización versión10 |
 
 El probe no leyó la clave privada de Auth, no modificó sus clases ni servicios, no vació Redis y no borró estados existentes. La espera ampliada permitió observar el registro UP; no se deduce que el primer timeout fuera un fallo del registro de Game.

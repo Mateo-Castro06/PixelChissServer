@@ -43,3 +43,7 @@ Redis DB 0 y DB 1 comparten servidor, memoria y durabilidad. Los servicios no le
 **Persistencia.** JPA/Hibernate se usa en PostgreSQL. MongoTemplate y documentos Spring Data son el adaptador apropiado para MongoDB; Redis usa tipos nativos, scripts y Streams. JPA estándar no modela estas operaciones de Redis ni documentos Mongo. Si el texto de la rúbrica exige JPA también para NoSQL, aclarar con el profesor; se demuestra persistencia NoSQL con los adaptadores nativos. No se duplican almacenes para consultas ni se usa Event Sourcing.
 
 **Observabilidad.** Actuator + Micrometer en Java/Kotlin; cliente Prometheus en FastAPI. El dashboard provisionado muestra targets, tráfico, latencia, errores, eventos, reintentos e intentos pendientes. Las etiquetas son rutas parametrizadas y resultados finitos. No incluyen IDs de partida, usuario ni tokens.
+
+## Geometría y versionado de Game
+
+El dominio `Board` concentra el tablero `v3-100`: 68 comunes y 32 finales; HOME es estado sin casilla. `GameState` persiste `boardLayout` y la aplicación rechaza layouts antiguos antes de recibos o mutaciones, conservando Redis. Las fronteras hexagonales, DDD, SAGA y contratos EDA no cambian. La versión del evento `GameInitialized` sigue siendo 1 y no es la versión del tablero. [ADR-003](../decisions/ADR-003-board-layout-100.md) documenta la incompatibilidad de coordenadas y las verificaciones pendientes; [BOARD.md](../../game-service/docs/BOARD.md) incluye el diagrama y las fórmulas.

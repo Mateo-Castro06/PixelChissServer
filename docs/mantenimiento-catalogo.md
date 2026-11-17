@@ -44,3 +44,5 @@ Todos los `mapId` coinciden con mapas admitidos y los índices apuntan a opcione
 ## Evitar que se repueble el catálogo
 
 El seeder existente usa `$setOnInsert` y volvería a crear los IDs que falten. En esta instalación se dejó `GAME_SEED_ENABLED=false` en el `.env` local ignorado. El Compose lo transmite a Game. Si se ejecuta Game fuera de Compose contra esta base, debe exportarse la misma opción antes de arrancar. El valor predeterminado para instalaciones nuevas se conserva.
+
+La pregunta legada `classic-3` de la tabla anterior conserva la respuesta histórica de 96; no describe el tablero v3-100 de 100 casillas ni pertenece al catálogo vigente que se sortea. La corrección geométrica no edita ese archivo de compatibilidad. Los estados del layout antiguo se rechazan, por lo que tampoco se reanudan esos desafíos sobre el tablero nuevo.

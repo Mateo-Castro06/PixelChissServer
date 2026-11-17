@@ -43,7 +43,7 @@ backup_dir=$(mktemp -d "$HOME/pixelchiss-backup.XXXXXX")
 | Redis y Streams | Conserva `REDIS_URL` de Game (por defecto DB 0) y `LOBBY_REDIS_URL` (por defecto DB 1). Compose deriva `GAME_EVENTS_REDIS_URL` del Redis de Game. El stream predeterminado es `pixelchiss:game:integration`. No cambies DB ni prefijo para intentar recuperar datos. |
 | Durabilidad | `REDIS_APPENDONLY=auto` conserva RDB en volúmenes antiguos sin AOF, y usa AOF en volúmenes nuevos o ya convertidos. Las instrucciones de conversión están abajo. |
 | Monitoreo | Es opcional. Agrega `PIXELCHISS_METRICS_KEY` (mínimo 32 caracteres) y `GRAFANA_ADMIN_PASSWORD` solo para usarlo. Prometheus y Grafana se publican en loopback en 9090 y 3000. |
-| Esquemas | Se mantienen estado de partida, CAS, versiones, DTO, JWT y evento `GameInitialized`. La migración modifica únicamente el catálogo de Game y Redis cambia de formato de persistencia, no de claves. |
+| Esquemas | Se mantienen CAS, DTO, JWT y evento `GameInitialized`. Para el tablero v3-100 se añade el marcador persistido `boardLayout` y se rechazan partidas antiguas sin modificar sus claves. Véase la sección de tablero al final de esta guía. La migración de catálogo descrita aquí pertenece a la entrega anterior y no se repite por el cambio geométrico. |
 
 Edita solo las líneas necesarias de tu `infrastructure/docker/.env`. Mantén el mismo `GAME_LOBBY_TOKEN` en los dos servicios (mínimo 32 caracteres) y no compartas valores. Para comparar nombres sin mostrar secretos, ejecuta:
 
@@ -114,3 +114,24 @@ Comprueba los cinco objetivos en [Prometheus](http://localhost:9090/targets) y e
 Una instalación nueva sigue el [manual](MANUAL_INSTALACION.md): prepara `.env` a partir del ejemplo **solo si no existe**, configura claves y OAuth, y arranca con `GAME_SEED_ENABLED=true` y `REDIS_APPENDONLY=auto`. La semilla idempotente crea las 32 preguntas y 6 cartas sin migración previa.
 
 Godot conserva login, JWT, REST, handshake, acciones y snapshots. Para usar todas las cartas nuevas, presenta una selección por casilla cuando una opción de `card.choices` trae solo `targetPosition`, y procesa el snapshot tras `CARD_PIECE_RETURNED`. El evento nuevo permite animar una devolución sin atacante; puede ignorarse si el cliente renderiza correctamente los snapshots y tolera tipos desconocidos. Revisa [el protocolo](../game-service/docs/WEBSOCKET.md) si el cliente valida una lista cerrada de eventos. La prueba de backend no sustituye probar el cliente real.
+
+## Tablero de 100 casillas
+
+Esta actualización introduce `v3-100`: 68 comunes y cuatro corredores de ocho. No ejecutar el procedimiento de catálogo anterior por este cambio: **no se modifica ninguna pregunta ni carta**. Los requisitos de Redis/AOF anteriores siguen aplicando si también vienes de aquella versión.
+
+El agregado `GameState` persiste un campo `boardLayout`. Solo se acepta `v3-100`. Un estado sin campo, con `v1`, con el borrador `v2-100` o cualquier valor desconocido se conserva y se rechaza con `UNSUPPORTED_BOARD_LAYOUT` (HTTP 409 o WebSocket `ERROR`). La comprobación precede a snapshots públicos, reconexión, acciones humanas/bots, mantenimiento, reintentos de creación y recuperación de recibos. La versión numérica CAS no se usa como versión de geometría.
+
+1. Programa mantenimiento y toma una copia de Redis DB 0 y DB 1 y de la versión anterior del servidor. No uses `FLUSHDB`, `FLUSHALL`, `down -v` ni borres volúmenes.
+2. Detén la aceptación de inicios en Lobby y deja resolver las SAGA pendientes con el despliegue anterior. Revisa salas STARTING/STARTED y sus intentos: un `GameInitialized` antiguo pendiente puede confirmar una sala antigua, pero no convierte su partida al layout nuevo. No lo vuelvas a producir con índices nuevos ni cambies sus IDs.
+3. Finaliza las partidas antiguas con el servidor anterior o archívalas conservando sus claves. Para reanudarlas, usa el build antiguo en un entorno separado con una copia de sus datos y el cliente anterior; no conectes escritores de ambos layouts al mismo conjunto de partidas.
+4. Detén **todas** las instancias antiguas de Game (incluidos bots y scheduler), cierra sockets y conserva Redis intacto. No hagas despliegue gradual mezclando versiones: un Game antiguo no conoce la guarda nueva y podría escribir geometría antigua en un estado nuevo.
+5. Tras ejecutar las verificaciones de integración pendientes, desplegar Game nuevo y el cliente con coordenadas v3-100 y el acceso propio descrito en [BOARD.md](../game-service/docs/BOARD.md). Crear salas y gameIds nuevos. Una creación con ID antiguo falla sin sobrescribirlo, aun si su fingerprint coincide.
+6. Verifica `/api/game/board` (`layout:v3-100`, `cellCount:100`), las doce seguras, las salidas 0/17/34/51 y dos conexiones humanas. Consulta una partida anterior: debe rechazar explícitamente y conservar el JSON y recibos originales.
+
+Los estados antiguos en el set `active` se omiten por rechazo de mantenimiento; no se eliminan automáticamente. Su presencia puede producir avisos hasta que el operador defina una política de archivo. No se ha agregado limpieza destructiva.
+
+Los recibos de idempotencia viven dentro del agregado: no se trasladan ni reejecutan con la geometría nueva. Los desafíos/carta pendientes contienen posiciones y se conservan en ese estado rechazado. Redis Pub/Sub no almacena mensajes pendientes: cerrar conexiones y detener productores antiguos evita mezclar publicaciones en tránsito; los clientes descartan cachés locales de rutas y vuelven a sincronizar. Redis Streams `GameInitialized` no contiene coordenadas y mantiene esquema 1, grupo, correlación y deduplicación; no se purga ni se reescribe el stream. Su confirmación de asociación no autoriza interpretar posiciones antiguas.
+
+Godot mantiene rutas HTTP/WS, JWT, nombres de mensajes y DTOs; debe actualizar posiciones/progresos y eliminar sus salidas físicas independientes. `HOME` sigue con posición `null`, progreso `-1`; `legalMoves.from` sigue `null` al liberar. `PIECE_CAPTURED` y `CARD_PIECE_RETURNED` conservan semántica. La migración rompe inevitablemente el contrato geométrico anterior; no se afirma compatibilidad completa sin probar el cliente real.
+
+El layout v3-100 añade el regreso al mismo seguro propio al completar la vuelta. Posiciones físicas idénticas distinguen fases por progreso (salida 0, acceso 68); primera final 69, corona 76. Se incrementa el marcador respecto del borrador v2-100 para evitar reanudar sus progresos con otra semántica. No cambies manualmente `boardLayout` en un snapshot: sus fichas, desafíos y recibos deben conservar la versión original. Las rutas REST ya no son listas sin repeticiones; `[0]==[68]` y contienen 77 entradas.

@@ -241,7 +241,7 @@ curl --fail --silent --show-error -H "Authorization: Bearer $PIXELCHISS_ACCESS_T
 unset PIXELCHISS_ACCESS_TOKEN
 ```
 
-Se esperan respectivamente un perfil, la definición de 96 casillas y el catálogo `classic`/`science`, todos con 200. Un perfil puede responder 404 si el subject no corresponde a un usuario persistido. Estos tres accesos autenticados quedan como comprobación del lector: en esta elaboración no se utilizó un token real. Sí se verificaron sus respuestas 401 sin token, Swagger público de Game y el inicio OAuth a través de Gateway.
+Se esperan respectivamente un perfil, la definición de 100 casillas y el catálogo `classic`/`science`, todos con 200. Un perfil puede responder 404 si el subject no corresponde a un usuario persistido. Estos tres accesos autenticados quedan como comprobación del lector: en esta elaboración no se utilizó un token real. Sí se verificaron sus respuestas 401 sin token, Swagger público de Game y el inicio OAuth a través de Gateway.
 
 <a id="capitulo-3"></a>
 ## 3. Creación de las bases de datos del proyecto
@@ -470,7 +470,7 @@ Auth depende de Eureka y PostgreSQL con condición de contenedor iniciado, sin e
 
 **Responsabilidad y arquitectura.** Game ejecuta las partidas mediante Java 21 y Boot 4.1.1. El paquete `com.pixelchiss.gameservice` contiene `controller`, `dto`, `domain`, `engine`, `service`, `persistence`, `bot`, `websocket` y `config`. `GameService` verifica acceso, deduplica acciones y confirma cambios por versión. `RuleEngine` coordina reglas; `DiceRules`, `TurnManager`, `TurnOrder`, `CardRules` y `TriviaRules` implementan dados, turnos, cartas y desafíos.
 
-El tablero `v1` tiene 96 casillas: 64 comunes, 16 salidas y 16 casillas de llegada privadas. Hay cuatro fichas por participante y dos dados. El motor valida liberación, recorridos, ocupación, captura, coronación y victoria. El creador indicado en el inicio abre la partida; los turnos siguientes siguen asientos 0→1→2→3, omitiendo retirados. La selección de turnos no depende del orden de conexión WebSocket.
+El tablero `v3-100` tiene 100 casillas: 68 comunes y 32 finales (cuatro corredores de ocho, incluida la corona). Las salidas comparten seguros comunes y HOME es estado, sin casilla física. Los estados Redis anteriores se rechazan explícitamente; véase [actualización del tablero](GUIA_ACTUALIZACION.md#tablero-de-100-casillas) y [validaciones pendientes](BOARD100_VALIDACION.md). Hay cuatro fichas por participante y dos dados. El motor valida liberación, recorridos, ocupación, captura, coronación y victoria. El creador indicado en el inicio abre la partida; los turnos siguientes siguen asientos 0→1→2→3, omitiendo retirados. La selección de turnos no depende del orden de conexión WebSocket.
 
 **Cartas, trivia y bots.** MongoDB conserva el catálogo; Redis conserva la partida. Trivia utiliza los mapas `classic` y `science`; la respuesta correcta no se revela mientras el desafío está pendiente. Las cartas existentes implementan `CAPTURE_NEXT`, `MOVE_SAFE`, `DICE_MAX_LIMIT` y `CHOOSE_DICE`. `BotPolicy` selecciona acciones legales y `BotRunner` las ejecuta automáticamente mediante el mismo motor. No hay endpoint para ordenar la ejecución de un bot desde el cliente.
 
@@ -814,7 +814,7 @@ Las rutas de **Request Mapping** siguientes son las del microservicio. Se indica
 | Funcionalidad | Request Mapping | Microservicio | Método HTTP | Parámetros / Tipo de dato | Retorno |
 |---|---|---|---|---|---|
 | Consultar tablero; misma ruta Gateway | `/api/game/board` | Game | GET | Bearer | 200 objeto descrito por `BoardLayout`: `layout`, `cellCount`, `safe`, `trivia`, `cells`, `routes` |
-| Consultar partida; misma ruta Gateway | `/api/game/games/{gameId}` | Game | GET | Path `gameId:String`, 1–80 letras/dígitos/guion/guion bajo; Bearer y pertenencia | 200 `GameView`; 400/401/403/404/503 |
+| Consultar partida; misma ruta Gateway | `/api/game/games/{gameId}` | Game | GET | Path `gameId:String`, 1–80 letras/dígitos/guion/guion bajo; Bearer y pertenencia | 200 `GameView`; 400/401/403/404/409/503 |
 | Inicialización privada desde Lobby; sin ruta Gateway | `/internal/games` | Game | POST | Header `X-Lobby-Token`; JSON `CreateGame`, descrito debajo | 200 `GameView` en creación o reintento idéntico; 400/403/409/503 |
 | Diagnóstico Mongo condicionado; Gateway `/api/game/test/mongodb` | `/test/mongodb` | Game | GET | Bearer; requiere `game.diagnostics.enabled=true`; escribe documento en colección `test` | 200 texto `MongoDB funciona`; no disponible por defecto |
 | Diagnóstico Redis condicionado; Gateway `/api/game/test/redis` | `/test/redis` | Game | GET | Bearer; misma condición; escribe clave `pixelchiss:test` | 200 texto `Redis funciona`; no disponible por defecto |
@@ -1219,3 +1219,5 @@ Las casillas deben completarse durante la preparación final. Los resultados de 
 - [ ] Los logs se revisaron y toda limitación funcional pendiente se comunica puntualmente.
 - [ ] La demostración completa se ensayó, sin errores operativos conocidos, antes de la sustentación.
 - [ ] Se conocen `stop/start` y `down` sin `-v`; no se borran los datos para reiniciar.
+
+La ruta v3-100 vuelve al seguro de salida propio (0/17/34/51) en progreso 68; la primera final tiene progreso 69 y la corona 76. El borrador v2-100 no contiene ese retorno y se rechaza como incompatible, sin modificar sus datos. Las rutas REST contienen 77 visitas a 76 casillas distintas por color; el tablero físico sigue teniendo 100 casillas. Consulte [BOARD.md](../game-service/docs/BOARD.md).
