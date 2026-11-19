@@ -1,6 +1,7 @@
 """Portable LAN certificate/configuration helper. Python 3 + Docker, no host OpenSSL/Bash.
 
-Does not change .env, start services, apply firewall rules or replace existing certificates.
+Never changes .env. The start --auto workflow manages LAN files and services after safety checks.
+Legacy init/request/sign/install/firewall/check commands keep their existing behavior.
 """
 import argparse
 import hashlib
@@ -41,8 +42,8 @@ def init(args, create_ca=True):
     password = secrets.token_urlsafe(32)
     env_file = directory / 'lan.env'
     tls_path = directory.as_posix().replace("'", "\\'")
-    env_file.write_text(f"LAN_BIND_ADDRESS={host}\nLAN_HTTPS_PORT={tls_port}\nLAN_TLS_PASSWORD={password}\nLAN_TLS_DIRECTORY='{tls_path}'\n", encoding='utf-8')
-    env_file.chmod(0o600)
+    from auto_support import atomic_write
+    atomic_write(env_file, f"LAN_BIND_ADDRESS={host}\nLAN_HTTPS_PORT={tls_port}\nLAN_TLS_PASSWORD={password}\nLAN_TLS_DIRECTORY='{tls_path}'\n")
     env = dict(os.environ, LAN_TLS_PASSWORD=password)
     base = ['docker', 'run', '--rm', '--network', 'none', '--env', 'LAN_TLS_PASSWORD',
             '--mount', f'type=bind,source={directory},target=/tls', '--workdir', '/tls']
@@ -226,13 +227,24 @@ def main():
     verify = commands.add_parser('check', help='Validate resolved Compose publications without printing credentials.')
     verify.add_argument('--lan', action='store_true')
     verify.add_argument('--tls-directory', default=str(ROOT / 'infrastructure/docker/lan-secrets'))
+    from auto_start import add_commands, inspect_command, start
+    add_commands(commands, ROOT)
     args = parser.parse_args()
     try:
-        {'init': init, 'request': lambda a: init(a,False), 'sign': sign, 'install': install, 'firewall': firewall, 'check': check}[args.command](args)
+        legacy = {'init': init, 'request': lambda a: init(a,False), 'sign': sign, 'install': install, 'firewall': firewall, 'check': check}
+        if args.command in legacy:
+            legacy[args.command](args)
+        elif args.command == 'start':
+            start(args)
+        else:
+            inspect_command(args)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         # subprocess errors may contain command output. No credential-bearing output is logged.
         print(str(error) if isinstance(error, ValueError) else 'Docker/file operation failed. Existing files were preserved; check prerequisites.', file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        print('Operación interrumpida. Conserva los respaldos y consulta status/diagnose.', file=sys.stderr)
+        return 130
     return 0
 
 
