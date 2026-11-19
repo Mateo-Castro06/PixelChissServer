@@ -1,3 +1,5 @@
+> Actualización LAN y seguridad: el callback Web ya no entrega tokens en URL. Godot debe enviar client_challenge S256 y canjear el handoff por POST /api/auth/login/exchange; para LAN usar OAuth Desktop + PKCE y TLS. Véanse [integración Godot](GODOT_INTEGRACION_LAN.md) y [manual LAN](MANUAL_SERVIDOR_LAN.md). Las caracterizaciones y ejemplos históricos de tokens en callback no describen el comportamiento vigente.
+
 # Manual de instalación y configuración — PixelChiss Server
 
 **Proyecto:** PixelChiss Server
@@ -436,19 +438,19 @@ Se espera `True` para ambas conexiones. Son valores de ejemplo Docker sin contra
 
 **Responsabilidad y organización.** Auth proporciona autenticación Google, emisión y renovación de tokens, cierre de sesión y perfil. Usa Kotlin 2.3.21, Boot 4.1.1 y Java 21. El paquete raíz es `com.pixelchiss.auth`: `controller`, `service`, `repository`, `entity`, `dto`, `security` y `config` separan transporte, casos de uso, persistencia, contratos y seguridad. `AuthServiceApplication` inicia la aplicación. `AuthController` delega perfiles a `UserService` y sesiones a `AuthService`; `TestController` conserva una prueba JWT directa.
 
-**OAuth 2.0, PKCE y retorno a Godot.** El cliente abre un listener loopback y el navegador hacia `/oauth2/authorization/google?client_state=...&client_port=...`. `client_state` debe tener entre 16 y 128 caracteres de letras, dígitos, guion o guion bajo; el puerto entero debe estar entre 1024 y 65535. No existe login por contraseña en estos controladores.
+**OAuth 2.0, PKCE y retorno a Godot.** El cliente abre un listener loopback y el navegador hacia `/oauth2/authorization/google?client_state=...&client_port=...&client_challenge=...`. `client_state` debe tener entre 16 y 128 caracteres de letras, dígitos, guion o guion bajo; el puerto entero debe estar entre 1024 y 65535. No existe login por contraseña en estos controladores.
 
-Spring Security administra el `state` OAuth, la sesión HTTP, los scopes `openid`, `profile`, `email` y PKCE. El `client_state` de Godot es distinto del state OAuth. Se comprobó que la autorización generada incluye `code_challenge_method=S256`; no hay un controlador PKCE propio. Google devuelve un código a `/login/oauth2/code/google`, y el framework realiza el intercambio.
+Spring Security administra el `state` OAuth, la sesión HTTP, los scopes `openid`, `profile`, `email` y PKCE. El `client_state` de Godot es distinto del state OAuth. Se comprobó que la autorización generada incluye `code_challenge_method=S256`; en este flujo Web el framework administra el PKCE Google; el handoff Godot y Desktop tienen validación PKCE adicional. Google devuelve un código a `/login/oauth2/code/google`, y el framework realiza el intercambio.
 
-`OAuth2LoginSuccessHandler` busca o crea al usuario por Google `sub`, emite JWT y refresh y redirige a:
+`OAuth2LoginSuccessHandler` valida primero la sesión/challenge, busca o crea al usuario por Google sub y devuelve un handoff de un solo uso:
 
 ```text
-http://127.0.0.1:{client_port}/callback?accessToken={access}&refreshToken={refresh}&state={client_state}
+http://127.0.0.1:{client_port}/callback?code={handoff_de_un_uso}&state={client_state}
 ```
 
-El cliente debe verificar el state y conservar sus tokens de forma privada. Ese callback devuelve credenciales: no compartir su URL ni imprimirla en informes. El login completo con Google y ese listener no se ejecutó durante esta elaboración.
+El cliente verifica state y canjea code/verifier mediante POST /api/auth/login/exchange para obtener tokens en JSON no-store. No se devuelven tokens en la URL. No compartir ni imprimir códigos o credenciales. El login completo con Google y ese listener no se ejecutó durante esta elaboración.
 
-**Configuración Google para el Compose vigente.** Crear un cliente OAuth apropiado en Google Cloud, habilitar la pantalla de consentimiento y, si aplica, autorizar los usuarios de prueba. Registrar exactamente **`http://localhost:8081/login/oauth2/code/google`** como URI de redirección para la demostración local: es el valor predeterminado de `OAUTH_REDIRECT_URI` y fue observado en la autorización real. La variable existe en YAML, pero Compose **no la transmite**. Cambiar solo `.env` a un callback 8080 no modifica el Auth desplegado. Una configuración futura que transmita una URI distinta requiere registrar la misma URI en Google; no se realizó aquí.
+**Configuración Google para el Compose vigente.** Crear un cliente OAuth apropiado en Google Cloud, habilitar la pantalla de consentimiento y, si aplica, autorizar los usuarios de prueba. Registrar exactamente **`http://localhost:8081/login/oauth2/code/google`** como URI de redirección para la demostración local: es el valor predeterminado de `OAUTH_REDIRECT_URI` y fue observado en la autorización real. Compose transmite OAUTH_REDIRECT_URI a Auth y conserva ese valor predeterminado. Si se cambia, recrear Auth y registrar exactamente la misma URI en el cliente Google Web. No cambiarla para resolver LAN: el nuevo flujo Desktop usa el loopback del jugador y un Desktop client distinto, según el manual LAN.
 
 **JWT.** `JwtService` lee una clave RSA privada PKCS#8 PEM, genera `sub`, `email`, `iat` y `exp` y firma con JJWT 0.12.6. La duración es 15 minutos. El algoritmo se selecciona según la clave; para la instalación nueva del manual se genera RSA de 2048 bits, compatible con RS256 y los decoders predeterminados de Auth/Gateway. Game y Lobby aceptan RS256/RS384/RS512, pero no debe suponerse que el Gateway predeterminado acepta todas esas variantes. Todos necesitan la misma clave pública X.509 PEM.
 

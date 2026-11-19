@@ -1,3 +1,12 @@
+## Local y LAN con el mismo backend
+
+El modo local conserva `http://127.0.0.1:8080`. El override LAN agrega HTTPS/WSS en la IP privada del anfitrión y mantiene loopback para herramientas y bases. No cambia el motor. LAN requiere certificados por anfitrión, firewall acotado, Google OAuth Desktop y Godot actualizado para PKCE/canje sin tokens en URLs. El anfitrión Docker puede ser distinto del administrador de la sala.
+
+- [Manual del anfitrión Linux/Windows](docs/MANUAL_SERVIDOR_LAN.md).
+- [Contrato y checklist para Godot](docs/GODOT_INTEGRACION_LAN.md).
+- [Actualización desde la versión anterior](docs/GUIA_ACTUALIZACION.md).
+- [Evidencia de validación LAN y limitaciones de las pruebas](docs/LAN_VALIDACION.md).
+
 ## Reglas definitivas v4-100
 
 Salidas 5/22/39/56, capacidades diferenciadas, captura múltiple/SOPLAR, tres intentos HOME, suma de dados y trivia probabilística. El cliente debe confirmar cada animación antes del plazo de movimiento de 30 segundos; la confirmación vence a los 10 segundos. Véanse [matriz y estado de validación](docs/AUDITORIA_REGLAS_DEFINITIVAS.md), [motor](game-service/docs/ENGINE.md) y [contrato Godot](game-service/docs/WEBSOCKET.md). Las evidencias anteriores corresponden a despliegues anteriores y no acreditan esta revisión.

@@ -1,3 +1,140 @@
+# Actualización desde la versión anterior a PixelChiss con soporte LAN
+
+Baseline: `5464aa22c62ce0a816612d0939ec778528f2aaf8`. Esta actualización conserva reglas, layout v4-100, estado Game, Redis Streams y SAGA. No modifica RuleEngine, GameState.Turn ni TriviaRules. Si un compañero parte de una revisión del motor anterior a esa baseline, también debe revisar el historial de compatibilidad de layouts; LAN no convierte partidas antiguas ni altera sus marcadores.
+
+| Área | Baseline anterior | Versión LAN |
+|---|---|---|
+| Entrada de clientes | Gateway HTTP/WS, uso local | Mismo HTTP/WS local; HTTPS/WSS LAN opcional en el mismo Gateway |
+| Puertos publicados de desarrollo | Bind sin restricción loopback explícita | Bind explícito 127.0.0.1; solo TLS de Gateway se publica en la IP privada elegida |
+| OAuth nativo | Flujo Web local; tokens en callback | Nuevo Desktop + PKCE; callback del jugador con código y canje JSON; Web local cambia a handoff de un uso |
+| Configuración | .env, claves JWT y Compose base | Se conservan; LAN agrega configuración Desktop y lan.env/certificados privados |
+| Persistencia | Usuarios, refresh, salas/partidas/catálogo | Mismos datos y volúmenes; una tabla aditiva login_attempts en Auth |
+| Motor y coordinación | Reglas verificadas, Redis Streams/SAGA | Sin cambios funcionales ni migración Game |
+
+## Respuestas explícitas para el equipo
+
+| Pregunta | Respuesta |
+|---|---|
+| ¿Basta con git pull? | Para actualizar el backend **local**, pull y reconstrucción/recreación de Auth/Gateway y servicios con publicaciones cambiadas; no se necesita una IP. Para **activar LAN**, no basta: exige Desktop OAuth, certificados, firewall y un cliente Godot actualizado. |
+| ¿Editar .env? | No se sobrescribe. Local conserva las variables existentes. LAN necesita agregar GOOGLE_DESKTOP_CLIENT_ID y, si Google lo requiere para ese cliente, GOOGLE_DESKTOP_CLIENT_SECRET. La herramienta crea otro archivo privado lan-secrets/lan.env para dirección/puerto/contraseña TLS. |
+| ¿Reconstruir? | Sí, Auth y Gateway. Recrear con up -d para aplicar los bindings loopback a los demás servicios; sus datos/volúmenes se conservan. Game/Lobby no necesitan reconstrucción por LAN. |
+| ¿Cambiar Docker? | Solo si es demasiado antiguo: LAN exige Engine >=28 y Compose >=2.24.4. Windows usa Docker Desktop con contenedores Linux; Linux Engine/Compose. No se necesita editar daemon.json ni activar host networking. |
+| ¿Configurar firewall? | Sí para LAN: alcance de IP/puerto/subred, con reglas reversibles del manual. En Linux UFW solo no filtra publicaciones Docker; usar DOCKER-USER con iptables o equivalente documentado para nftables. En Windows reglas Private con bloqueo fuera de subred. No se aplican automáticamente. |
+| ¿Cambiar Google OAuth/certificados? | LAN requiere un cliente Google Desktop real, sin sustituir el Web client ni su redirect por una IP. El administrador Google lo configura; cada anfitrión instala su configuración. Generar CA/certificado por anfitrión y distribuir solo ca.crt verificada a Godot. No se requieren certificados públicos o instalación global de CA si Godot confía en ella explícitamente. |
+| ¿Migrar bases de datos? | Redis/Mongo/Game: no. Auth agrega la tabla transitoria login_attempts con índice de expiración en PostgreSQL usando el ddl-auto=update existente. No cambia users/refresh_tokens. Si el despliegue administra DDL aparte, aplicar el SQL aditivo provisto, sin borrar tablas. |
+| ¿Se conservan volúmenes, usuarios y partidas? | Sí en el mismo anfitrión y proyecto Compose. Conservar también las claves JWT y .env. Otro anfitrión tiene otra persistencia; no hay traslado automático de partidas/usuarios. No cambiar nombres de proyecto para actualizar. |
+| ¿Se puede seguir como antes sin LAN? | Sí: mismo Compose base y HTTP/WS por 127.0.0.1:8080, bots y mapas. Los puertos de desarrollo pasan a loopback. Hay un cambio necesario en el login Godot: por seguridad ya no devuelve tokens en la URL; requiere handoff PKCE o el nuevo Desktop flow. Un binario Godot antiguo que esperaba tokens en callback debe actualizarse. |
+
+## Variables y tareas manuales
+
+| Variable | Predeterminado | Obligación / quién |
+|---|---|---|
+| GOOGLE_DESKTOP_CLIENT_ID | vacío: Desktop devuelve 503 | Obligatoria para LAN; anfitrión usa el Desktop client creado por administrador Google. No inventarlo. |
+| GOOGLE_DESKTOP_CLIENT_SECRET | vacío | Solo si ese Desktop client lo requiere; privado del anfitrión, nunca Godot. |
+| LAN_BIND_ADDRESS | sin valor | Obligatoria LAN; generada con la IP privada de **cada anfitrión**, no localhost ni bridge Docker. |
+| LAN_HTTPS_PORT | 8443 | Opcional cambiar; el cliente y firewall deben coincidir. |
+| LAN_TLS_DIRECTORY | lan-secrets | Directorio privado generado para cada anfitrión; no copiar una ruta ajena. Si se mueve el checkout, corregir esta ruta en lan.env. |
+| LAN_TLS_PASSWORD | sin valor | Obligatoria LAN; generada aleatoriamente por anfitrión en lan-secrets/lan.env. No copiar a un documento. |
+| GATEWAY_PORT | 8080 | Opcional local; Godot usa este puerto con host loopback. |
+| AUTH_PORT / LOBBY_PORT / EUREKA_PORT | 8081 / 8083 / 8761 | Opcionales para herramientas del anfitrión; siempre loopback, no clientes LAN. |
+| POSTGRES_PORT / MONGO_PORT / REDIS_PORT | 5432 / 27017 / 6379 | Opcionales para desarrollo local; siempre loopback. No cambian los puertos internos Docker. |
+| GAME_ALLOWED_ORIGINS | conserva valor existente | Godot nativo puede omitir Origin. Para navegadores agregar orígenes exactos de forma consciente; no usar comodines. |
+| OAUTH_REDIRECT_URI | conserva URI Web anterior | No cambiar para Desktop/LAN. Cambiarla solo si se reconfigura también el cliente Google Web local. |
+
+No copiar .env.example sobre .env. El nuevo lan.env **complementa** el .env existente; no contiene los secretos PostgreSQL/Google/JWT previos. Cada anfitrión tiene su propia IP, contraseña/clave TLS y persistencia. Para cambiar solo la dirección en Godot, usar una CA pública común de equipo con claves de servidor distintas, siguiendo request/sign/install; su clave CA queda solo con el administrador. Con CAs independientes se necesita importar su confianza al conectar por primera vez. El Desktop client puede ser compartido por el equipo según su proyecto Google. Los invitados no necesitan .env ni Docker: necesitan Godot actualizado, la dirección, puerto y CA pública verificada.
+
+## Actualización simple (seguir local)
+
+Desde la raíz, conservar cambios propios y respaldos antes de actualizar. Mantener el proyecto Compose existente (`docker` por defecto si se usó este archivo); si usabas -p, repetir el mismo nombre.
+
+```sh
+git status
+git pull --ff-only
+docker compose -f infrastructure/docker/docker-compose.yml build auth-service api-gateway
+docker compose -f infrastructure/docker/docker-compose.yml up -d
+docker compose -f infrastructure/docker/docker-compose.yml restart game-service
+docker compose -f infrastructure/docker/docker-compose.yml ps
+```
+
+En Windows PowerShell estos comandos son iguales. No es obligatorio editar .env para seguir local. La recreación aplica restricciones de publicación también a las bases ya existentes: no recrea sus volúmenes. Reiniciar Game después del primer up de actualización: sus conexiones persistentes pueden conservar direcciones antiguas de Redis/Mongo al recrear dependencias. No cambia su imagen ni reglas; recarga el estado persistido. Si los clientes estaban conectados, deben reconectar/sincronizar tras la ventana de mantenimiento. Actualizar Godot para el retorno OAuth seguro; el resto de acciones/WS/reglas se mantiene.
+
+## Activar LAN: configuración manual obligatoria
+
+1. Administrador Google: crear Desktop app, consentimiento y usuarios de prueba; cada anfitrión agrega las variables Desktop reales.
+2. Anfitrión: comprobar versiones Docker, identificar IP privada y subred reales.
+3. Generar certificados con `python3 infrastructure/lan/lan.py init --host DIRECCION_PRIVADA` (Windows: `py -3`). No reemplaza archivos existentes.
+4. Aplicar las reglas de firewall específicas generadas por la herramienta y verificar su alcance; no basta con tener Wi-Fi con contraseña.
+5. Compartir únicamente ca.crt y verificar huella por canal de confianza; configurar su confianza en Godot sin omitir TLS/SAN.
+6. Ejecutar `lan.py check --lan` y los comandos con **ambos env-files y ambos archivos Compose** del [manual LAN](MANUAL_SERVIDOR_LAN.md).
+7. Equipo Godot: implementar selección de conexión, HTTPS/WSS y OAuth Desktop con loopback del jugador según [GODOT_INTEGRACION_LAN.md](GODOT_INTEGRACION_LAN.md). El anfitrión del backend puede ser un jugador más.
+
+Opcional: reservar IP por DHCP, recordar dirección/CA pública en Godot, monitorización existente y persistencia segura del refresh en el almacén del sistema operativo. No guardar refresh en ConfigFile.
+
+## Checklist operativa de actualización
+
+Todos los comandos se ejecutan desde la raíz. Si tu proyecto Compose tiene otro nombre, añadir el mismo `-p NOMBRE_EXISTENTE` a **cada** comando Compose. `docker compose ls -a` permite identificarlo; no crear otro proyecto para actualizar.
+
+- [ ] **Todos los anfitriones:** revisar `git status`, conservar cambios ajenos, `.env`, claves y respaldos de volúmenes; ejecutar `git pull --ff-only`. Si hay divergencias, resolverlas sin force/reset destructivo.
+- [ ] **Todos los anfitriones:** ejecutar `docker version` y `docker compose version`. Para LAN exigir Engine >=28 y Compose >=2.24.4; actualizar Docker Desktop/Engine únicamente si hace falta. Mantener contenedores Linux en Windows. No es necesario cambiar redes internas o daemon.json.
+- [ ] **Actualización local:** ejecutar el bloque «Actualización simple» anterior. No añadir variables LAN ni certificados/firewall para seguir local. Actualizar también el cliente Godot si usaba el callback con tokens.
+- [ ] **Anfitrión LAN:** administrador Google crea/configura Desktop app y consentimiento/usuarios de prueba; anfitrión agrega `GOOGLE_DESKTOP_CLIENT_ID` real a `.env` y `GOOGLE_DESKTOP_CLIENT_SECRET` solo si lo requiere ese cliente. Conservar el Web client, `OAUTH_REDIRECT_URI` y secretos existentes.
+- [ ] **Anfitrión LAN:** preparar certificado para su IP actual. Preferir la CA común del equipo mediante request/sign/install del manual; `init` es para crear una CA nueva. No ejecutar ambos sobre el mismo directorio ni sobre certificados existentes.
+
+Linux, para el primer anfitrión que crea la CA (variables interactivas, sin IP fija):
+
+```bash
+ip -brief address
+read -r -p 'IPv4 privada del anfitrión: ' lan_host
+read -r -p 'Subred CIDR permitida: ' lan_subnet
+docker pull maven:3.9-eclipse-temurin-21
+python3 infrastructure/lan/lan.py init --host "$lan_host"
+python3 infrastructure/lan/lan.py firewall --host "$lan_host" --subnet "$lan_subnet" --platform linux
+```
+
+Windows PowerShell, equivalente:
+
+```powershell
+Get-NetIPConfiguration
+$lanHost = Read-Host 'IPv4 privada del anfitrión'
+$lanSubnet = Read-Host 'Subred CIDR permitida'
+docker pull maven:3.9-eclipse-temurin-21
+py -3 infrastructure/lan/lan.py init --host $lanHost
+py -3 infrastructure/lan/lan.py firewall --host $lanHost --subnet $lanSubnet --platform windows
+```
+
+- [ ] **Firewall, manual obligatorio:** revisar y aplicar con privilegios las reglas impresas, guardar sus comandos de reversión. Linux: comprobar DOCKER-USER y backend iptables; Windows: comprobar perfil Private y reglas Docker Desktop. La herramienta no aplica ninguna regla. Si personalizas el puerto TLS, usar el mismo `--port` en certificados y firewall.
+- [ ] **Certificados, manual obligatorio:** entregar únicamente `ca.crt` a los jugadores y verificar huella DER SHA256 por canal autenticado. Conservar claves/lan.env en privado. No es obligatorio instalar la CA globalmente: Godot debe cargarla para HTTP y WS.
+- [ ] **Anfitrión LAN:** comprobar configuración e iniciar el mismo backend; comandos reales comunes a ambos sistemas (primera línea Windows: `py -3`):
+
+```sh
+python3 infrastructure/lan/lan.py check --lan
+docker compose --env-file infrastructure/docker/.env --env-file infrastructure/docker/lan-secrets/lan.env -f infrastructure/docker/docker-compose.yml -f infrastructure/docker/docker-compose.lan.yml build auth-service api-gateway
+docker compose --env-file infrastructure/docker/.env --env-file infrastructure/docker/lan-secrets/lan.env -f infrastructure/docker/docker-compose.yml -f infrastructure/docker/docker-compose.lan.yml up -d
+docker compose --env-file infrastructure/docker/.env --env-file infrastructure/docker/lan-secrets/lan.env -f infrastructure/docker/docker-compose.yml -f infrastructure/docker/docker-compose.lan.yml restart game-service
+docker compose --env-file infrastructure/docker/.env --env-file infrastructure/docker/lan-secrets/lan.env -f infrastructure/docker/docker-compose.yml -f infrastructure/docker/docker-compose.lan.yml ps
+```
+
+- [ ] **Verificación local:** `curl --fail http://127.0.0.1:8080/actuator/health` (Windows: `curl.exe`). Esperar UP y salud de servicios/bases. Ajustar si personalizaste GATEWAY_PORT.
+- [ ] **Verificación desde otro computador:** con la CA pública verificada, ejecutar `curl --fail --cacert ca.crt https://DIRECCION_PRIVADA:8443/actuator/health` (Windows: `curl.exe`); sustituir dirección y puerto reales. No usar `-k`. Verificar que los puertos internos no sean accesibles desde el invitado.
+- [ ] **Prueba de usuario obligatoria antes de dar LAN por validado en el equipo:** dos cuentas Google reales independientes, sala compartida, partida en ambos mapas, bots local, refresh/logout y reconexión. Godot real, Windows anfitrión y dos computadores físicos siguen pendientes de verificación; los probes simulados registrados no acreditan esas pruebas.
+- [ ] **Datos:** no ejecutar migraciones Redis/Mongo por LAN. PostgreSQL agrega login_attempts automáticamente; SQL manual solo si el administrador gestiona el esquema. Comprobar usuarios/partidas preexistentes sin borrar bases ni volúmenes.
+
+Los compañeros que solo ejecutan Godot **no ejecutan estos comandos de servidor**, no necesitan Docker, `.env`, secretos Google ni migraciones. Instalan el cliente actualizado, configuran CA pública/dirección/puerto LAN y se autentican en su propio navegador. El anfitrión puede usar ese mismo cliente con la opción local sin introducir IP. Una instalación nueva de servidor necesita además preparar claves y secretos de base: ver los pasos separados Windows/Linux del [manual LAN](MANUAL_SERVIDOR_LAN.md#2-preparar-repositorio-y-datos).
+
+Opcionales: reserva DHCP, puerto distinto, recordar dirección, monitorización y almacén seguro para refresh. Si se mueve la carpeta del repositorio, corregir `LAN_TLS_DIRECTORY` del lan.env generado. Si cambia la IP del anfitrión, reemitir su certificado con el SAN correcto; con la CA común, los clientes conservan su confianza. No trasladar automáticamente la persistencia entre anfitriones.
+
+## Verificaciones posteriores y recuperación
+
+Comprobar salud, registro de servicios, REST autenticado/401 sin JWT y WebSocket. Probar local contra bots y dos jugadores LAN en ambos mapas, login Google real, renovación/logout y reconexión. Tras recreación puede haber errores transitorios de descubrimiento; esperar disponibilidad sin desactivar autenticación. Las pruebas automatizadas y en una IP no loopback no sustituyen una partida física Windows↔Linux.
+
+Si falla LAN, detener solo ese proyecto con los mismos archivos y `stop`; conservar volúmenes y certificados. Volver a local con el Compose base y `up -d`, y retirar únicamente las reglas de firewall generadas para PixelChiss si ya no hacen falta. Para revertir código, usar la revisión anterior en un checkout y reconstruir servicios con el mismo proyecto/volúmenes; la tabla login_attempts adicional puede permanecer y el motor usa el mismo estado. La versión anterior vuelve a exponer tokens en el callback: no usar esa autenticación como solución LAN segura. No usar down -v, prune, reset de bases ni cambios manuales al estado Game.
+
+SQL opcional para instalaciones con DDL gestionado: [login-attempts.sql](../infrastructure/lan/login-attempts.sql). Las instalaciones con ddl-auto=update no requieren ejecutarlo manualmente. Revisar permisos de esquema si Auth no puede crear la tabla; no borrar datos para arrancar.
+
+---
+
+## Historial de actualizaciones anteriores
+
 ## Actualización v4-100
 
 Actualizar Game y Godot conjuntamente: salidas 5/22/39/56, rutas `(17*s+5+p)%68` hasta p=68 y corredor p=69..76. Consultar [BOARD](../game-service/docs/BOARD.md). Los agregados antiguos se conservan y rechazan con UNSUPPORTED_BOARD_LAYOUT; crear otro gameId, sin vaciar Redis ni borrar volúmenes.

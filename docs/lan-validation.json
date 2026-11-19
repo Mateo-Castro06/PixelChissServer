@@ -1,0 +1,568 @@
+{
+  "baseline": "5464aa22c62ce0a816612d0939ec778528f2aaf8",
+  "verificationDate": "2026-11-19",
+  "resumedWithoutRerunningSuites": true,
+  "automatedTests": {
+    "auth-service": {
+      "tests": 87,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "api-gateway": {
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "game-service": {
+      "tests": 257,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "eureka-server": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lobby-service": {
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lan-helper": {
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "totalTests": 376,
+  "testLogSha256": {
+    "auth-final": "24b258f815b10c9069fe2f4b74389b918bd329185a344dade3273a4fbb8e223f",
+    "gateway-final": "8b673341611ca83722c9bc3483bd37f97a8b73f9d41446a4828e61703c51de78",
+    "game": "c9cc3619483626d39594ae9b1c9bd093c04b465436b4dd3ea26f5026f81bac1c",
+    "eureka": "9a2e9573a1befce274666cdfbb42bccc1fd9b43e038e22cc1c238f1371b72442",
+    "lobby": "e08a2c9d0c199882a5ce38879fecc0b826fec5461d8b0f5aede56cbed598b902",
+    "helper-tests": "11646e977eddb7d276f129e5f174d30ac194a85bd0e4463499474d07d05c5aa4"
+  },
+  "integrationProbes": {
+    "local": {
+      "pairs": {
+        "results": 8,
+        "logSha256": "2326abe7780f995cccdc78ad1026509b6354a6b0469826535452c2f3421006c0",
+        "observations": [
+          {
+            "map": "classic",
+            "twoJWTClients": true,
+            "releaseConsumesPair": true,
+            "extraRoll": true,
+            "pairMovementWithoutHome": true,
+            "thirdPairCrown": true,
+            "noFourthRoll": true,
+            "reconnectCounters": true
+          },
+          {
+            "map": "classic",
+            "triviaTimeout": false,
+            "independent15Seconds": true,
+            "movementPaused": true,
+            "remainingPreserved": true,
+            "reconnectTimers": true,
+            "twoJWTClients": true,
+            "lateRejected": false
+          },
+          {
+            "map": "science",
+            "twoJWTClients": true,
+            "releaseConsumesPair": true,
+            "extraRoll": true,
+            "pairMovementWithoutHome": true,
+            "thirdPairCrown": true,
+            "noFourthRoll": true,
+            "reconnectCounters": true
+          },
+          {
+            "map": "science",
+            "triviaTimeout": false,
+            "independent15Seconds": true,
+            "movementPaused": true,
+            "remainingPreserved": true,
+            "reconnectTimers": true,
+            "twoJWTClients": true,
+            "lateRejected": false
+          },
+          {
+            "map": "classic",
+            "triviaTimeout": true,
+            "independent15Seconds": true,
+            "movementPaused": true,
+            "remainingPreserved": true,
+            "reconnectTimers": true,
+            "twoJWTClients": true,
+            "lateRejected": true
+          },
+          {
+            "map": "science",
+            "triviaTimeout": true,
+            "independent15Seconds": true,
+            "movementPaused": true,
+            "remainingPreserved": true,
+            "reconnectTimers": true,
+            "twoJWTClients": true,
+            "lateRejected": true
+          },
+          {
+            "map": "classic",
+            "pausedTriviaProcessRestart": true,
+            "triviaDeadlinePreserved": true,
+            "movementResumeFromTriviaDeadline": true,
+            "twoJWTClients": true
+          },
+          {
+            "map": "science",
+            "pausedTriviaProcessRestart": true,
+            "triviaDeadlinePreserved": true,
+            "movementResumeFromTriviaDeadline": true,
+            "twoJWTClients": true
+          }
+        ]
+      },
+      "humans": {
+        "results": 2,
+        "logSha256": "4fc91275258df16c482ad5534abf22215b36394748ba606e5e1a6d1edc3d856d",
+        "observations": [
+          {
+            "map": "classic",
+            "humans": 2,
+            "seats": [
+              0,
+              2
+            ],
+            "outOfTurnRejected": true,
+            "bothRolledMovedAndReconnected": true,
+            "peerMoveObserved": true
+          },
+          {
+            "map": "science",
+            "humans": 2,
+            "seats": [
+              0,
+              2
+            ],
+            "outOfTurnRejected": true,
+            "bothRolledMovedAndReconnected": true,
+            "peerMoveObserved": true
+          }
+        ]
+      },
+      "timeouts": {
+        "results": 6,
+        "logSha256": "f2a7d57dc8ba59b04a70d1759d1d77823b2e6d24716367d86140234c1685c501",
+        "observations": [
+          {
+            "map": "classic",
+            "botTriviaOverBothWebSockets": true,
+            "normalEvaluation": true
+          },
+          {
+            "map": "science",
+            "botTriviaOverBothWebSockets": true,
+            "normalEvaluation": true
+          },
+          {
+            "map": "classic",
+            "phase": "animation",
+            "restartRecovered": true,
+            "bothJWTClients": true,
+            "lateActionsRejected": true,
+            "acceptedMovePreserved": false,
+            "blowApplied": false
+          },
+          {
+            "map": "science",
+            "phase": "animation",
+            "restartRecovered": true,
+            "bothJWTClients": true,
+            "lateActionsRejected": true,
+            "acceptedMovePreserved": false,
+            "blowApplied": false
+          },
+          {
+            "map": "classic",
+            "phase": "movement",
+            "restartRecovered": true,
+            "bothJWTClients": true,
+            "lateActionsRejected": true,
+            "acceptedMovePreserved": true,
+            "blowApplied": true
+          },
+          {
+            "map": "science",
+            "phase": "movement",
+            "restartRecovered": true,
+            "bothJWTClients": true,
+            "lateActionsRejected": true,
+            "acceptedMovePreserved": true,
+            "blowApplied": true
+          }
+        ]
+      }
+    },
+    "lan": {
+      "pairs": {
+        "results": 8,
+        "logSha256": "2326abe7780f995cccdc78ad1026509b6354a6b0469826535452c2f3421006c0",
+        "observations": [
+          {
+            "map": "classic",
+            "twoJWTClients": true,
+            "releaseConsumesPair": true,
+            "extraRoll": true,
+            "pairMovementWithoutHome": true,
+            "thirdPairCrown": true,
+            "noFourthRoll": true,
+            "reconnectCounters": true
+          },
+          {
+            "map": "classic",
+            "triviaTimeout": false,
+            "independent15Seconds": true,
+            "movementPaused": true,
+            "remainingPreserved": true,
+            "reconnectTimers": true,
+            "twoJWTClients": true,
+            "lateRejected": false
+          },
+          {
+            "map": "science",
+            "twoJWTClients": true,
+            "releaseConsumesPair": true,
+            "extraRoll": true,
+            "pairMovementWithoutHome": true,
+            "thirdPairCrown": true,
+            "noFourthRoll": true,
+            "reconnectCounters": true
+          },
+          {
+            "map": "science",
+            "triviaTimeout": false,
+            "independent15Seconds": true,
+            "movementPaused": true,
+            "remainingPreserved": true,
+            "reconnectTimers": true,
+            "twoJWTClients": true,
+            "lateRejected": false
+          },
+          {
+            "map": "classic",
+            "triviaTimeout": true,
+            "independent15Seconds": true,
+            "movementPaused": true,
+            "remainingPreserved": true,
+            "reconnectTimers": true,
+            "twoJWTClients": true,
+            "lateRejected": true
+          },
+          {
+            "map": "science",
+            "triviaTimeout": true,
+            "independent15Seconds": true,
+            "movementPaused": true,
+            "remainingPreserved": true,
+            "reconnectTimers": true,
+            "twoJWTClients": true,
+            "lateRejected": true
+          },
+          {
+            "map": "classic",
+            "pausedTriviaProcessRestart": true,
+            "triviaDeadlinePreserved": true,
+            "movementResumeFromTriviaDeadline": true,
+            "twoJWTClients": true
+          },
+          {
+            "map": "science",
+            "pausedTriviaProcessRestart": true,
+            "triviaDeadlinePreserved": true,
+            "movementResumeFromTriviaDeadline": true,
+            "twoJWTClients": true
+          }
+        ]
+      },
+      "humans": {
+        "results": 2,
+        "logSha256": "4fc91275258df16c482ad5534abf22215b36394748ba606e5e1a6d1edc3d856d",
+        "observations": [
+          {
+            "map": "classic",
+            "humans": 2,
+            "seats": [
+              0,
+              2
+            ],
+            "outOfTurnRejected": true,
+            "bothRolledMovedAndReconnected": true,
+            "peerMoveObserved": true
+          },
+          {
+            "map": "science",
+            "humans": 2,
+            "seats": [
+              0,
+              2
+            ],
+            "outOfTurnRejected": true,
+            "bothRolledMovedAndReconnected": true,
+            "peerMoveObserved": true
+          }
+        ]
+      },
+      "timeouts": {
+        "results": 6,
+        "logSha256": "6c91aad7505e18d584bf002302059046f68491c5d4056dd547c8205044e3e5d8",
+        "observations": [
+          {
+            "map": "classic",
+            "botTriviaOverBothWebSockets": true,
+            "normalEvaluation": true
+          },
+          {
+            "map": "science",
+            "botTriviaOverBothWebSockets": true,
+            "normalEvaluation": true
+          },
+          {
+            "map": "science",
+            "phase": "animation",
+            "restartRecovered": true,
+            "bothJWTClients": true,
+            "lateActionsRejected": true,
+            "acceptedMovePreserved": false,
+            "blowApplied": false
+          },
+          {
+            "map": "classic",
+            "phase": "animation",
+            "restartRecovered": true,
+            "bothJWTClients": true,
+            "lateActionsRejected": true,
+            "acceptedMovePreserved": false,
+            "blowApplied": false
+          },
+          {
+            "map": "classic",
+            "phase": "movement",
+            "restartRecovered": true,
+            "bothJWTClients": true,
+            "lateActionsRejected": true,
+            "acceptedMovePreserved": true,
+            "blowApplied": true
+          },
+          {
+            "map": "science",
+            "phase": "movement",
+            "restartRecovered": true,
+            "bothJWTClients": true,
+            "lateActionsRejected": true,
+            "acceptedMovePreserved": true,
+            "blowApplied": true
+          }
+        ]
+      }
+    }
+  },
+  "totalProbeResults": 32,
+  "transport": {
+    "targetIsNonLoopbackPrivateAddress": true,
+    "trustedTlsAndHostname": true,
+    "untrustedCARejected": true,
+    "wrongHostnameRejected": true,
+    "plaintextNotAccepted": true,
+    "localHttpPreserved": true,
+    "sameIdentityLocalAndLan": true,
+    "independentJwtSessions": true,
+    "concurrentWss": true,
+    "invalidJwtRejected": true,
+    "wsQueryRejected": true,
+    "originRejected": true,
+    "desktopPkceStart": true,
+    "clientLoopbackRedirect": true,
+    "verifierRejectedBeforeGoogle": true,
+    "legacyWebOnlyLocal": true,
+    "lanMetricsBlocked": true,
+    "realGoogleLoginExecuted": false,
+    "physicalSecondComputerUsed": false
+  },
+  "compose": {
+    "localAllPublicationsLoopback": true,
+    "lanOnlyTlsGatewayOutsideLoopback": true,
+    "sameServices": true,
+    "sameVolumes": true
+  },
+  "images": {
+    "auth": "sha256:355a6eb6ee77ffee6c03974357e31352e9f7de13acb04179ee89f17129df3ee3",
+    "gateway": "sha256:bb498e4161452b333abe6b78aa6c6dfcf35f5482e4540bd07534412bd0d7670d",
+    "game": "sha256:6a895762b7f7dd9e7275897dd5379bce99c02631310b6f091b613c91afbf656b",
+    "isolatedAuth": "sha256:355a6eb6ee77ffee6c03974357e31352e9f7de13acb04179ee89f17129df3ee3",
+    "isolatedGateway": "sha256:bb498e4161452b333abe6b78aa6c6dfcf35f5482e4540bd07534412bd0d7670d",
+    "isolatedTlsMount": {
+      "target": "/app/tls/server.p12",
+      "readOnly": true,
+      "caPrivateKeyMounted": false
+    }
+  },
+  "developmentHealth": {
+    "developmentHealth": "UP",
+    "eurekaRegistered": [
+      "API-GATEWAY",
+      "AUTH-SERVICE",
+      "GAME-SERVICE",
+      "LOBBY-SERVICE"
+    ],
+    "gatewayRestJwtRequired": true,
+    "developmentWebSocketReachesGame": true,
+    "invalidJwtRejected": true
+  },
+  "developmentAuth": {
+    "localRefreshRoute": true,
+    "localLogoutRoute": true,
+    "localWebOAuthPkceStart": true,
+    "developmentDesktopFailsClosedUntilConfigured": true,
+    "noRealGoogleConsent": true
+  },
+  "developmentServices": [
+    {
+      "service": "grafana",
+      "state": "running",
+      "health": ""
+    },
+    {
+      "service": "prometheus",
+      "state": "running",
+      "health": ""
+    },
+    {
+      "service": "auth-service",
+      "state": "running",
+      "health": "healthy"
+    },
+    {
+      "service": "eureka-server",
+      "state": "running",
+      "health": ""
+    },
+    {
+      "service": "game-service",
+      "state": "running",
+      "health": "healthy"
+    },
+    {
+      "service": "api-gateway",
+      "state": "running",
+      "health": "healthy"
+    },
+    {
+      "service": "lobby-service",
+      "state": "running",
+      "health": "healthy"
+    },
+    {
+      "service": "mongodb",
+      "state": "running",
+      "health": "healthy"
+    },
+    {
+      "service": "postgres",
+      "state": "running",
+      "health": "healthy"
+    },
+    {
+      "service": "redis",
+      "state": "running",
+      "health": "healthy"
+    }
+  ],
+  "streamsDevelopment": [
+    {
+      "name": "lobby-game-initialization-v1",
+      "consumers": 10,
+      "pending": 0,
+      "last-delivered-id": "0-0",
+      "entries-read": null,
+      "lag": 0
+    }
+  ],
+  "streamsIsolated": [
+    {
+      "name": "lobby-game-initialization-v1",
+      "consumers": 6,
+      "pending": 0,
+      "last-delivered-id": "1795121834585-0",
+      "entries-read": 138,
+      "lag": 0
+    }
+  ],
+  "dataBefore": {
+    "postgres": {
+      "users": 1,
+      "refreshTokens": 18,
+      "loginTable": null
+    },
+    "catalog": {
+      "questions": 32,
+      "cards": 6
+    },
+    "redisGameStates": 0
+  },
+  "dataAfter": {
+    "postgres": {
+      "users": 1,
+      "refreshTokens": 18,
+      "loginTable": "login_attempts"
+    },
+    "catalog": {
+      "questions": 32,
+      "cards": 6
+    },
+    "redisGameStates": 0
+  },
+  "envUnchanged": true,
+  "gameLobbyEurekaMainSourceUnchanged": true,
+  "portIsolation": {
+    "testedFromSameHost": true,
+    "physicalLanIsolationTested": false,
+    "privateAddressRejectsPorts": [
+      8080,
+      8081,
+      8083,
+      8761,
+      5432,
+      27017,
+      6379
+    ],
+    "loopbackPortsAvailable": true
+  },
+  "manualTestsNotExecuted": [
+    "Godot real",
+    "Consentimiento Google con cuentas reales",
+    "Anfitrión Windows real",
+    "Dos computadores físicos",
+    "Aplicación de reglas al firewall del anfitrión",
+    "Verificación física desde fuera de la subred permitida"
+  ],
+  "isolatedProjectStoppedVolumesPreserved": true,
+  "functionalCommits": [
+    {
+      "hash": "6594b05189a2faeed03ec86ef8710572ce12534f",
+      "subject": "feat(auth): secure desktop PKCE login and one-use local handoff"
+    },
+    {
+      "hash": "8e737d009965a1f2675552e80cc3c0d9c49c3393",
+      "subject": "feat(lan): add portable TLS gateway and scoped host configuration"
+    }
+  ]
+}

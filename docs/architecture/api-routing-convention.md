@@ -9,3 +9,6 @@ Godot usa el API Gateway. Las rutas se conservan según su contrato, aun cuando 
 - Métricas: `/actuator/prometheus` y `/internal/metrics` son endpoints de scraping con clave separada. No pertenecen a la API del cliente.
 
 Ver [tabla de métodos, DTO y códigos](../MANUAL_INSTALACION.md#operaciones-rest), [WebSocket](../../game-service/docs/WEBSOCKET.md) y [contrato asíncrono](../second-cut/start-saga.md).
+
+
+LAN mantiene todas las rutas públicas existentes. Se agregan POST /api/auth/desktop/start, /api/auth/desktop/exchange y /api/auth/login/exchange al mismo Auth por Eureka, sin reescritura. El Gateway único expone HTTPS/WSS a la IP privada seleccionada y HTTP solo a loopback en modo LAN. El flujo OAuth Web solo se usa por loopback; los jugadores remotos usan Desktop + PKCE y callback en su propio dispositivo. Ninguna ruta cliente revela direcciones Docker o tokens en URLs.
