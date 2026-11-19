@@ -1,3 +1,66 @@
+# Actualización del asistente LAN automático
+
+Esta sección corresponde a la actualización **desde `c93f82a6e2d44a9396c3bf55a9c40bda2b7cffd6`**, que ya dispone de HTTPS/WSS y OAuth Desktop. La sección posterior conserva los pasos para instalaciones anteriores a LAN.
+
+## Qué deben hacer los anfitriones existentes
+
+1. Conservar cambios ajenos, `.env`, `lan-secrets`, claves y volúmenes; ejecutar `git status` y `git pull --ff-only`.
+2. Disponer de Python **3.9 o posterior** y mantener Docker Engine >=28 / Compose >=2.24.4. Windows: Docker Desktop con contenedores Linux; no hace falta Bash ni cambiar daemon.json.
+3. Ejecutar desde la raíz:
+
+   ```bash
+   # Linux
+   python3 infrastructure/lan/lan.py start --auto
+   ```
+
+   ```powershell
+   # Windows PowerShell
+   py -3 infrastructure/lan/lan.py start --auto
+   ```
+
+4. Elegir una interfaz solo si hay varias candidatas; confirmar la red y las operaciones de seguridad que se describan. Sudo/UAC se solicita únicamente para firewall y nunca equivale a una aprobación global. Si hay partidas activas o no se puede descartarlas, autorizar la ventana de mantenimiento antes de recrear servicios.
+5. Compartir las nuevas URLs que imprime el asistente y la CA pública verificada, conservando su confianza anterior. Los jugadores deben reconectar y sincronizar; un cambio de IP puede cortar WebSocket.
+
+**No hay nuevas variables obligatorias en `.env`, cambios OAuth/Google Cloud ni migraciones por esta automatización.** No cambia Auth, Gateway, Game, Lobby ni Eureka. Los anfitriones que ya configuraron Google Desktop conservan sus valores. No hay que reconstruir imágenes por actualizar solo la herramienta: esta detecta imágenes faltantes o cambios posteriores en los archivos usados para construir los servicios. En la primera adopción reutiliza las imágenes existentes; si no conoces su procedencia, `start --auto --rebuild` permite reconstruirlas expresamente.
+
+## Qué cambia cuando cambia la Wi-Fi
+
+La herramienta detecta IPv4/interfaz/prefijo reales y escribe atómicamente LAN_BIND_ADDRESS. Conserva LAN_HTTPS_PORT —salvo `--port` explícito—, LAN_TLS_DIRECTORY y la contraseña TLS. No regenera JWT ni modifica usuarios, partidas, PostgreSQL, MongoDB o Redis. Reutiliza el nombre de proyecto Compose existente y rechaza colisiones; `--project NOMBRE_EXISTENTE` resuelve una selección ambigua.
+
+- **CA individual:** renueva el certificado con la misma CA y clave de servidor cuando cambia el SAN o vence el certificado. No se distribuye otra CA.
+- **CA común sin clave privada local:** deja CSR pendiente y muestra el procedimiento de firma. Reanudar con `start --auto --signed-certificate RUTA_CERTIFICADO.crt`; no hay que editar archivos ni copiar ca.p12. Una segunda red archiva la CSR anterior de forma privada.
+- **Firewall:** verifica protección y solicita autorización explícita antes de aplicar reglas limitadas a la IP/puerto/subred y perfil autorizados. Gestiona únicamente reglas etiquetadas por esta instalación. Las antiguas reglas manuales equivalentes se reutilizan sin duplicarlas y no se borran; un conflicto con ellas requiere revisión del administrador. Linux usa DOCKER-USER o una tabla propia nftables; Windows usa Defender Firewall/UAC.
+- **Docker:** recrea los servicios cuyo hash/imagen cambió, y Gateway cuando necesita cargar un certificado nuevo; conserva los demás. Reinicia Game únicamente si se recrearon sus dependencias persistentes. Mantiene el monitoreo si ya existía. Espera salud y verifica que los puertos internos sigan en loopback.
+
+Una red Public/Unknown o nueva requiere confirmación; no se altera el perfil Windows ni se asume confianza por usar una contraseña Wi-Fi. Si no hay autorización, firma, privilegios, certificado válido o protección verificable, no se publica una configuración nueva.
+
+## Configuración manual obligatoria y opcional
+
+| Situación | Acción |
+|---|---|
+| Anfitrión ya configurado con CA individual | Un comando y las confirmaciones necesarias; no editar .env/lan.env ni regenerar CA |
+| CA común, certificado actual todavía válido | Se reutiliza; no necesita una nueva firma |
+| CA común, SAN nuevo o certificado vencido | Firma del administrador y reanudación con --signed-certificate |
+| Primera instalación sin OAuth/secretos/JWT | Preparación inicial del manual; no se automatiza la creación de credenciales Google |
+| Primera CA individual | Confirmar CREAR CA; se generan archivos nuevos sin sobrescribir material previo |
+| Primera CA común | --ca-certificate con su certificado público verificado; firma del administrador |
+| Windows / Linux | Python py -3 / python3; elevación UAC / sudo para firewall, después de autorización |
+| Permisos privados insuficientes | Corregir propietario/permisos/ACL según el diagnóstico, sin compartir claves |
+| Backend de firewall no verificable o rootless/remoto | Resolver con el administrador; no se publica LAN sin protección |
+| Imágenes de procedencia desconocida | Opcional --rebuild; no cambia volúmenes |
+| IP o puerto elegidos expresamente | Opcional --host / --interface / --port; solo una red realmente detectada |
+| Compañero que solo ejecuta Godot | No actualiza Docker ni instala esta herramienta; cambia dirección y reconecta con la misma CA |
+
+`auto-state.json` guarda metadatos de red/proyecto y huellas, no sustituye `.env`. `.backups`, `.renewal` y el journal están dentro de lan-secrets privado e ignorado por Git; contienen material de servidor/contraseña y no se comparten. La clave privada de una CA común nunca se solicita ni se copia a otro anfitrión.
+
+Verificaciones posteriores desde la raíz: `python3 infrastructure/lan/lan.py status`, y el mismo comando sustituyendo status por cert-check, firewall-check o diagnose. En Windows sustituir python3 por `py -3`. Consultar direcciones con url. Comprobar desde otro computador HTTPS con ca.crt y una partida real; los mocks Windows y los probes del mismo anfitrión no acreditan una prueba física Windows↔Linux ni un cambio real de Wi-Fi.
+
+Recuperación: un fallo intenta restaurar configuración y contenedores previos sin borrar datos; si la IP anterior desapareció, puede no reactivarlos y lo informa. Para un journal interrumpido, `lan.py recover` restaura archivos; después usar start --auto. Si hay auto.lock, comprobar que su proceso terminó antes de retirarlo manualmente. Se conservan respaldos y reglas protectoras; no usar down -v, prune ni reset de bases. Para detener voluntariamente solo el proyecto, usar `lan.py stop` y confirmar.
+
+Instrucciones completas y comandos de firma/reversión: [manual del inicio automático](MANUAL_SERVIDOR_LAN.md#inicio-automático-y-cambios-de-wi-fi).
+
+---
+
 # Actualización desde la versión anterior a PixelChiss con soporte LAN
 
 Baseline: `5464aa22c62ce0a816612d0939ec778528f2aaf8`. Esta actualización conserva reglas, layout v4-100, estado Game, Redis Streams y SAGA. No modifica RuleEngine, GameState.Turn ni TriviaRules. Si un compañero parte de una revisión del motor anterior a esa baseline, también debe revisar el historial de compatibilidad de layouts; LAN no convierte partidas antiguas ni altera sus marcadores.

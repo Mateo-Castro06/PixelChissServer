@@ -2,10 +2,100 @@
 
 Un único backend Docker atiende al anfitrión y a los demás jugadores. Los invitados solo ejecutan Godot; no instalan microservicios ni bases de datos. El dueño del backend no adquiere permisos especiales sobre salas. No hay despliegue en Internet, hosting, AWS ni port forwarding del router.
 
+## Inicio automático y cambios de Wi-Fi
+
+Desde la raíz, con Docker funcionando y la configuración inicial de secretos/Google completada:
+
+```bash
+python3 infrastructure/lan/lan.py start --auto
+```
+
+Windows PowerShell:
+
+```powershell
+py -3 infrastructure/lan/lan.py start --auto
+```
+
+No se necesita recordar la IP ni editar archivos al cambiar de Wi-Fi. El asistente detecta interfaces físicas activas, IPv4 privada, prefijo/subred y gateway. Linux consulta `ip -j` y dispositivos físicos en sysfs; Windows consulta adaptadores físicos, direcciones, rutas y perfiles mediante PowerShell. Descarta loopback, Docker, bridges, VPN/túneles y direcciones no aptas. Con varias redes físicas no elige por prioridad arbitraria: muestra interfaz/IP/subred y pide una selección, o permite `--interface NOMBRE` / `--host IP_DETECTADA`. `--subnet` solo selecciona una subred realmente detectada; no permite ampliar el acceso.
+
+### Preparación inicial, una sola vez
+
+1. Instalar Python **3.9 o posterior**, Git, Docker Engine >=28 y Compose >=2.24.4. En Windows usar Docker Desktop con contenedores Linux. No ejecutar todo Python como administrador/root: el asistente solicita privilegios únicamente para las operaciones de firewall.
+2. Preparar `.env`, claves JWT y credenciales Google reales siguiendo las secciones posteriores. La automatización **no edita `.env` ni inventa OAuth**. Falta de Desktop client ID detiene el inicio. El secreto Desktop existente se conserva.
+3. Para una CA individual nueva, ejecutar start --auto y confirmar expresamente `CREAR CA`. La imagen JDK se descarga si falta. Si ya hay certificados, no se crea otra CA.
+4. Para la CA común del equipo en un anfitrión nuevo, recibir solo su certificado público verificado y ejecutar `start --auto --ca-certificate RUTA_CA_PUBLICA.crt`. Se crea la clave de servidor y una CSR privada para traslado público al administrador; nunca se solicita su ca.p12. Si no hay firma todavía, el comando se detiene antes de publicar LAN.
+5. Verificar que el directorio y las claves privadas sean del usuario anfitrión. En Linux: directorio 700, lan.env/PKCS12 600; en Windows sin permisos de acceso para Everyone, Users o Authenticated Users. El asistente comprueba protección y se detiene si es insuficiente; no cambia ACL/permisos de archivos existentes automáticamente.
+
+### Qué hace cada inicio
+
+- Muestra la red elegida. Una red nueva, pública, de dominio o cuya confianza no pueda determinar requiere `AUTORIZO`. No convierte una red pública a privada. Linux normalmente informa perfil Unknown y pide confirmación; Windows conserva el perfil detectado. Tener perfil Private no garantiza seguridad.
+- Identifica el proyecto Compose por los archivos de este checkout. Conserva su nombre; `--project NOMBRE` permite resolver ambigüedad. Rechaza colisiones con contenedores de otros proyectos, contextos remotos y Docker rootless sin una protección de bridge verificable.
+- Reutiliza el certificado si su SAN, vigencia, firma, cadena, uso de servidor y correspondencia con la clave privada son válidos. La comprobación usa Java dentro de la imagen JDK, sin red ni secretos en argumentos. La CA pública existente es el ancla; esta CA privada offline no tiene OCSP/CRL configurado.
+- Si cambia la IP o vence el certificado de servidor, genera una CSR con **la misma clave de servidor** y prepara una copia validada dentro de lan-secrets. Con CA individual firma allí, sin copiar su clave CA a otra carpeta. Con CA común se detiene para obtener la firma. Una CA vencida, una cadena ajena o una clave incompatible no provocan regeneración silenciosa.
+- Actualiza atómicamente solo LAN_BIND_ADDRESS y, si se solicitó, LAN_HTTPS_PORT. Conserva LAN_TLS_DIRECTORY, contraseña TLS, Google, JWT y bases. Por defecto conserva el puerto anterior; `--port PUERTO` lo cambia expresamente.
+- Comprueba las partidas leyendo únicamente estados persistidos de Game en Redis. Ante partidas ACTIVE, estado desconocido o una consulta no verificable pide confirmación antes de aplicar cambios que puedan interrumpir conexiones. Vuelve a consultar antes de recrear servicios si inicialmente no había partidas. No congela la creación de nuevas partidas: anuncia una ventana de mantenimiento a los jugadores antes de autorizar cambios.
+- Verifica y, si hace falta, solicita autorización para aplicar firewall limitado a esa IP/puerto/subred. Solo entonces permite privilegios de sistema. Comprueba la protección instalada antes de publicar y conserva las reglas anteriores hasta que HTTPS esté saludable.
+- Usa los dos Compose y los dos env-files existentes. Construye imágenes faltantes o cuyos archivos de construcción hayan cambiado desde el último inicio automático exitoso. En la primera adopción reutiliza imágenes existentes; si proceden de una revisión desconocida, usar `--rebuild` para reconstruir expresamente los cinco servicios. No reconstruye por cambios solo documentales. Una instalación nueva construye las imágenes que falten.
+- Reutiliza servicios sin cambios y no los recrea. Renueva Gateway si cambió su certificado aunque su IP sea la misma. Si se recrearon Redis/Mongo, reinicia Game para renovar conexiones; se conserva su estado. Si el monitoreo ya existía, también aplica el override de Prometheus, sin iniciar servicios opcionales que antes no existían.
+- Espera healthchecks, valida los puertos realmente publicados y comprueba tanto HTTPS con la CA como HTTP local. Deja el backend funcionando y muestra REST/WSS, certificado público, huella DER SHA256 y ubicación de la reversión de firewall.
+
+El asistente no es un monitor residente: **cada ejecución** detecta la red actual. No puede mantener intactos los WebSocket durante un cambio de IP. Tras la migración, los jugadores usan la nueva dirección y reconectan/sincronizan con el estado persistido. No hay cambios en los contratos ni reglas del juego.
+
+### Firma de una CA común: reanudar el mismo inicio
+
+Cuando haga falta renovar y no exista ca.p12 local, el comando muestra `lan-secrets/.renewal/server.csr`. Enviar únicamente esa CSR y la IP autorizada al administrador. En su equipo:
+
+```sh
+python3 infrastructure/lan/lan.py sign --host IP_AUTORIZADA --csr RUTA_CSR --ca-directory RUTA_CA_PRIVADA --output certificado.crt
+```
+
+Windows sustituye python3 por `py -3`. El administrador devuelve solo el certificado público firmado. En el anfitrión:
+
+```sh
+python3 infrastructure/lan/lan.py start --auto --signed-certificate RUTA_CERTIFICADO.crt
+```
+
+No se necesita editar lan.env ni ejecutar install manualmente para este flujo. La CA queda fijada al certificado público anterior y la firma debe corresponder a su clave de servidor y nueva IP. El asistente instala la copia validada y continúa. Si vuelve a cambiar de red antes de recibir la firma, archiva la solicitud anterior en `.renewal-history` privada y prepara otra; no sobrescribe la CSR anterior. Conservar la confianza pública en Godot: no hay que importar otra CA por cambiar de Wi-Fi.
+
+### Firewall administrado y autorizaciones
+
+Las reglas nuevas llevan una identidad de esta instalación/proyecto. El asistente nunca elimina reglas sin esa identidad; una regla manual antigua equivalente en DOCKER-USER se reutiliza sin duplicarla y permanece bajo administración manual. Al cambiar de red, esas reglas antiguas sin etiqueta se conservan. Si coinciden con la misma IP/puerto y restringen una subred anterior, pueden bloquear invitados de la nueva subred: el administrador debe revisar esa regla manual, sin vaciar cadenas.
+
+Linux detecta DOCKER-USER realmente enlazada al inicio de FORWARD, o las tablas del backend nativo nftables Docker. En iptables usa coincidencia de destino/puerto original por conntrack y DROP fuera de la subred. En nftables utiliza una tabla propia por instalación con cadena forward de prioridad -1, sin editar ni vaciar tablas Docker. Una plataforma no verificable detiene la publicación con indicaciones de diagnóstico; UFW por sí solo no se considera suficiente.
+
+Windows crea reglas con nombre/grupo propios: autorización para la subred y perfil actual, bloqueo del complemento IPv4 y bloqueo de los otros perfiles. Una red Public solo se utiliza después de confirmar expresamente el aviso; no se cambia su perfil ni se desactiva Defender Firewall. Si hace falta elevación, se muestra UAC para un bloque limitado de comandos de firewall, sin ejecutar todo el asistente como administrador. La pertenencia al grupo Administradores no sustituye `AUTORIZO`.
+
+En Linux sudo puede pedir contraseña **en tu terminal**, nunca como parámetro de la herramienta ni dentro de un archivo. Si falta autorización, privilegios o verificación real de reglas, no se publicará una nueva configuración. No hay `--yes` para omitir consentimientos. La protección debe volver a verificarse tras reinicios: no se modifica el mecanismo global de persistencia del firewall del sistema.
+
+Después del éxito, `firewall-undo.txt` contiene los comandos para retirar exclusivamente la protección creada por esa instalación. No ejecutarlos mientras se recibe tráfico LAN. Para una regla manual reutilizada indica que no le pertenece. La retirada de reglas administradas antiguas se hace solo después de comprobar la protección nueva y HTTPS; si esa limpieza falla, la configuración nueva queda protegida y se informa del error, sin revertir a un estado desprotegido.
+
+### Consultas, diagnóstico, parada y recuperación
+
+```sh
+python3 infrastructure/lan/lan.py network
+python3 infrastructure/lan/lan.py status
+python3 infrastructure/lan/lan.py cert-check
+python3 infrastructure/lan/lan.py firewall-check
+python3 infrastructure/lan/lan.py url
+python3 infrastructure/lan/lan.py diagnose
+python3 infrastructure/lan/lan.py stop
+python3 infrastructure/lan/lan.py recover
+```
+
+En PowerShell usar `py -3` en cada línea. Los comandos network/status/cert-check/firewall-check/url/diagnose no escriben configuración ni reglas ni recrean servicios. La comprobación del firewall necesita permisos de lectura privilegiada en Linux; si no están disponibles, devuelve pendiente sin solicitar ni aplicar cambios. `cert-check --host IP` permite verificar expresamente otro SAN. `url` muestra la dirección **configurada**, no promete disponibilidad. `status` enumera contenedores; `diagnose` también comprueba TLS, red, firewall y Gateway y termina con error si falta verificación. Stop pide confirmación y detiene únicamente el proyecto seleccionado, conservando todos sus datos.
+
+Antes de modificar archivos, el asistente guarda copias privadas de lan.env, server.p12, server.crt y auto-state.json en `.backups`. Un journal permite recuperar una operación interrumpida. Las sustituciones son atómicas, y un error intenta restaurar los archivos y la configuración previa de contenedores cuando era posible; si la IP anterior ya no existe, informa de que no pudo reactivarla. Mantiene protecciones de firewall en los fallos. Nunca elimina volúmenes ni estados de dominio para recuperarse.
+
+`recover` restaura solo los archivos de una transacción interrumpida; después ejecutar start --auto para validar la red y reconciliar servicios. Si quedó auto.lock tras un cierre abrupto, comprobar primero que el PID ya no existe y retirar únicamente ese bloqueo de la instalación. No retirar el bloqueo de un proceso vivo. Los respaldos siguen privados y no se borran automáticamente; no compartirlos porque contienen contraseñas y claves de servidor.
+
+Si falta Google, Docker no está disponible, no hay red apta, falla TLS o no puede protegerse el firewall, el comando termina con error y no declara «listo». Si se pierde una firma, reanudar con el certificado correcto; nunca sustituir la CA común por una nueva para evitar la aprobación.
+
+Las secciones siguientes conservan el procedimiento **manual avanzado** y la preparación inicial. Los subcomandos históricos init/request/sign/install/firewall/check mantienen su comportamiento; `firewall` imprime reglas, mientras que **start --auto** puede aplicarlas tras autorización.
+
 ## 1. Requisitos
 
 - Docker Engine **28 o posterior** en Linux, o Docker Desktop actualizado con contenedores Linux en Windows. Docker documenta una limitación de aislamiento de publicaciones loopback en versiones anteriores a 28: no usarlas como base de seguridad LAN.
-- Docker Compose **2.24.4 o posterior** (`!override`), Git y Python 3. La herramienta usa Python estándar y keytool dentro de un contenedor JDK; no exige OpenSSL ni Bash en Windows.
+- Docker Compose **2.24.4 o posterior** (`!override`), Git y Python 3.9 o posterior. La herramienta usa Python estándar y keytool dentro de un contenedor JDK; no exige OpenSSL ni Bash en Windows.
 - Permisos para Docker, espacio para imágenes/volúmenes y administrador para las reglas de firewall.
 - Conexión a Internet para descargar dependencias/imágenes y para **autenticación Google**, aunque la partida y sus servicios estén en LAN. No es login offline.
 - OAuth Web/keys/secreto Lobby ya existentes para la instalación local, y un cliente OAuth **Desktop app** para login LAN seguro. El equipo Godot debe implementar [su guía](GODOT_INTEGRACION_LAN.md).
@@ -135,7 +225,7 @@ La alternativa de generar una CA independiente en cada anfitrión con init tambi
 
 0.0.0.0 escucha en todas las interfaces, no solo en la LAN. Escuchar en una IP privada tampoco limita por sí solo quién puede acceder mediante rutas. Este override publica TLS en **la IP privada seleccionada**, no en todas las interfaces. Aplicar además el alcance de subred permitido. No habilitar direct routing de Docker ni redes nat-unprotected. No desactivar el firewall de Docker.
 
-La herramienta solo **imprime** reglas específicas y reversibles. Revisarlas y aplicarlas con privilegios; no cambia el firewall automáticamente.
+El subcomando histórico **firewall** solo imprime reglas específicas y reversibles. Revisarlas y aplicarlas con privilegios; este subcomando no cambia el firewall. El nuevo **start --auto** usa el flujo de autorización y verificación descrito arriba.
 
 Los ejemplos usan 8443. Si elegiste otro puerto con `init --port` o `request --port`, añadir ese mismo `--port PUERTO` a `firewall` y usarlo en todas las pruebas y en Godot. `firewall` no lee automáticamente el puerto de lan.env.
 

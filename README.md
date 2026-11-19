@@ -2,10 +2,25 @@
 
 El modo local conserva `http://127.0.0.1:8080`. El override LAN agrega HTTPS/WSS en la IP privada del anfitrión y mantiene loopback para herramientas y bases. No cambia el motor. LAN requiere certificados por anfitrión, firewall acotado, Google OAuth Desktop y Godot actualizado para PKCE/canje sin tokens en URLs. El anfitrión Docker puede ser distinto del administrador de la sala.
 
+Para un anfitrión ya configurado, cada inicio detecta la red actual y prepara LAN con un comando:
+
+```sh
+# Linux
+python3 infrastructure/lan/lan.py start --auto
+```
+
+```powershell
+# Windows
+py -3 infrastructure/lan/lan.py start --auto
+```
+
+El asistente conserva la CA y los datos; pide autorización para firewall, redes no confirmadas e interrupciones de partidas. Una CA común puede requerir la firma de su administrador. No existe un modo de aprobación global que omita esos controles. Véase [inicio automático y cambios de Wi-Fi](docs/MANUAL_SERVIDOR_LAN.md#inicio-automático-y-cambios-de-wi-fi).
+
 - [Manual del anfitrión Linux/Windows](docs/MANUAL_SERVIDOR_LAN.md).
 - [Contrato y checklist para Godot](docs/GODOT_INTEGRACION_LAN.md).
 - [Actualización desde la versión anterior](docs/GUIA_ACTUALIZACION.md).
 - [Evidencia de validación LAN y limitaciones de las pruebas](docs/LAN_VALIDACION.md).
+- [Pruebas del inicio automático y límites Windows/Wi-Fi](docs/LAN_AUTO_VALIDACION.md).
 
 ## Reglas definitivas v4-100
 

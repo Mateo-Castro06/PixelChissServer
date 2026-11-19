@@ -1,0 +1,240 @@
+{
+  "baseline": "c93f82a6e2d44a9396c3bf55a9c40bda2b7cffd6",
+  "verificationDate": "2026-11-19",
+  "automatedTests": {
+    "auth-service": {
+      "tests": 87,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "api-gateway": {
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "game-service": {
+      "tests": 257,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "eureka-server": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lobby-service": {
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lan-unit": {
+      "tests": 92,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lan-tls-real": {
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lan-firewall-namespace": {
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "totalTests": 470,
+  "finalFailures": 0,
+  "finalSkipped": 0,
+  "testLogSha256": {
+    "auth": "4ebd58e01284eb00f913d58240335f74b40a4505187ab31872b667d6b38dc786",
+    "gateway": "52b03b3eaddfc629f758746cc625e13d60fd5cf3a80b27f2302f1302a0151252",
+    "game": "b36c4899b91db65aed5a951b5cb04cd640a60db8aa1b134f505c9689681c7232",
+    "eureka": "9f75cd1ac36a299c3f3a661b80e3c9a03392ea1d370e5765ee9d7f4959fbddb4",
+    "lobby": "4580512f26ca68025bcd0746524b3e7605d7186df008575461e92df184005b55",
+    "unit": "9842667c574ff56564a1189988b4c5083e65bf05986bb0f6c2949e923d9fac9a",
+    "tls-integration": "3fb19433b460889beb4e24397d6791d8e65697f93c14ee2a3051812f19d784a6",
+    "firewall-integration": "f244b23c3d11c1be5c039c6a1ef63f9387f05b1bd3a273e7e2c3f08620f021b9"
+  },
+  "helperSourceSha256": {
+    "firewall-test.Dockerfile": "52f381012fe1f77909284fe4ae619d5c219c3cbdb4fc3b0a7b8d733e7c6e0743",
+    "integration_firewall.py": "0d83f48f96495534cc8c07a3ced23af34cd62f68db0bbab7fb518fdc3174666e",
+    "auto_firewall.py": "10256e69c0d3412f33f9d7179ce368c15993d8bcdf9fabd4ce49f1527fe9c457",
+    "auto_start.py": "3bd7a0ba19d3c724b614a27548ce47d0fd43753a0e772c9a2f1a69ff9244280d",
+    "VerifyTls.java": "41a4453154c45aca98db7dd3ec1aad3678384afd7e81fe7fa8b92d27e6358552",
+    "auto_network.py": "ca61db886171c75729b45a36ccc136933b2b86a7d2719de0a0ab17a79b9b7d03",
+    "test_automation.py": "99a0f3814034c7dd6a7069bc13e94199d138380f43a9180832a8a55c2035eb41",
+    "auto_support.py": "e0501b5b5812a991e254be594d18815485f607c33d2c9a26d8d4085950bc43a4",
+    "integration_tls.py": "4e8e55469ffd2a55ea013f2dd2abbed6d6223ae81d822f4dc933c67416c57a21",
+    "auto_tls.py": "d4294dfaf9401626b606155946f4b9097008b802c236e7151ba3c6567f4db7c0",
+    "auto_docker.py": "81845b1cb3b54b63ccca1bacf6fb908e2b520c4ac3961664de161b2a8fdd97f3",
+    "test_lan.py": "67b4a83845a09dfc6d77ca043fc5118601d1021fb52e25103d0dcd5e8d4b6e3a",
+    "lan.py": "d7d077d66756ff5357b723db320889a6bc98aa21206dd56486b9be0c7b922ad2"
+  },
+  "integrationProbeResults": {
+    "local": {
+      "pairs": {
+        "results": 8,
+        "logSha256": "2326abe7780f995cccdc78ad1026509b6354a6b0469826535452c2f3421006c0"
+      },
+      "humans": {
+        "results": 2,
+        "logSha256": "4fc91275258df16c482ad5534abf22215b36394748ba606e5e1a6d1edc3d856d"
+      },
+      "timeouts": {
+        "results": 6,
+        "logSha256": "261b2b972410ffc13f265972699672964bc2a33a4fc25c682f4f654022ca7fba"
+      }
+    },
+    "lan": {
+      "pairs": {
+        "results": 8,
+        "logSha256": "2326abe7780f995cccdc78ad1026509b6354a6b0469826535452c2f3421006c0"
+      },
+      "humans": {
+        "results": 2,
+        "logSha256": "4fc91275258df16c482ad5534abf22215b36394748ba606e5e1a6d1edc3d856d"
+      },
+      "timeouts": {
+        "results": 6,
+        "logSha256": "8ab2f108bb5e87cf15a5d6f22c849da49104eeae8436e821f0b0892e487688f6"
+      }
+    }
+  },
+  "totalProbeResults": 32,
+  "transport": {
+    "targetIsNonLoopbackPrivateAddress": true,
+    "trustedTlsAndHostname": true,
+    "untrustedCARejected": true,
+    "wrongHostnameRejected": true,
+    "plaintextNotAccepted": true,
+    "localHttpPreserved": true,
+    "sameIdentityLocalAndLan": true,
+    "independentJwtSessions": true,
+    "concurrentWss": true,
+    "invalidJwtRejected": true,
+    "wsQueryRejected": true,
+    "originRejected": true,
+    "desktopPkceStart": true,
+    "clientLoopbackRedirect": true,
+    "verifierRejectedBeforeGoogle": true,
+    "legacyWebOnlyLocal": true,
+    "lanMetricsBlocked": true,
+    "realGoogleLoginExecuted": false,
+    "physicalSecondComputerUsed": false
+  },
+  "development": {
+    "developmentProject": "docker",
+    "services": {
+      "grafana": {
+        "running": true,
+        "health": null
+      },
+      "prometheus": {
+        "running": true,
+        "health": null
+      },
+      "auth-service": {
+        "running": true,
+        "health": "healthy"
+      },
+      "eureka-server": {
+        "running": true,
+        "health": null
+      },
+      "game-service": {
+        "running": true,
+        "health": "healthy"
+      },
+      "api-gateway": {
+        "running": true,
+        "health": "healthy"
+      },
+      "lobby-service": {
+        "running": true,
+        "health": "healthy"
+      },
+      "mongodb": {
+        "running": true,
+        "health": "healthy"
+      },
+      "postgres": {
+        "running": true,
+        "health": "healthy"
+      },
+      "redis": {
+        "running": true,
+        "health": "healthy"
+      }
+    },
+    "certificateValidForDetectedIp": true,
+    "localHttpAndSecureLanHealthy": true,
+    "localWsAndWssJwtRejection": true,
+    "plannedRecreations": [],
+    "activeGames": 0,
+    "envAndLanEnvUnchanged": true,
+    "metricsAllUp": true,
+    "edaGroups": [
+      {
+        "name": "lobby-game-initialization-v1",
+        "consumers": 10,
+        "pending": 0,
+        "last-delivered-id": "0-0",
+        "entries-read": null,
+        "lag": 0
+      }
+    ],
+    "sagaStartsPending": 0,
+    "firewallOfHostNotModified": true,
+    "realWifiChangeExecuted": false,
+    "realWindowsHostExecuted": false,
+    "physicalSecondComputerUsed": false
+  },
+  "developmentData": {
+    "postgres": {
+      "users": 1,
+      "refreshTokens": 18,
+      "loginTable": "login_attempts"
+    },
+    "catalog": {
+      "questions": 32,
+      "cards": 6
+    },
+    "redisGameStates": 0
+  },
+  "developmentVolumesUnchanged": true,
+  "microservicesAndGameRulesUnchanged": true,
+  "newDatabaseMigrations": false,
+  "physicalTestsNotExecuted": [
+    "Windows host",
+    "Real Wi-Fi switch",
+    "Godot real",
+    "Two physical computers",
+    "Google consent with real accounts"
+  ],
+  "hostFirewallNotModified": true,
+  "linuxFirewallTestsExecutedOnlyInDisposableNetworkNoneContainer": true,
+  "fullStartWorkflowTestedWithMocks": true,
+  "realDevelopmentComposePlanTestedReadOnly": true,
+  "resolvedFindings": [
+    "Existing CA alias had to be removed only from the staged keystore before reinstalling the public CA",
+    "nftables canonical JSON omits redundant address family in an IPv4 table"
+  ],
+  "earlierProbeFailuresPreservedInTmp": [
+    "isolated TLS fixture used the wrong password file; corrected to matching test keystore",
+    "probe read refresh tokens from the unit database instead of auth_runtime; corrected test setup",
+    "missing test-only WebSocket/Redis packages; installed only into temporary test paths",
+    "one HTTPS trivia answer returned INVALID_CHALLENGE; unchanged probe passed with fresh games",
+    "one HTTPS room start returned 409; unchanged probe passed with fresh rooms"
+  ],
+  "gameIntegrationExplicitlyEnabled": true,
+  "functionalCommit": "fb41189256b2c7bd7e24660629f8dada8b7db42b"
+}
