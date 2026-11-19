@@ -1,0 +1,9 @@
+# TLS is mandatory on the LAN connector; no plaintext fallback.
+server:
+  ssl:
+    enabled: true
+    key-store: file:/app/tls/server.p12
+    key-store-type: PKCS12
+    key-store-password: ${LAN_TLS_PASSWORD}
+    key-alias: server
+    enabled-protocols: TLSv1.2,TLSv1.3

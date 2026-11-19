@@ -88,6 +88,13 @@ class GatewayRoutingTest {
         }
         assertEquals(401, request("GET", "/api/auth/me", null).statusCode());
     }
+    @Test void desktopAndHandoffExchangesRouteWithoutChangingExistingAuthPaths() throws Exception {
+        for (String path : List.of("/api/auth/desktop/start", "/api/auth/desktop/exchange", "/api/auth/login/exchange")) {
+            var response = request("POST", path, null);
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("\"path\":\""+path+"\""));
+        }
+    }
     @Test void optionalDiagnosticsAndPublicDocsHaveExactRewrites() throws Exception {
         for (String name : List.of("mongodb", "redis")) {
             String publicPath = "/api/game/test/" + name;

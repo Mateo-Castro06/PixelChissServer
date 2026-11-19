@@ -13,6 +13,12 @@ spring:
       server:
         webmvc:
           routes:
+            - id: auth-desktop-login
+              uri: lb://AUTH-SERVICE
+              predicates:
+                - Path=/api/auth/desktop/start,/api/auth/desktop/exchange,/api/auth/login/exchange
+                - Method=POST
+
             - id: auth-refresh
               uri: lb://AUTH-SERVICE
               predicates:

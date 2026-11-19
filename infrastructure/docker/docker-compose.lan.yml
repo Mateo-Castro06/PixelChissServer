@@ -1,0 +1,16 @@
+# Docker Compose >= 2.24.4 required for !override. Reuses every service and volume.
+services:
+  api-gateway:
+    environment:
+      SPRING_PROFILES_ACTIVE: lan
+      LAN_TLS_PASSWORD: ${LAN_TLS_PASSWORD:?Generate the LAN certificates first}
+    volumes:
+      - ${LAN_TLS_DIRECTORY:-./lan-secrets}/server.p12:/app/tls/server.p12:ro
+    ports: !override
+      - "127.0.0.1:${GATEWAY_PORT:-8080}:8082"
+      - "${LAN_BIND_ADDRESS:?Set the private host address}:${LAN_HTTPS_PORT:-8443}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8082/actuator/health"]
+  prometheus:
+    volumes:
+      - ../monitoring/prometheus.lan.yml:/etc/prometheus/prometheus.yml:ro

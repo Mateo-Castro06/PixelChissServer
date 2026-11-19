@@ -103,13 +103,16 @@ async def game_probe(game_id, tokens, actors, map_id):
                 state = (await client.command(state, "END_TURN"))["state"]
                 assert state["turn"]["playerId"] == actors[1-index]
         assert moved == rolled == set(actors), "Both humans must roll and move"
+        # Captures/cards can legally leave a player with no BOARD pieces.
+        # Reconnection must preserve every piece, whatever its valid status is.
+        expected_pieces = state["pieces"]
     for token, actor in zip(tokens, actors, strict=True):
         async with websockets.connect(WS) as socket:
             client = PlayerSocket(socket, game_id)
             await client.authenticate(token, actor)
             state = (await client.snapshot())["state"]
             assert state["gameId"] == game_id
-            assert any(p["status"] == "BOARD" for p in state["pieces"] if p["ownerId"] == actor)
+            assert state["pieces"] == expected_pieces, "Reconnection changed persisted pieces"
 
 
 

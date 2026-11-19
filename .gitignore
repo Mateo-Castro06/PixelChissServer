@@ -49,3 +49,6 @@ docker-compose.override.yml
 .vscode/
 auth-service/keys/
 api-gateway/keys/
+
+# Per-host LAN CA, TLS keystores and generated configuration
+infrastructure/docker/lan-secrets/

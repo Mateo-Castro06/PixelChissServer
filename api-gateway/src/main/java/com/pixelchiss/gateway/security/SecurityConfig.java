@@ -29,6 +29,9 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/actuator/health",
                                 "/api/refresh",
+                                "/api/auth/desktop/start",
+                                "/api/auth/desktop/exchange",
+                                "/api/auth/login/exchange",
                                 "/api/logout",
                                 "/oauth2/**",
                                 "/login/**"

@@ -12,8 +12,10 @@ services:
       EUREKA_URL: ${EUREKA_URL}
       JWT_PUBLIC_KEY_PATH: ${JWT_PUBLIC_KEY_PATH}
 
+      GATEWAY_GAME_ALLOWED_ORIGINS: ${GAME_ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+
     ports:
-      - "8080:8080"
+      - "127.0.0.1:${GATEWAY_PORT:-8080}:8080"
 
     volumes:
       - ../../api-gateway/keys:/app/keys:ro
@@ -40,7 +42,7 @@ services:
     environment:
       PIXELCHISS_METRICS_KEY: ${PIXELCHISS_METRICS_KEY:-}
     ports:
-      - "8761:8761"
+      - "127.0.0.1:${EUREKA_PORT:-8761}:8761"
     networks:
       - pixelchiss-network
 
@@ -62,6 +64,8 @@ services:
 
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_DESKTOP_CLIENT_ID: ${GOOGLE_DESKTOP_CLIENT_ID:-}
+      GOOGLE_DESKTOP_CLIENT_SECRET: ${GOOGLE_DESKTOP_CLIENT_SECRET:-}
       OAUTH_REDIRECT_URI: ${OAUTH_REDIRECT_URI:-http://localhost:8081/login/oauth2/code/google}
 
       JWT_PRIVATE_KEY_PATH: ${JWT_PRIVATE_KEY_PATH}
@@ -70,7 +74,7 @@ services:
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: INFO
 
     ports:
-      - "8081:8081"
+      - "127.0.0.1:${AUTH_PORT:-8081}:8081"
 
     volumes:
       - ../../auth-service/keys:/app/keys:ro
@@ -148,7 +152,7 @@ services:
       SERVICE_PORT: 8083
       GAME_LOBBY_TOKEN: ${GAME_LOBBY_TOKEN:?Set a private Lobby-to-Game token of at least 32 characters}
     ports:
-      - "8083:8083"
+      - "127.0.0.1:${LOBBY_PORT:-8083}:8083"
     volumes:
       - ../../auth-service/keys/public_key.pem:${JWT_PUBLIC_KEY_PATH}:ro
     depends_on:
@@ -174,7 +178,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -192,7 +196,7 @@ services:
     environment:
       MONGO_INITDB_DATABASE: pixelchiss
     ports:
-      - "27017:27017"
+      - "127.0.0.1:${MONGO_PORT:-27017}:27017"
     volumes:
       - mongodb_data:/data/db
     networks:
@@ -217,7 +221,7 @@ services:
     container_name: pixelchiss-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
       - ../redis/start.sh:/etc/pixelchiss/redis-start.sh:ro
