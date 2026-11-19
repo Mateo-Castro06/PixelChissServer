@@ -25,6 +25,8 @@ HOME siempre se representa así, incluso tras cartas, captura y SOPLAR:
 {"id":"seat-0-piece-0","ownerId":"a","number":0,"status":"HOME","position":null,"progress":-1}
 ```
 
-La liberación por pares es automática y atómica en la tirada: (1,1) libera hasta cuatro, (6,6) hasta tres, otros pares hasta dos, limitada por HOME y cupo propio de la salida después de retirar rivales. Las coronadas no se liberan. `PIECE_RELEASED.from=null`; no se envía MOVE_REQUEST para liberar HOME. La liberación no consume los dados de avance. Esta política y el retorno a la salida se documentan explícitamente para revisión funcional.
+La liberación por pares es automática y atómica en la tirada: (1,1) libera hasta cuatro, (6,6) hasta tres, otros pares hasta dos, limitada por HOME y cupo propio de la salida después de retirar rivales. Las coronadas no se liberan. `PIECE_RELEASED.from=null`; no se envía MOVE_REQUEST para liberar HOME. La liberación consume ambos dados completamente e impide movimiento de avance con esa tirada. Esta política y el retorno a la salida se documentan explícitamente para revisión funcional.
 
 El layout v4-100 es incompatible con v3-100 y anteriores. No se transforman ni eliminan partidas antiguas: se devuelve `UNSUPPORTED_BOARD_LAYOUT`. Debe iniciarse otra partida con ID nuevo.
+
+Los pares con HOME se dedican íntegramente a la liberación: (1,1) hasta cuatro, (6,6) hasta tres y los demás hasta dos. Ambos dados quedan consumidos; no permiten movimientos ordinarios ni obligación ficticia de captura. La salida propia captura rivales al liberar. La geometría y capacidades no cambian.

@@ -1,5 +1,67 @@
 # Auditoría de reglas definitivas
 
+
+## Actualización de pares y temporizadores — 2026-11-19
+
+Esta revisión parte de `b496033` en main, sincronizado con origin/main; el único archivo ajeno detectado fue el directorio no seguido demo-rum/, que se preserva. Sustituye las afirmaciones históricas de abajo sobre liberación sin consumo y plazos de trivia limitados por movimiento.
+
+| Área | Antes de esta revisión | Resultado |
+|---|---|---|
+| Par con HOME | Liberaba 4/3/2, pero dejaba dados disponibles para avance | Liberación obligatoria; consume ambos incluso si sale una sola ficha; no hay movimientos ordinarios ni SOPLAR ficticio |
+| Par sin HOME | Dados individuales/suma y repetición | Se conserva; otro UUID y confirmación por cada tirada |
+| Lanzamiento adicional | Disponible al agotar movimientos | Disponible tras resolver movimiento o confirmar liberación; persiste extraRollAvailable; no se concede por dados vencidos |
+| Tres pares | Selección CROWN_REQUEST de activa previa, pero podía continuar hacia cuarta tirada | Conserva selección humana y política del bot; consume dados, corona solo propia activa previa y cierra sin cuarta tirada. Nunca penaliza por tres pares |
+| HOME/capturas/tablero | Tres intentos HOME, captura múltiple, seguros/salidas, corredores y corona exacta | Se conservan; captura especial de salida satisface obligación del turno |
+| Movimiento | 30 s después de confirmación, espera de animación 10 s | Se conserva; liberar HOME no abre movimiento; confirmación repetida no reinicia plazo |
+| Trivia | Hasta 15 s limitados por movimiento; ambos relojes corrían | 15 s independientes; pausa saldo, reanuda exactamente ese saldo; no acepta respuesta tardía |
+| Recuperación | Fechas absolutas y CAS | Persiste también saldo/rollId pausado; timeout de trivia reanuda desde su deadline, incluso tras caída. Si venció el saldo, cierra en el mismo commit |
+
+Inicio y vencimiento de animación/movimiento se calculan con una sola lectura del reloj; una prueba con reloj que avanza por lectura verifica exactamente 10000/30000 ms.
+
+Si la trivia se activa al consumir el último dado, no se publica una reanudación de movimiento obsoleta. Las cartas de selección conservan sus reglas y su propio límite; no se cambia el catálogo ni la trivia probabilística. El efecto explícito de la carta doubles-death sigue siendo distinto del premio de tres pares y permanece intacto.
+
+El timeout de movimiento conserva jugadas confirmadas, descarta dados pendientes, evalúa SOPLAR sobre oportunidades reales omitidas y avanza atómicamente. No concede tirada adicional a un par sin resolver. La liberación, el premio, las respuestas y los vencimientos utilizan los recibos/CAS existentes; un reintento no duplica fichas, dados ni premios.
+
+### Archivos de esta revisión
+
+Dominio: GameState.Turn agrega homeRelease, extraRollAvailable, thirdDoubleReward, movementRemainingMillis y pausedMovementRollId. RuleEngine controla consumo exclusivo, tercer premio y relojes; TriviaRules controla pausa, plazo independiente y recuperación. No hay cambios arquitectónicos ni nuevos servicios. GameService, RedisGameRepository, BotPolicy, JWT y la SAGA conservan sus contratos; las opciones del bot cambian a través del mismo dominio.
+
+Pruebas nuevas: PairsAndTriviaTimersTest y PairsPersistenceTest. Se adaptan los escenarios de movimiento de EngineFixture, RuleEngineTest, CardsTriviaTest, BotTest, LapEntryTest, TurnDeadlineServiceTest, TurnOrderTest e InfrastructureIntegrationTest para que no dependan de reutilizar dados de HOME. Nuevo probe infrastructure/tests/pairs_and_trivia.py; los probes two_humans.py y definitive_timeouts.py se ejecutan también.
+
+Documentación: README, ENGINE, WEBSOCKET, BOARD, WS_DICE_EXAMPLE, manual, guía, arquitectura y ADR-004. Los nuevos campos son aditivos; no cambia boardLayout v4-100 ni Redis Streams. Una tirada/trivia ya persistida antes del despliegue conserva su estado: no se infiere retroactivamente una liberación sin marcador fiable. Las reglas nuevas rigen desde la siguiente activación sin borrar partidas.
+
+### Godot
+
+Procesar HOME_RELEASE_RESOLVED y PIECE_RELEASED; con homeRelease y consumed=[true,true] no ofrecer movimientos. Confirmar la animación del rollId y esperar ROLL_AVAILABLE o la selección de coronación. Mostrar consecutiveDoubles y extraRollAvailable desde snapshot; el tercer premio no habilita cuarta tirada. Durante trivia mostrar trivia.deadline y congelar movimiento en movementRemainingMillis; MOVEMENT_TIMER_RESUMED aporta deadline actualizado. TURN_EXPIRED descarta dados pendientes; siempre aplicar el snapshot final del lote. No cambian rutas ni acciones.
+
+### Verificación ejecutada de esta revisión
+
+| Suite | Ejecutadas | Fallos | Errores | Omitidas |
+|---|---:|---:|---:|---:|
+| Game con Redis/Mongo/HTTP/WebSocket reales | 257 | 0 | 0 | 0 |
+| Auth con PostgreSQL aislado | 75 | 0 | 0 | 0 |
+| Gateway | 12 | 0 | 0 | 0 |
+| Eureka | 1 | 0 | 0 | 0 |
+| Lobby con EDA/SAGA reales | 13 | 0 | 0 | 0 |
+
+Total: **358 pruebas**. Además, **16 resultados de probes**: ocho de pares/trivia/reinicio pausado, dos de dos humanos e inicio desde Lobby y seis de bots/vencimientos/reinicio, todos con ambos mapas y dos JWT por Gateway. Se verificaron respuestas tardías, confirmaciones duplicadas/antiguas, pérdida de dados pendientes, conservación de movimientos y SOPLAR real. No se declara ejecución de Godot.
+
+La imagen final se reconstruyó y desplegó en el proyecto docker; coincide con la imagen utilizada por las pruebas aisladas. Los diez servicios de desarrollo permanecen activos y sus healthchecks disponibles están saludables. Se comprobó Redis PONG, Mongo ping=1, PostgreSQL aceptando conexiones, servicios registrados UP en Eureka, REST protegido por JWT y puente WS de desarrollo alcanzando Game y rechazando token inválido. Consumidores de Streams de desarrollo/aislado: pendientes=0 y lag=0. El entorno aislado se detiene después de las pruebas conservando volúmenes; desarrollo queda activo.
+
+Los primeros intentos no se cuentan como aprobados: hubo escenarios de pruebas que asumían reutilización de dados HOME, una carrera con el consumidor aislado de Lobby y dependencias del entorno del probe incompletas. Tras recrear contenedores se observaron 500/502/503 transitorios por propagación de descubrimiento; se esperó disponibilidad antes de repetir. Un probe detectó 1 ms de diferencia entre dos lecturas del reloj; se corrigió usando una sola muestra, con regresión específica y repetición satisfactoria de toda la suite y probes finales. No quedan verificaciones críticas fallidas.
+
+### Reproducción y límites
+
+Ejecutar suites con infraestructura aislada (16379/17017/55432), como se describe abajo. El nuevo probe exige PROOF_ISOLATED=1, PROOF_REDIS_URL del Redis aislado, dos refresh sintéticos y PROOF_LOBBY_TOKEN; PROOF_RESTART_PAUSED=1 añade recuperación real del proceso con trivias pausadas en ambos mapas. Las fixtures solo afectan IDs nuevos proof-pairs-*. Las credenciales no forman parte del repositorio. El consumidor de Lobby aislado debe detenerse durante su suite de recuperación SAGA y levantarse después: de otro modo puede resolver un caso antes de que la prueba inspeccione el estado intermedio.
+
+No se ejecutó Godot real; se usan clientes WebSocket simulados con JWT distintos. No se sobrescribió .env ni se eliminaron datos o volúmenes. Desarrollo usa el proyecto Compose existente docker; el otro proyecto de la máquina no se modifica.
+
+Commit funcional verificado: `749f457bcc81ebafdaaec350d21ce943b54150c4`. Los resultados actuales se registran en [pares-temporizadores-validation.json](pares-temporizadores-validation.json). La evidencia de la sección siguiente pertenece al despliegue anterior.
+
+---
+
+## Auditoría histórica del despliegue anterior
+
 Inspección inicial: main sincronizado con origin/main; único cambio previo: demo-rum/ sin seguimiento. No se incluye en commits. Esta matriz se escribe antes de implementar; «pendiente» no significa verificado.
 
 | Regla | Implementación actual inspeccionada | Comportamiento esperado | Estado inicial | Acción necesaria |

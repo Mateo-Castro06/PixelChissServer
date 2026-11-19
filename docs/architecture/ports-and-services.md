@@ -22,3 +22,5 @@ El Gateway descubre servicios en Eureka. Lobby llama a Auth y al endpoint privad
 Ver [diagrama y capas](../second-cut/architecture.md), [contratos HTTP](../MANUAL_INSTALACION.md#operaciones-rest) y [EDA/SAGA](../second-cut/start-saga.md). Los puertos publicados de desarrollo no constituyen una configuración de producción.
 
 Game utiliza la geometría `v4-100`, aislada en el dominio `Board`; el marcador persistido evita interpretar partidas antiguas con índices nuevos. HOME no ocupa posición física. No se modifican los puertos ni los contratos EDA/SAGA: véase [ADR-003](../decisions/ADR-003-board-layout-100.md).
+
+Las transiciones de liberación exclusiva por par, premio de coronación y pausa/reanudación del saldo de movimiento pertenecen a RuleEngine/TriviaRules. GameService conserva recibos y CAS; RedisGameRepository persiste el agregado y publica el lote atómicamente. Los campos de pausa y marcadores de liberación se agregan a Turn; no hay nuevo servicio ni cambios al protocolo de SAGA/Streams.

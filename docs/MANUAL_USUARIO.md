@@ -24,13 +24,22 @@ El tablero tiene **100 casillas físicas**: 68 comunes, en cuatro sectores de 17
 
 | Color / asiento | Sector | Salida compartida | Seguros | Corredor | Corona |
 |---|---|---:|---|---|---:|
-| Rojo / 0 | 0–16 | 0 | 0, 5, 12 | 68–75 | 75 |
-| Azul / 1 | 17–33 | 17 | 17, 22, 29 | 76–83 | 83 |
-| Verde / 2 | 34–50 | 34 | 34, 39, 46 | 84–91 | 91 |
-| Amarillo / 3 | 51–67 | 51 | 51, 56, 63 | 92–99 | 99 |
+| Rojo / 0 | 0–16 | 5 | 0, 5, 12 | 68–75 | 75 |
+| Azul / 1 | 17–33 | 22 | 17, 22, 29 | 76–83 | 83 |
+| Verde / 2 | 34–50 | 39 | 34, 39, 46 | 84–91 | 91 |
+| Amarillo / 3 | 51–67 | 56 | 51, 56, 63 | 92–99 | 99 |
 
-Salir exige dobles y consume un dado; el valor no añade avance a esa liberación. Cada salida es un seguro de capacidad dos: hay que despejar cupo para liberar más fichas. Un seguro protege de captura ordinaria; las dos cartas de captura de casilla pueden ignorarlo. Trivia se activa en 8, 25, 42, 59. La coronación exige valor exacto: faltando una casilla, 1 corona y 2 no permite mover; faltando dos, 2 corona y 3 no permite mover. Una coronada no vuelve a avanzar.
+Salir exige dobles y consume ambos dados; el valor no añade avance a esa liberación. Cada salida admite cuatro fichas; los seguros normales admiten dos. Un seguro protege de captura ordinaria; las dos cartas de captura de casilla pueden ignorarlo. Trivia se activa en 8, 25, 42, 59. La coronación exige valor exacto: faltando una casilla, 1 corona y 2 no permite mover; faltando dos, 2 corona y 3 no permite mover. Una coronada no vuelve a avanzar.
 
 El servidor representa cualquier regreso a casa como `{"status":"HOME","position":null,"progress":-1}`; no existe una casilla de cárcel. Si una partida anterior a esta geometría devuelve `UNSUPPORTED_BOARD_LAYOUT`, no puede reanudarse con el servidor nuevo: sus datos se conservan. Consulta al administrador para usar la versión anterior aislada o iniciar una sala nueva; no borres datos ni intentes reutilizar coordenadas. Véanse [fórmulas y acceso confirmado](../game-service/docs/BOARD.md) y [estado de validación](BOARD100_VALIDACION.md). La interfaz Godot real todavía requiere validación.
 
-El seguro de acceso de cada color coincide con su salida: rojo 0, azul 17, verde 34 y amarillo 51. La ficha debe volver a ese seguro tras la vuelta completa antes de entrar al corredor. Al finalizar, rojo sigue 67→0→68; azul 16→17→76; verde 33→34→84; amarillo 50→51→92. El seguro sigue siendo una sola casilla física. El cliente debe distinguir el progreso de salida (0) del regreso (68); la corona exige progreso exacto 76.
+El seguro de acceso de cada color coincide con su salida: rojo 5, azul 22, verde 39 y amarillo 56. La ficha debe volver a ese seguro tras la vuelta completa antes de entrar al corredor. Al finalizar, rojo sigue 4→5→68; azul 21→22→76; verde 38→39→84; amarillo 55→56→92. El seguro sigue siendo una sola casilla física. El cliente debe distinguir el progreso de salida (0) del regreso (68); la corona exige progreso exacto 76.
+
+
+### Actualización de pares y temporizadores
+
+Un par concede otra tirada una vez resuelto. Si quedan fichas HOME, libera obligatoriamente hasta 4 con (1,1), 3 con (6,6) o 2 con los demás pares; consume ambos dados incluso si libera menos. No se puede mover con esos dados. Sin HOME, admite suma o uso separado. Se conservan los tres intentos HOME y la captura especial de salida. Tres pares conceden coronación de una ficha propia activa previa (recorrido o corredor); el jugador conserva la selección CROWN_REQUEST y después termina el turno, sin cuarta tirada ni penalización por tres pares.
+
+Movimiento: 30 segundos tras confirmar cada animación (máximo 10 segundos para confirmar). Las liberaciones no abren reloj de movimiento. Trivia: 15 segundos independientes; pausa el saldo de movimiento y lo reanuda sin reiniciarlo. Sin respuesta se resuelve como incorrecta; se rechazan respuestas tardías. Al vencer movimiento se conservan jugadas aceptadas, se descartan dados pendientes, se evalúa SOPLAR solo por oportunidades reales omitidas y pasa turno sin lanzamiento extra pendiente.
+
+Godot debe reconocer HOME_RELEASE_RESOLVED, los dados consumidos y ROLL_AVAILABLE, además de MOVEMENT_TIMER_PAUSED/RESUMED y trivia.deadline. Reconectar mantiene contadores, saldo y plazos del servidor. Véase [contrato WebSocket](../game-service/docs/WEBSOCKET.md). No cambia el tablero v4-100, el catálogo ni las acciones existentes. Los campos nuevos son aditivos; tiradas/trivias ya persistidas antes de actualizar conservan su estado, y las nuevas reglas se aplican desde la siguiente activación, sin borrar partidas o volúmenes.

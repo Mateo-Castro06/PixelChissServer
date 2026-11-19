@@ -1,0 +1,297 @@
+{
+  "recordedAt": "2026-11-19T19:50:48.575703+00:00",
+  "baselineCommit": "b496033",
+  "layout": "v4-100",
+  "suites": {
+    "game-service": {
+      "tests": 257,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "auth-service": {
+      "tests": 75,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "api-gateway": {
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "eureka-server": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lobby-service": {
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "totalTests": 358,
+  "pairsTriviaAndPausedRestart": [
+    {
+      "map": "classic",
+      "twoJWTClients": true,
+      "releaseConsumesPair": true,
+      "extraRoll": true,
+      "pairMovementWithoutHome": true,
+      "thirdPairCrown": true,
+      "noFourthRoll": true,
+      "reconnectCounters": true
+    },
+    {
+      "map": "classic",
+      "triviaTimeout": false,
+      "independent15Seconds": true,
+      "movementPaused": true,
+      "remainingPreserved": true,
+      "reconnectTimers": true,
+      "twoJWTClients": true,
+      "lateRejected": false
+    },
+    {
+      "map": "science",
+      "twoJWTClients": true,
+      "releaseConsumesPair": true,
+      "extraRoll": true,
+      "pairMovementWithoutHome": true,
+      "thirdPairCrown": true,
+      "noFourthRoll": true,
+      "reconnectCounters": true
+    },
+    {
+      "map": "science",
+      "triviaTimeout": false,
+      "independent15Seconds": true,
+      "movementPaused": true,
+      "remainingPreserved": true,
+      "reconnectTimers": true,
+      "twoJWTClients": true,
+      "lateRejected": false
+    },
+    {
+      "map": "classic",
+      "triviaTimeout": true,
+      "independent15Seconds": true,
+      "movementPaused": true,
+      "remainingPreserved": true,
+      "reconnectTimers": true,
+      "twoJWTClients": true,
+      "lateRejected": true
+    },
+    {
+      "map": "science",
+      "triviaTimeout": true,
+      "independent15Seconds": true,
+      "movementPaused": true,
+      "remainingPreserved": true,
+      "reconnectTimers": true,
+      "twoJWTClients": true,
+      "lateRejected": true
+    },
+    {
+      "map": "classic",
+      "pausedTriviaProcessRestart": true,
+      "triviaDeadlinePreserved": true,
+      "movementResumeFromTriviaDeadline": true,
+      "twoJWTClients": true
+    },
+    {
+      "map": "science",
+      "pausedTriviaProcessRestart": true,
+      "triviaDeadlinePreserved": true,
+      "movementResumeFromTriviaDeadline": true,
+      "twoJWTClients": true
+    }
+  ],
+  "twoHumans": [
+    {
+      "map": "classic",
+      "humans": 2,
+      "seats": [
+        0,
+        2
+      ],
+      "outOfTurnRejected": true,
+      "bothRolledMovedAndReconnected": true,
+      "peerMoveObserved": true
+    },
+    {
+      "map": "science",
+      "humans": 2,
+      "seats": [
+        0,
+        2
+      ],
+      "outOfTurnRejected": true,
+      "bothRolledMovedAndReconnected": true,
+      "peerMoveObserved": true
+    }
+  ],
+  "timersBotsAndRestart": [
+    {
+      "map": "classic",
+      "botTriviaOverBothWebSockets": true,
+      "normalEvaluation": true
+    },
+    {
+      "map": "science",
+      "botTriviaOverBothWebSockets": true,
+      "normalEvaluation": true
+    },
+    {
+      "map": "classic",
+      "phase": "animation",
+      "restartRecovered": true,
+      "bothJWTClients": true,
+      "lateActionsRejected": true,
+      "acceptedMovePreserved": false,
+      "blowApplied": false,
+      "gameId": "proof-deadline-086639b092e24c8c85ce1ea1ebced213"
+    },
+    {
+      "map": "science",
+      "phase": "animation",
+      "restartRecovered": true,
+      "bothJWTClients": true,
+      "lateActionsRejected": true,
+      "acceptedMovePreserved": false,
+      "blowApplied": false,
+      "gameId": "proof-deadline-50b69a5277da4c3f85c397de23143444"
+    },
+    {
+      "map": "classic",
+      "phase": "movement",
+      "restartRecovered": true,
+      "bothJWTClients": true,
+      "lateActionsRejected": true,
+      "acceptedMovePreserved": true,
+      "blowApplied": true,
+      "gameId": "proof-deadline-cbd9ab75cf5640bea38f77654662309c"
+    },
+    {
+      "map": "science",
+      "phase": "movement",
+      "restartRecovered": true,
+      "bothJWTClients": true,
+      "lateActionsRejected": true,
+      "acceptedMovePreserved": true,
+      "blowApplied": true,
+      "gameId": "proof-deadline-cf895f4d1eca4c6e9f122d591af2a394"
+    }
+  ],
+  "developmentGateway": {
+    "developmentHealth": "UP",
+    "eurekaRegistered": [
+      "API-GATEWAY",
+      "AUTH-SERVICE",
+      "GAME-SERVICE",
+      "LOBBY-SERVICE"
+    ],
+    "gatewayRestJwtRequired": true,
+    "developmentWebSocketReachesGame": true,
+    "invalidJwtRejected": true
+  },
+  "docker": {
+    "project": "docker",
+    "imageId": "sha256:6a895762b7f7dd9e7275897dd5379bce99c02631310b6f091b613c91afbf656b",
+    "containers": [
+      {
+        "service": "grafana",
+        "state": "running",
+        "health": ""
+      },
+      {
+        "service": "prometheus",
+        "state": "running",
+        "health": ""
+      },
+      {
+        "service": "auth-service",
+        "state": "running",
+        "health": "healthy"
+      },
+      {
+        "service": "eureka-server",
+        "state": "running",
+        "health": ""
+      },
+      {
+        "service": "game-service",
+        "state": "running",
+        "health": "healthy"
+      },
+      {
+        "service": "api-gateway",
+        "state": "running",
+        "health": "healthy"
+      },
+      {
+        "service": "lobby-service",
+        "state": "running",
+        "health": "healthy"
+      },
+      {
+        "service": "mongodb",
+        "state": "running",
+        "health": "healthy"
+      },
+      {
+        "service": "postgres",
+        "state": "running",
+        "health": "healthy"
+      },
+      {
+        "service": "redis",
+        "state": "running",
+        "health": "healthy"
+      }
+    ],
+    "redis": "PONG",
+    "mongoPing": 1,
+    "postgres": "accepting connections",
+    "isolatedProject": "pixelchiss-definitive",
+    "volumesPreserved": true,
+    "isolatedStoppedWithVolumesPreserved": true
+  },
+  "eda": {
+    "development": [
+      {
+        "name": "lobby-game-initialization-v1",
+        "consumers": 9,
+        "pending": 0,
+        "last-delivered-id": "0-0",
+        "entries-read": null,
+        "lag": 0
+      }
+    ],
+    "isolated": [
+      {
+        "name": "lobby-game-initialization-v1",
+        "consumers": 4,
+        "pending": 0,
+        "last-delivered-id": "1795117789204-0",
+        "entries-read": 93,
+        "lag": 0
+      }
+    ]
+  },
+  "godotRealExecuted": false,
+  "catalogSha256": "6112bf1778422449b81f92125dd0f592ed5951ee85c3e7e5c233491ba19cf7cf",
+  "notes": [
+    "Initial movement scenarios expected reuse of HOME dice; adapted to movement without HOME.",
+    "First Lobby integration attempt raced its running isolated consumer; all 13 passed after stopping that consumer during the suite.",
+    "Gateway may return transient 500/502/503 while discovery caches refresh after container recreation; final probes wait for readiness.",
+    "A real timer probe exposed a one-millisecond discrepancy; one clock sample per transition and a ticking-clock regression test fix exact durations.",
+    "No Godot executable was run. Legacy in-flight rolls/challenges keep persisted state; new behavior starts at the next activation.",
+    "No volumes, games or unrelated demo-rum files were removed. Development .env was not overwritten."
+  ],
+  "functionalCommit": "749f457bcc81ebafdaaec350d21ce943b54150c4"
+}

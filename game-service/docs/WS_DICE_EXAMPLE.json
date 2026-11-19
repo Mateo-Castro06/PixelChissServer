@@ -147,7 +147,12 @@
       "consumed": [
         false,
         false
-      ]
+      ],
+      "homeRelease": false,
+      "extraRollAvailable": false,
+      "thirdDoubleReward": false,
+      "movementRemainingMillis": null,
+      "pausedMovementRollId": null
     },
     "trivia": null,
     "card": null

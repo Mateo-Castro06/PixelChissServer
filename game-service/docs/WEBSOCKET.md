@@ -53,7 +53,7 @@ Mover (ejemplo orientativo sujeto a origen/recorrido reales):
 }
 ```
 
-HOME se libera automáticamente al obtener par, mediante PIECE_RELEASED con from=null; no requiere MOVE_REQUEST. El servidor recalcula, nunca acepta posición por el solo envío. `dieIndex` identifica 0 o 1, o 2 para consumir la suma de ambos; incluso dados iguales se consumen por separado. Puede usar ambos en cualquier orden, con nueva acción/versión por movimiento. `legalMoves` devuelve pieceId, dieIndex, dieValue, from, to, progress, capture, safe, crown y release.
+HOME se libera automáticamente al obtener par, mediante PIECE_RELEASED con from=null; no requiere MOVE_REQUEST. El servidor recalcula, nunca acepta posición por el solo envío. `dieIndex` identifica 0 o 1, o 2 para consumir la suma de ambos; si no hay HOME, incluso dados iguales pueden consumirse por separado. Si el par libera HOME, ambos están consumidos y legalMoves queda vacío. Puede usar ambos en cualquier orden, con nueva acción/versión por movimiento. `legalMoves` devuelve pieceId, dieIndex, dieValue, from, to, progress, capture, safe, crown y release.
 
 Responder trivia (índice base0):
 
@@ -196,7 +196,7 @@ El lote incluye el siguiente turno y el snapshot completo definitivo:
 {"type":"TURN_CHANGED","data":{"playerId":"84","turnNumber":4,"deadline":1800000093000}}
 ```
 
-Los movimientos aceptados permanecen; los dados descartados no se reutilizan y las fichas sin mover no avanzan automáticamente. deadline del siguiente turno, antes de lanzar, pertenece a la espera de lanzamiento de 60 segundos: no es el plazo de movimiento. Si no se confirma animación, TURN_EXPIRED.reason="ANIMATION_TIMEOUT", se descartan dados y se avanza sin iniciar movimiento ni penalizar oportunidades inaccesibles de esa tirada. Los plazos de trivia/carta no pueden extender el turno.
+Los movimientos aceptados permanecen; los dados descartados no se reutilizan y las fichas sin mover no avanzan automáticamente. deadline del siguiente turno, antes de lanzar, pertenece a la espera de lanzamiento de 60 segundos: no es el plazo de movimiento. Si no se confirma animación, TURN_EXPIRED.reason="ANIMATION_TIMEOUT", se descartan dados y se avanza sin iniciar movimiento ni penalizar oportunidades inaccesibles de esa tirada. La trivia pausa el saldo de movimiento y tiene 15 segundos propios; las cartas de selección conservan su límite por el plazo de movimiento reanudado.
 
 Eventos adicionales:
 
@@ -224,8 +224,42 @@ El servidor publica:
 {"type":"PIECE_CROWNED","data":{"pieceId":"seat-0-piece-0","reason":"THREE_DOUBLES"}}
 ```
 
-No se acepta HOME, CROWNED, rival ni una ficha recién liberada en esa tercera tirada. Tras elegir se reevalúan victoria y acciones restantes. Bots confirman internamente sin depender de Godot. La trivia del bot usa p nueva por pregunta y responde por TRIVIA_ANSWER normal; no existe un mensaje de respuesta automáticamente correcta.
+No se acepta HOME, CROWNED, rival ni una ficha recién liberada en esa tercera tirada. Tras elegir se reevalúa victoria y se cierra el turno; no hay movimientos con ese tercer par ni cuarta tirada. Si no existe ficha elegible, el turno se cierra al confirmar la animación. No hay penalización por tres pares. Bots confirman internamente sin depender de Godot. La trivia del bot usa p nueva por pregunta y responde por TRIVIA_ANSWER normal; no existe un mensaje de respuesta automáticamente correcta.
 
 Errores nuevos: ANIMATION_PENDING, STALE_ROLL, CROWN_CHOICE_REQUIRED, NO_CROWN_CHOICE, INVALID_CROWN_PIECE y HOME_RELEASE_AUTOMATIC. El layout v4-100 rechaza estados antiguos con UNSUPPORTED_BOARD_LAYOUT; no borra ni migra partidas.
 
 El [ejemplo completo de GAME_UPDATED con todos los campos del snapshot](WS_DICE_EXAMPLE.json) muestra dos jugadores, sus ocho fichas y una tirada pendiente de animación. Los valores son ilustrativos, no credenciales ni evidencia de una sesión real. Se puede usar como fixture de deserialización de Godot.
+
+
+## Liberación prioritaria y trivia independiente (actualización de pares)
+
+`turn.homeRelease=true` identifica una tirada dedicada exclusivamente a HOME. El lote de ROLL_DICE contiene DICE_ROLLED, PIECE_RELEASED por ficha, capturas especiales si proceden y:
+
+```json
+{"type":"HOME_RELEASE_RESOLVED","data":{"rollId":"roll-home-1","pieceIds":["seat-0-piece-0","seat-0-piece-1"],"consumed":[true,true]}}
+```
+
+Este evento resume una transición atómica: no se envía una acción para cada ficha. Los límites son 4 para (1,1), 3 para (6,6), 2 para los demás pares, siempre limitados por HOME disponible. No hay sobrantes. Godot anima la tirada y confirma su rollId con DICE_ANIMATION_COMPLETED dentro de 10 segundos. La confirmación de liberación NO emite MOVEMENT_TIMER_STARTED: normalmente produce ROLL_AVAILABLE, `rolled=false`, `extraRollAvailable=true`, dados consumidos y legalMoves vacío. No ofrecer MOVE_REQUEST ni END_TURN antes del nuevo lanzamiento. Cada nueva tirada reemplaza rollId y reinicia sus marcadores; reintentar una confirmación anterior no habilita movimientos. Con tercer par, mostrar la selección de corona correspondiente.
+
+`turn.consecutiveDoubles` conserva 1/2 entre tiradas, llega a 3 en el premio y se reinicia con no par o cierre. `turn.homeAttempts` es independiente. `turn.thirdDoubleReward` identifica el premio pendiente; `crownEligible` conserva las activas previas. El snapshot es la autoridad para reconexión y deduplicación por versión.
+
+Al caer en trivia con movimiento activo, el mismo lote contiene PIECE_MOVED, MOVEMENT_TIMER_PAUSED y TRIVIA_QUESTION. Ejemplos de eventos:
+
+```json
+{"type":"MOVEMENT_TIMER_PAUSED","data":{"rollId":"roll-move-2","remainingMillis":18000}}
+{"type":"TRIVIA_QUESTION","data":{"question":{"id":"challenge-1","questionId":"server-question","playerId":"42","prompt":"Pregunta","options":["A","B","C"],"deadline":1800000027000}}}
+```
+
+Mostrar **15 segundos** desde la activación usando `trivia.deadline`, sin descontar movimiento. Durante pausa `turn.movementRemainingMillis` y `pausedMovementRollId` están persistidos; `turn.deadline` conserva su valor previo y no debe mostrarse como reloj activo. TRIVIA_ANSWER usa trivia.id como challengeId. No enviar respuestas tardías; el servidor las rechaza aunque no haya ejecutado todavía el scheduler.
+
+Respuesta o vencimiento producen TRIVIA_RESOLVED (`correct=false` si no responde), las consecuencias normales y:
+
+```json
+{"type":"MOVEMENT_TIMER_RESUMED","data":{"rollId":"roll-move-2","remainingMillis":18000,"deadline":1800000040000}}
+```
+
+Usar el nuevo deadline, sin restaurar 30 segundos. Los campos de pausa vuelven a null. Si terminó el turno, no reactivar un reloj anterior: aplicar siempre el snapshot final del lote. Reconectar no reinicia ninguno de los plazos. Un timeout posterior descarta solo dados pendientes, conserva movimientos y pasa turno sin conceder lanzamiento extra por par sin resolver. Bots usan las mismas reglas y no esperan animación visual.
+
+No se cambian acciones ni rutas. Los nuevos campos/eventos son aditivos; el cliente debe tolerarlos. Las pruebas del servidor usan clientes WebSocket simulados, no acreditan ejecución del cliente Godot real.
+
+Si el scheduler o proceso vuelve después del vencimiento de trivia, el saldo de movimiento se reanuda desde trivia.deadline, no desde la hora tardía del procesamiento. Si también se agotó ese saldo, el mismo commit resuelve trivia y cierra el turno. Un reinicio no regala segundos adicionales.
