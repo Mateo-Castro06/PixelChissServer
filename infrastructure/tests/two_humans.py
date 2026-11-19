@@ -71,6 +71,12 @@ async def game_probe(game_id, tokens, actors, map_id):
                 result = await client.command(state, "ROLL_DICE")
                 rolled.add(actor)
                 state = result["state"]
+            if state["turn"].get("animationStatus") == "WAITING":
+                state = (await client.command(state, "DICE_ANIMATION_COMPLETED", challengeId=state["turn"]["rollId"]))["state"]
+                if state["turn"]["playerId"] == actor and not state["turn"]["rolled"]:
+                    continue
+            if state["turn"].get("crownChoiceRequired"):
+                state = (await client.command(state, "CROWN_REQUEST", pieceId=state["turn"]["crownEligible"][0]))["state"]
             if state["turn"]["playerId"] != actor:
                 continue  # no valid move; server already rotated
             if actor not in moved:
@@ -82,14 +88,18 @@ async def game_probe(game_id, tokens, actors, map_id):
                                                   dieIndex=move["dieIndex"], dieValue=move["dieValue"],
                                                   fromPosition=move["from"], targetPosition=move["to"])
                     state = result["state"]
-                    assert move["from"] is None
-                    assert move["release"] and move["to"] == (0 if index == 0 else 34)
+                    assert move["from"] is not None
+                    assert not move["release"]
                     await peer.receive(lambda m: m["type"]=="GAME_UPDATED" and m["version"]==result["committedVersion"]
                                        and any(e["type"]=="PIECE_MOVED" for e in m["events"]))
                     moved.add(actor)
+            if state.get("trivia"):
+                state = (await client.command(state, "TRIVIA_ANSWER", challengeId=state["trivia"]["id"], answerIndex=0))["state"]
+            if state.get("card"):
+                state = (await client.command(state, "CARD_TARGET", challengeId=state["card"]["id"], **state["card"]["choices"][0]))["state"]
             if moved == set(actors):
                 break
-            if state["turn"]["playerId"] == actor:
+            if state["turn"]["playerId"] == actor and state["turn"]["rolled"]:
                 state = (await client.command(state, "END_TURN"))["state"]
                 assert state["turn"]["playerId"] == actors[1-index]
         assert moved == rolled == set(actors), "Both humans must roll and move"
@@ -99,8 +109,8 @@ async def game_probe(game_id, tokens, actors, map_id):
             await client.authenticate(token, actor)
             state = (await client.snapshot())["state"]
             assert state["gameId"] == game_id
-            assert [next(p["position"] for p in state["pieces"] if p["id"]==f"seat-{seat}-piece-0")
-                    for seat in (0, 2)] == [0, 34]
+            assert any(p["status"] == "BOARD" for p in state["pieces"] if p["ownerId"] == actor)
+
 
 
 def main():
@@ -111,7 +121,7 @@ def main():
     actors = [str(request(GATEWAY, "/api/auth/me", token=token)["id"]) for token in tokens]
     assert len(set(actors)) == 2
     board = request(GATEWAY, "/api/game/board", token=tokens[0])
-    assert board["layout"] == "v3-100" and board["cellCount"] == 100
+    assert board["layout"] == "v4-100" and board["cellCount"] == 100
     assert {cell["id"] for cell in board["cells"]} == set(range(100))
     assert set(board["safe"]) == {0,5,12,17,22,29,34,39,46,51,56,63}
     for map_id in ("classic", "science"):

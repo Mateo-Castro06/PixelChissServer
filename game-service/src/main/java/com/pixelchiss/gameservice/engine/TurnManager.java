@@ -10,14 +10,12 @@ import static com.pixelchiss.gameservice.engine.RuleEngine.Event.of;
 /** Owns turn deadlines, clockwise advancement and per-owner effect duration. */
 public class TurnManager {
     private final Clock clock;
-    private final long turnMillis;
 
     public TurnManager(Clock clock, long turnMillis) {
         if (turnMillis <= 0) {
             throw new IllegalArgumentException("Turn duration must be positive");
         }
         this.clock = clock;
-        this.turnMillis = turnMillis;
     }
 
     public void start(GameState game, String actor) {
@@ -27,7 +25,7 @@ public class TurnManager {
         var turn = new Turn();
         turn.number = number;
         turn.playerId = actor;
-        turn.deadline = clock.millis() + turnMillis;
+        turn.deadline = clock.millis() + 60_000;
         turn.maxDieValue = DiceRules.maximumValue(player);
         turn.diceSelectionRequired = DiceRules.selectionEffect(player).isPresent();
         game.turn = turn;
@@ -54,6 +52,14 @@ public class TurnManager {
         if (game.turn.diceSelectionRequired) {
             events.add(of("DICE_SELECTION_REQUIRED", "playerId", next, "maxDieValue", game.turn.maxDieValue));
         }
+    }
+
+    public void repeatRoll(GameState game, List<RuleEngine.Event> events) {
+        Player player = game.player(game.turn.playerId);
+        expireOwnEffects(player, events);
+        player.turnsStarted++;
+        game.turn.maxDieValue = DiceRules.maximumValue(player);
+        game.turn.diceSelectionRequired = DiceRules.selectionEffect(player).isPresent();
     }
 
     private void expireOwnEffects(Player player, List<RuleEngine.Event> events) {

@@ -7,9 +7,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-/** Layout v3: 68 common cells, return to the start safe, then eight private cells. HOME is a state. */
+/** Layout v4: 68 common cells, return to the start safe, then eight private cells. HOME is a state. */
 public class Board {
-    public static final String LAYOUT = "v3-100";
+    public static final String LAYOUT = "v4-100";
     public static final int CELL_COUNT = 100;
     public static final int SEAT_COUNT = 4;
     public static final int PIECES_PER_PLAYER = 4;
@@ -23,6 +23,7 @@ public class Board {
     public static final int FINISH = FIRST_FINISH_PROGRESS + FINISH_CELLS_PER_PLAYER - 1;
     public static final Set<Integer> SAFE = Set.of(0, 5, 12, 17, 22, 29, 34, 39, 46, 51, 56, 63);
     // Preserve one trivia cell per sector, at the original relative offset eight.
+    public static final Set<Integer> STARTS = Set.of(5, 22, 39, 56);
     public static final Set<Integer> TRIVIA = Set.of(8, 25, 42, 59);
 
     public int position(int seat, int pieceNumber, int progress) {
@@ -31,7 +32,7 @@ public class Board {
             throw new IllegalArgumentException("Invalid route coordinate");
         }
         if (progress <= LAST_COMMON_PROGRESS) {
-            return (seat * SECTOR_CELL_COUNT + progress) % TRACK_CELL_COUNT;
+            return (seat * SECTOR_CELL_COUNT + 5 + progress) % TRACK_CELL_COUNT;
         }
         return FINISH_START + seat * FINISH_CELLS_PER_PLAYER + progress - FIRST_FINISH_PROGRESS;
     }
@@ -44,7 +45,7 @@ public class Board {
         if (isCrown(position)) {
             return PIECES_PER_PLAYER;
         }
-        return SAFE.contains(position) ? 2 : 1;
+        return STARTS.contains(position) ? 4 : SAFE.contains(position) ? 2 : position >= FINISH_START ? 1 : 4;
     }
 
     private boolean isCrown(int position) {

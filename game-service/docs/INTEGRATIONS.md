@@ -85,3 +85,9 @@ La comprobación anterior de `firstPlayerId` se conserva como evidencia históri
 [VALIDATION.md](VALIDATION.md). La regla definitiva la sustituye: creador original
 más asientos explícitos. La validación de esta corrección y la refactorización se
 documenta en [CLEAN_CODE.md](CLEAN_CODE.md).
+
+## Compatibilidad de reglas v4-100
+
+REST conserva rutas y autorización. `/api/game/board` devuelve layout v4-100 con salidas 5/22/39/56; las capacidades están en cells y las rutas se indexan por progreso. `/api/game/games/{gameId}` incluye el estado persistido de tirada y plazos en turn. Las geometrías anteriores devuelven HTTP 409 UNSUPPORTED_BOARD_LAYOUT y permanecen almacenadas.
+
+El cliente confirma animación por WebSocket, no por el endpoint interno de Lobby: [mensajes completos](WEBSOCKET.md#confirmación-de-animación-y-relojes-v4-100). GameInitialized, esquema 1 de Streams, y la SAGA de inicio no cambian. Las nuevas transiciones de juego viajan por GAME_UPDATED y conservan versión CAS y snapshot atómico.

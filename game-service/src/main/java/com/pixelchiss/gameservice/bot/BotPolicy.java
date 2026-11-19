@@ -25,16 +25,20 @@ public class BotPolicy {
     private final RuleEngine rules;
     private final GameCatalog catalog;
     private final DoubleSupplier random;
-    private final double triviaAccuracy;
 
+
+    /** Legacy constructor retained for callers; accuracy is now sampled independently per question. */
     public BotPolicy(RuleEngine rules, GameCatalog catalog, DoubleSupplier random, double triviaAccuracy) {
-        if (triviaAccuracy < 0 || triviaAccuracy > 1) {
+        this(rules, catalog, random);
+        if (!Double.isFinite(triviaAccuracy) || triviaAccuracy < 0 || triviaAccuracy > 1)
             throw new IllegalArgumentException("Trivia accuracy must be a probability");
-        }
+    }
+
+    public BotPolicy(RuleEngine rules, GameCatalog catalog, DoubleSupplier random) {
         this.rules = rules;
         this.catalog = catalog;
         this.random = random;
-        this.triviaAccuracy = triviaAccuracy;
+
     }
 
     public GameAction next(GameState game) {
@@ -44,13 +48,20 @@ public class BotPolicy {
         }
         if (game.trivia != null) return answerTrivia(game);
         if (game.card != null) return selectCardTarget(game);
+        if (game.turn.crownChoiceRequired) {
+            var piece = game.pieces.stream().filter(p -> p.ownerId.equals(player.id) && p.status.equals("BOARD") && game.turn.crownEligible.contains(p.id))
+                    .max(Comparator.comparingInt(p -> p.progress)).orElseThrow();
+            return new GameAction("CROWN_REQUEST", game.id, requestId(), game.version,
+                    piece.id, null, null, null, null, null, null, null, null, null);
+        }
         if (!game.turn.rolled) return roll(game);
         var moves = rules.legalMoves(game, player.id);
         if (moves.isEmpty()) {
             return new GameAction("END_TURN", game.id, requestId(), game.version,
                     null, null, null, null, null, null, null, null, null, null);
         }
-        var selected = weightedMove(game, moves);
+        var captures = moves.stream().filter(RuleEngine.Move::capture).toList();
+        var selected = weightedMove(game, !game.turn.captureSatisfied && !captures.isEmpty() ? captures : moves);
         return new GameAction("MOVE_REQUEST", game.id, requestId(), game.version,
                 selected.pieceId(), selected.dieIndex(), selected.dieValue(), selected.from(), selected.to(),
                 null, null, null, null, null);
@@ -58,10 +69,8 @@ public class BotPolicy {
 
     private GameAction answerTrivia(GameState game) {
         var question = catalog.question(game.trivia.questionId);
-        int answer = question.correctIndex();
-        if (random.getAsDouble() >= triviaAccuracy) {
-            answer = (answer + 1 + (int) (random.getAsDouble() * (question.options().size() - 1))) % question.options().size();
-        }
+        double probability = random.getAsDouble();
+        int answer = TriviaSelection.select(question.options().size(), question.correctIndex(), probability, random);
         return new GameAction("TRIVIA_ANSWER", game.id, requestId(), game.version,
                 null, null, null, null, null, null, game.trivia.id, answer, null, null);
     }

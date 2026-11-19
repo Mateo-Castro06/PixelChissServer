@@ -25,13 +25,22 @@ public class RuleEngine {
     protected final Clock clock;
     private final DiceRules diceRules;
     private final TurnManager turns;
+    private final long movementMillis;
+    private long animationMillis = 10_000;
 
     public RuleEngine(Board board, DiceSource dice, Clock clock, long turnMillis) {
         this.board = board;
         this.dice = dice;
         this.clock = clock;
+        this.movementMillis = turnMillis;
         diceRules = new DiceRules(dice);
         turns = new TurnManager(clock, turnMillis);
+    }
+
+    public RuleEngine animationWaitMillis(long millis) {
+        require(millis > 0, "INVALID_TIMEOUT", "Animation wait must be positive");
+        animationMillis = millis;
+        return this;
     }
 
     public record Event(String type, Map<String, Object> data) {
@@ -119,10 +128,13 @@ public class RuleEngine {
         require(game.trivia == null && game.card == null, "PENDING_CHALLENGE", "Resolve current challenge first");
         var events = new ArrayList<Event>();
         switch (action.type()) {
+            case "DICE_ANIMATION_COMPLETED" -> confirmAnimation(game, action, events);
+            case "CROWN_REQUEST" -> chooseCrown(game, actor, action, events);
             case "ROLL_DICE" -> roll(game, actor, action, events);
             case "MOVE_REQUEST" -> move(game, actor, action, events);
             case "END_TURN" -> {
                 require(game.turn.rolled, "ROLL_REQUIRED", "Roll before ending turn");
+                require(!"WAITING".equals(game.turn.animationStatus), "ANIMATION_PENDING", "Confirm animation first");
                 finishTurn(game, false, events);
             }
             default -> throw new GameException("UNKNOWN_ACTION", "Unsupported action type");
@@ -132,7 +144,33 @@ public class RuleEngine {
 
     protected void roll(GameState game, String actor, GameAction action, List<Event> events) {
         diceRules.roll(game, actor, action.chosenDice(), events);
+        var turn = game.turn;
+        turn.consumed = new boolean[2];
+        turn.rollId = java.util.UUID.randomUUID().toString();
+        turn.rollPublishedAt = clock.millis();
+        turn.movementStartedAt = null;
+        turn.animationDeadline = clock.millis() + animationMillis;
+        turn.animationStatus = game.player(actor).bot ? "COMPLETED" : "WAITING";
+        turn.deadline = game.player(actor).bot ? clock.millis() + movementMillis : turn.animationDeadline;
+        if (game.player(actor).bot) turn.movementStartedAt = clock.millis();
+        turn.consecutiveDoubles = turn.doubles ? turn.consecutiveDoubles + 1 : 0;
+        boolean onlyHome = game.pieces.stream().filter(p -> p.ownerId.equals(actor))
+                .noneMatch(p -> p.status.equals("BOARD"));
+        if (onlyHome && !turn.doubles) turn.homeAttempts++;
+        turn.crownEligible.clear();
+        game.pieces.stream().filter(p -> p.ownerId.equals(actor) && p.status.equals("BOARD"))
+                .forEach(p -> turn.crownEligible.add(p.id));
+        if (turn.doubles) releaseHome(game, actor, events);
         afterRoll(game, events);
+        turn.crownEligible.removeIf(id -> !"BOARD".equals(game.piece(id).status));
+        if (turn.consecutiveDoubles == 3) {
+            turn.consecutiveDoubles = 0;
+            turn.crownChoiceRequired = !turn.crownEligible.isEmpty();
+            if (turn.crownChoiceRequired) events.add(event("CROWN_CHOICE_REQUIRED", "playerId", actor));
+        }
+        events.add(event("DICE_ANIMATION_REQUIRED", "rollId", turn.rollId, "turnNumber", turn.number,
+                "animationDeadline", turn.animationDeadline, "required", !game.player(actor).bot));
+        if (game.player(actor).bot) rememberCaptures(game);
         continueTurn(game, events);
     }
 
@@ -146,8 +184,7 @@ public class RuleEngine {
         boolean release = piece.status.equals("HOME");
         int progress;
         if (release) {
-            require(game.turn.doubles, "DOUBLES_REQUIRED", "Doubles required to leave home");
-            progress = 0;
+            throw new GameException("HOME_RELEASE_AUTOMATIC", "Home release is resolved atomically on doubles");
         } else {
             progress = piece.progress + dieValue;
         }
@@ -158,7 +195,7 @@ public class RuleEngine {
         if (!crown) {
             validateOccupancy(occupants, actor, target);
         }
-        boolean capture = !crown && !board.protectedCell(target) && !occupants.isEmpty();
+        boolean capture = !crown && !board.protectedCell(target) && occupants.stream().anyMatch(p -> !p.ownerId.equals(actor));
         return new Move(piece.id, dieIndex, dieValue, piece.position, target, progress,
                 capture, Board.SAFE.contains(target), crown, release);
     }
@@ -166,9 +203,6 @@ public class RuleEngine {
     private void validateOccupancy(List<Piece> occupants, String actor, int target) {
         if (board.protectedCell(target)) {
             require(occupants.size() < board.capacity(target), "CELL_FULL", "Protected cell capacity exceeded");
-        } else {
-            require(occupants.stream().noneMatch(piece -> piece.ownerId.equals(actor)),
-                    "CELL_FULL", "Own piece blocks destination");
         }
     }
 
@@ -178,7 +212,8 @@ public class RuleEngine {
 
     public List<Move> legalMoves(GameState game, String actor) {
         if (!game.status.equals("ACTIVE") || !game.turn.playerId.equals(actor) || !game.turn.rolled
-                || game.trivia != null || game.card != null) {
+                || game.trivia != null || game.card != null || "WAITING".equals(game.turn.animationStatus)
+                || game.turn.crownChoiceRequired || clock.millis() >= game.turn.deadline) {
             return List.of();
         }
         var moves = new ArrayList<Move>();
@@ -186,7 +221,7 @@ public class RuleEngine {
             if (!piece.ownerId.equals(actor)) {
                 continue;
             }
-            for (int dieIndex = 0; dieIndex < DiceRules.DICE_COUNT; dieIndex++) {
+            for (int dieIndex = 0; dieIndex <= DiceRules.DICE_COUNT; dieIndex++) {
                 try {
                     moves.add(calculate(game, actor, piece.id, dieIndex));
                 } catch (GameException ignored) {
@@ -198,6 +233,9 @@ public class RuleEngine {
     }
 
     protected void move(GameState game, String actor, GameAction action, List<Event> events) {
+        require(!"WAITING".equals(game.turn.animationStatus), "ANIMATION_PENDING", "Confirm animation first");
+        require(!game.turn.crownChoiceRequired, "CROWN_CHOICE_REQUIRED", "Choose active piece first");
+        rememberCaptures(game);
         require(action.dieIndex() != null && action.dieValue() != null && action.targetPosition() != null,
                 "INVALID_ACTION", "Die index, value and destination required");
         Move movement = calculate(game, actor, action.pieceId(), action.dieIndex());
@@ -223,7 +261,9 @@ public class RuleEngine {
         if (!movement.capture()) {
             return;
         }
+        game.turn.captureSatisfied = true;
         for (Piece victim : occupants(game, movement.to(), movement.pieceId())) {
+            if (victim.ownerId.equals(game.turn.playerId)) continue;
             victim.home();
             events.add(event("PIECE_CAPTURED", "pieceId", victim.id, "byPieceId", movement.pieceId()));
         }
@@ -249,9 +289,20 @@ public class RuleEngine {
         if (!game.status.equals("ACTIVE") || !game.turn.rolled || game.trivia != null || game.card != null) {
             return;
         }
+        if ("WAITING".equals(game.turn.animationStatus) || game.turn.crownChoiceRequired) return;
+        rememberCaptures(game);
         if (legalMoves(game, game.turn.playerId).isEmpty()) {
+            boolean retryHome = !game.turn.doubles && game.turn.homeAttempts > 0 && game.turn.homeAttempts < 3
+                    && game.pieces.stream().noneMatch(p -> p.ownerId.equals(game.turn.playerId) && p.status.equals("BOARD"));
             Arrays.fill(game.turn.consumed, true);
-            finishTurn(game, game.turn.doubles, events);
+            if (game.turn.doubles || retryHome) {
+                if (game.turn.doubles) turns.repeatRoll(game, events);
+                game.turn.rolled = false;
+                game.turn.animationStatus = "NONE";
+                game.turn.movementStartedAt = null;
+                game.turn.deadline = clock.millis() + 60_000;
+                events.add(event("ROLL_AVAILABLE", "playerId", game.turn.playerId));
+            } else finishTurn(game, false, events);
         }
     }
 
@@ -260,6 +311,9 @@ public class RuleEngine {
     }
 
     protected void finishTurn(GameState game, boolean extraTurn, List<Event> events) {
+        if (game.turn.movementStartedAt != null) rememberCaptures(game);
+        resolveBlow(game, events);
+        Arrays.fill(game.turn.consumed, true);
         turns.finish(game, extraTurn, events);
     }
 
@@ -268,9 +322,91 @@ public class RuleEngine {
             return List.of();
         }
         var events = new ArrayList<Event>();
-        events.add(event("TURN_EXPIRED", "playerId", game.turn.playerId));
+        if (game.card != null || game.trivia != null) events.add(event("CARD_DISCARDED", "reason", "TURN_TIMEOUT"));
+        var discarded = new ArrayList<Integer>();
+        for (int i = 0; i < game.turn.dice.length; i++) if (!game.turn.consumed[i]) discarded.add(i);
+        if ("WAITING".equals(game.turn.animationStatus)) game.turn.animationStatus = "EXPIRED";
+        else if (game.turn.movementStartedAt != null) rememberCaptures(game);
+        events.add(event("TURN_EXPIRED", "playerId", game.turn.playerId, "rollId", game.turn.rollId,
+                "reason", "EXPIRED".equals(game.turn.animationStatus) ? "ANIMATION_TIMEOUT" : "MOVEMENT_TIMEOUT",
+                "discardedDice", discarded));
         finishTurn(game, false, events);
         return events;
+    }
+
+
+    private void confirmAnimation(GameState game, GameAction action, List<Event> events) {
+        require(Objects.equals(game.turn.rollId, action.challengeId()) && game.turn.rollId != null,
+                "STALE_ROLL", "Confirmation must identify the current roll in challengeId");
+        if ("COMPLETED".equals(game.turn.animationStatus)) return;
+        require("WAITING".equals(game.turn.animationStatus), "STALE_ROLL", "No animation pending");
+        game.turn.animationStatus = "COMPLETED";
+        game.turn.movementStartedAt = clock.millis();
+        game.turn.deadline = clock.millis() + movementMillis;
+        events.add(event("MOVEMENT_TIMER_STARTED", "rollId", game.turn.rollId,
+                "startedAt", game.turn.movementStartedAt, "deadline", game.turn.deadline));
+        rememberCaptures(game);
+        continueTurn(game, events);
+    }
+
+    private void releaseHome(GameState game, String actor, List<Event> events) {
+        int limit = game.turn.dice[0] == 1 ? 4 : game.turn.dice[0] == 6 ? 3 : 2;
+        int start = board.position(game.player(actor).seat, 0, 0);
+        var own = occupants(game, start, null).stream().filter(p -> p.ownerId.equals(actor)).count();
+        var home = game.pieces.stream().filter(p -> p.ownerId.equals(actor) && p.status.equals("HOME"))
+                .limit(Math.min(limit, Math.max(0, 4 - own))).toList();
+        if (home.isEmpty()) return;
+        for (var rival : occupants(game, start, null)) if (!rival.ownerId.equals(actor)) {
+            rival.home();
+            events.add(event("PIECE_CAPTURED", "pieceId", rival.id, "reason", "HOME_RELEASE"));
+        }
+        for (var piece : home) {
+            piece.progress = 0; piece.position = start; piece.status = "BOARD";
+            events.add(event("PIECE_RELEASED", "pieceId", piece.id, "from", null, "to", start));
+        }
+    }
+
+    private void chooseCrown(GameState game, String actor, GameAction action, List<Event> events) {
+        require(!"WAITING".equals(game.turn.animationStatus), "ANIMATION_PENDING", "Confirm animation first");
+        require(game.turn.crownChoiceRequired, "NO_CROWN_CHOICE", "Three doubles required");
+        Piece piece = game.piece(action.pieceId());
+        require(piece != null && actor.equals(piece.ownerId) && "BOARD".equals(piece.status) && game.turn.crownEligible.contains(piece.id),
+                "INVALID_CROWN_PIECE", "Only own active pieces are eligible");
+        piece.progress = Board.FINISH;
+        piece.position = board.position(game.player(actor).seat, piece.number, Board.FINISH);
+        piece.status = "CROWNED";
+        game.turn.crownChoiceRequired = false;
+        events.add(event("PIECE_CROWNED", "pieceId", piece.id, "reason", "THREE_DOUBLES"));
+        if (!checkVictory(game, actor, events)) continueTurn(game, events);
+    }
+
+    private void rememberCaptures(GameState game) {
+        if (game.turn.captureSatisfied || "WAITING".equals(game.turn.animationStatus)) return;
+        for (Move move : legalMoves(game, game.turn.playerId)) if (move.capture()) {
+            game.turn.captureCandidates.add(move.pieceId());
+            var witnesses = game.turn.captureVictims.computeIfAbsent(move.pieceId(), id -> new java.util.LinkedHashSet<>());
+            occupants(game, move.to(), move.pieceId()).stream().filter(p -> !p.ownerId.equals(game.turn.playerId))
+                    .forEach(p -> witnesses.add(p.id + ":" + move.to()));
+        }
+    }
+
+    private void resolveBlow(GameState game, List<Event> events) {
+        if (game.turn.captureSatisfied || game.turn.captureCandidates.isEmpty()) return;
+        // A card or another participant may have removed the opportunity. Do not guess a victim.
+        var candidates = game.turn.captureCandidates.stream().filter(id -> {
+            var piece = game.piece(id);
+            return piece != null && piece.status.equals("BOARD") && game.turn.captureVictims.getOrDefault(id, Set.of()).stream().anyMatch(w -> {
+                int split = w.lastIndexOf(':');
+                var victim = game.piece(w.substring(0, split));
+                return victim != null && victim.status.equals("BOARD")
+                        && Objects.equals(victim.position, Integer.valueOf(w.substring(split + 1)));
+            });
+        }).toList();
+        if (candidates.size() == 1) {
+            var piece = game.piece(candidates.getFirst());
+            piece.home();
+            events.add(event("PIECE_BLOWN", "pieceId", piece.id, "playerId", piece.ownerId));
+        } else if (candidates.size() > 1) events.add(event("BLOW_AMBIGUOUS", "pieceIds", candidates));
     }
 
     public List<Event> retire(GameState game, String actor) {

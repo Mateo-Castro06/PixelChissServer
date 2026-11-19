@@ -32,7 +32,7 @@ class FinishPathsTest extends EngineFixture {
         String rival = "seat-" + opponent + "-piece-0";
         int firstFinal = 68 + seat * 8;
         start(map,seat,opponent);
-        assertEquals(seat * 17,board.position(seat,0,68));
+        assertEquals(seat * 17 + 5,board.position(seat,0,68));
         assertEquals(IntStream.range(firstFinal,firstFinal+8).boxed().toList(),
                 board.route(seat,0).subList(69,77));
         for (int remaining=1; remaining<=8; remaining++) {
@@ -77,7 +77,7 @@ class FinishPathsTest extends EngineFixture {
         for (int n=1;n<4;n++) place(prefix+n,Board.FINISH);
         place(prefix+0,68);
         for (int i=0;i<8;i++) {
-            if (i%2==0) roll(); // 1,1; automatic extra turn after the first two moves
+            if (i%2==0) {game.turn.rolled=true;game.turn.dice=new int[]{1,1};game.turn.doubles=true;game.turn.consumed=new boolean[2];} // 1,1; automatic extra turn after the first two moves
             if (i==0) assertEquals("CROWNED_PIECE",assertThrows(GameException.class,
                     () -> engine.calculate(game,"a",prefix+1,0)).code());
             move(engine.calculate(game,"a",prefix+0,i%2));

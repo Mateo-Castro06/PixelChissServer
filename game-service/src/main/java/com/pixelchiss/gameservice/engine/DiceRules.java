@@ -71,6 +71,10 @@ public class DiceRules {
 
     public static int authorizedValue(Turn turn, int index) {
         require(turn.rolled, "ROLL_REQUIRED", "Dice have not been rolled");
+        if (index == 2) {
+            require(!turn.consumed[0] && !turn.consumed[1], "DIE_UNAVAILABLE", "Sum requires both dice");
+            return turn.dice[0] + turn.dice[1];
+        }
         require(index >= 0 && index < DICE_COUNT && !turn.consumed[index],
                 "DIE_UNAVAILABLE", "Die unavailable or already consumed");
         return turn.dice[index];
@@ -78,6 +82,7 @@ public class DiceRules {
 
     public static void consume(Turn turn, int index) {
         authorizedValue(turn, index);
-        turn.consumed[index] = true;
+        if (index == 2) Arrays.fill(turn.consumed, true);
+        else turn.consumed[index] = true;
     }
 }

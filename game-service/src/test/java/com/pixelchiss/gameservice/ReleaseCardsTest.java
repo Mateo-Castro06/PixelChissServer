@@ -82,15 +82,15 @@ class ReleaseCardsTest extends EngineFixture {
     }
 
     @Test void advanceUsesNextSafeWithCapacityAndCannotLeavePrivateLane() {
-        placeAt("seat-0-piece-0",4);
+        placeAt("seat-0-piece-0",6);
         place("seat-0-piece-1",69);
-        placeAt("seat-1-piece-0",5);
-        placeAt("seat-2-piece-0",5); // safe 5 full
+        placeAt("seat-1-piece-0",12);
+        placeAt("seat-2-piece-0",12); // normal safe capacity two
         grant("advance-safe");
         var choice = game.card.choices.getFirst();
-        assertEquals(List.of(new CardChoice("seat-0-piece-0",null,null,12)),game.card.choices);
+        assertEquals(List.of(new CardChoice("seat-0-piece-0",null,null,17)),game.card.choices);
         rules.act(game,"a",select(choice));
-        assertEquals(12,game.piece("seat-0-piece-0").position);
+        assertEquals(17,game.piece("seat-0-piece-0").position);
         assertEquals(68,game.piece("seat-0-piece-1").position);
     }
 
@@ -141,6 +141,7 @@ class ReleaseCardsTest extends EngineFixture {
         endByTimeout();
         rollAs("c",2,4); // both even but not a pair; auto advances (all home)
         assertEquals("BOARD",game.piece("seat-0-piece-0").status);
+        endByTimeout(); // no confirmation: the roll expires without a movement opportunity
         assertEquals("a",game.turn.playerId);
         rollAs("a",5,5,1);
         assertEquals("HOME",game.piece("seat-0-piece-0").status);

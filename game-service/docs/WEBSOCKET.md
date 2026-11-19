@@ -40,7 +40,7 @@ Lanzar:
 {"type":"ROLL_DICE","gameId":"game-123","requestId":"roll-1","expectedVersion":0}
 ```
 
-El servidor genera los resultados y publica `DICE_ROLLED`, por ejemplo `{"type":"DICE_ROLLED","data":{"playerId":"42","dice":[4,2]}}`, dentro de `GAME_UPDATED`. Si no hay movimientos legales, ese mismo lote incluye transición de turno.
+El servidor genera los resultados y publica `DICE_ROLLED`, por ejemplo `{"type":"DICE_ROLLED","data":{"playerId":"42","dice":[4,2]}}`, dentro de `GAME_UPDATED`. El lote incluye DICE_ANIMATION_REQUIRED con rollId. En humanos el servidor espera confirmación antes de habilitar movimiento o resolver nuevos intentos.
 
 Solo si `diceSelectionRequired=true`, incluir `"chosenDice":[2,3]`. El servidor verifica el efecto y `maxDieValue`; fuera de ese derecho rechaza `UNAUTHORIZED_DICE`.
 
@@ -53,7 +53,7 @@ Mover (ejemplo orientativo sujeto a origen/recorrido reales):
 }
 ```
 
-Para salir de casa, `fromPosition=null` y destino=salida asignada. El servidor recalcula, nunca acepta posición por el solo envío. `dieIndex` identifica0 o1; incluso dados iguales se consumen por separado. Puede usar ambos en cualquier orden, con nueva acción/versión por movimiento. `legalMoves` devuelve pieceId, dieIndex, dieValue, from, to, progress, capture, safe, crown y release.
+HOME se libera automáticamente al obtener par, mediante PIECE_RELEASED con from=null; no requiere MOVE_REQUEST. El servidor recalcula, nunca acepta posición por el solo envío. `dieIndex` identifica 0 o 1, o 2 para consumir la suma de ambos; incluso dados iguales se consumen por separado. Puede usar ambos en cualquier orden, con nueva acción/versión por movimiento. `legalMoves` devuelve pieceId, dieIndex, dieValue, from, to, progress, capture, safe, crown y release.
 
 Responder trivia (índice base0):
 
@@ -134,26 +134,98 @@ Cada mensaje es un frame JSON separado, enviando el último solo si ese jugador 
 
 No existe petición pública para disparar bots: el servidor los ejecuta y publica sus movimientos automáticamente. La validación operativa observó estos eventos por Gateway con un cliente que solo envió AUTH/JOIN_GAME. El recorrido de inicio desde Lobby se prueba en el segundo corte. La ejecución del cliente Godot sigue pendiente.
 
-## Posiciones v3-100 y HOME
+## Confirmación de animación y relojes (v4-100)
 
-El protocolo de mensajes conserva la versión JSON; la versión de geometría de `GET /api/game/board` pasa a `v3-100`. Sus 100 posiciones son 0–67 comunes y 68–99 finales. Las cuatro rutas de cada asiento empiezan en el mismo seguro: rojo 0, azul 17, verde 34, amarillo 51; admiten dos fichas. Los corredores son 68–75, 76–83, 84–91 y 92–99, con corona en su octava posición. No hay casillas físicas `EXIT` ni de cárcel. Fórmulas y acceso confirmado en [BOARD.md](BOARD.md).
+Godot debe actualizar sus rutas a [BOARD.md](BOARD.md). Los sectores siguen empezando en 0/17/34/51; las salidas son 5/22/39/56. Seguros normales: capacidad dos; salidas: cuatro. HOME lleva position=null y progress=-1. PIECE_RELEASED es automático al obtener un par y tiene from=null. No enviar el antiguo MOVE_REQUEST para salir de HOME.
 
-Una ficha en casa, capturada, penalizada o devuelta por carta conserva:
-
-```json
-{"id":"seat-0-piece-0","ownerId":"42","number":0,"status":"HOME","position":null,"progress":-1}
-```
-
-Con dobles y cupo en la salida, una opción legal de liberación tiene `from:null`, `to:0`, `progress:0`, `release:true` para rojo. Ejemplo de acción:
+Tras ROLL_DICE, procesar DICE_ROLLED y DICE_ANIMATION_REQUIRED del mismo GAME_UPDATED. Ejemplos completos de los elementos del array events:
 
 ```json
-{"type":"MOVE_REQUEST","gameId":"game-123","requestId":"release-1","expectedVersion":1,"pieceId":"seat-0-piece-0","dieIndex":0,"dieValue":4,"fromPosition":null,"targetPosition":0}
+{"type":"DICE_ROLLED","data":{"playerId":"42","dice":[4,2]}}
 ```
 
-`PIECE_CAPTURED` conserva atacante y víctima; `CARD_PIECE_RETURNED` conserva `from` y el motivo. En ambos, el snapshot deja la víctima en HOME con posición nula y progreso -1. Godot debe usar el estado para dibujar casa, y la coordenada para dibujar fichas BOARD/CROWNED. El progreso de corona es 76; movimientos mayores producen `OVERSHOOT` y una coronada rechaza `CROWNED_PIECE`.
+```json
+{"type":"DICE_ANIMATION_REQUIRED","data":{"rollId":"f81231b1-7a20-440d-8de0-11dc2f7d219b","turnNumber":3,"animationDeadline":1800000010000,"required":true}}
+```
 
-Un `JOIN_GAME`/`SYNC_REQUEST` o acción sobre un estado sin `boardLayout="v3-100"` devuelve `ERROR` con código **`UNSUPPORTED_BOARD_LAYOUT`**. REST e inicialización interna usan HTTP 409 con ese código. No reintentar reinterpretando coordenadas ni regenerando recibos; conservar la partida y seguir la [guía](../../docs/GUIA_ACTUALIZACION.md#tablero-de-100-casillas). La versión de acciones `expectedVersion` sigue siendo la versión CAS, independiente del layout. El snapshot público no incorpora un campo nuevo de layout: el cliente consulta `/api/game/board` y actualiza su caché de rutas al cambiar de despliegue. No se ensayó el cliente Godot real.
+El snapshot turn contiene esos datos persistidos además de animationStatus="WAITING", rollPublishedAt y movementStartedAt=null. Mientras WAITING no mostrar una cuenta regresiva de movimiento ni habilitar movimientos. El servidor espera hasta 10 segundos, configurables con GAME_ANIMATION_WAIT_MILLIS. Animar los dados y, al terminar, enviar:
 
-El seguro de acceso es el mismo de salida después de la vuelta: rojo 0, azul 17, verde 34, amarillo 51. En `routes[seat][piece]`, los índices son progresos: `[0]` y `[68]` contienen el mismo ID común; `[69]` es la primera final y `[76]` la corona. La ruta tiene 77 entradas, 76 IDs distintos; `cells` tiene exactamente 100 IDs únicos. Godot debe mantener `progress` además de `position`: en la salida (`p=0`) se sigue la pista y al regresar (`p=68`) se entra al corredor. Ejemplo rojo al terminar: `67 → 0 → 68 → 69 → … → 75`. Esto sustituye el borrador v2-100; su estado persistido se rechaza sin convertir coordenadas ni recibos. No se renombra ningún DTO o mensaje.
+```json
+{"type":"DICE_ANIMATION_COMPLETED","gameId":"game-123","requestId":"animation-3-1","expectedVersion":7,"challengeId":"f81231b1-7a20-440d-8de0-11dc2f7d219b"}
+```
 
-**Atención para el equipo de Godot al actualizar:** el backend verificado usa `v3-100`; no reutilizar coordenadas ni cachés de rutas anteriores. Comunes 0–67, seguros **0, 5, 12, 17, 22, 29, 34, 39, 46, 51, 56, 63** y corredores 68–75 / 76–83 / 84–91 / 92–99. Una misma posición de salida/acceso representa progreso 0 o 68: conservar ambos campos y seguir la ruta del servidor. Las finales usan progreso 69–76; corona exacta en 76. HOME sigue sin coordenada física. Los estados anteriores se rechazan con `UNSUPPORTED_BOARD_LAYOUT`, sin conversión automática. Los ensayos actuales usaron clientes automatizados, no Godot real: [evidencia](../../docs/BOARD100_VALIDACION.md).
+challengeId reutiliza el campo de correlación existente, aquí con turn.rollId. El UUID identifica inequívocamente la tirada; expectedVersion identifica el estado y el servidor comprueba turno y JWT activo. No enviar playerId. Usar la última versión recibida, incluso si una reconexión la cambió. Una tirada anterior produce STALE_ROLL; un actor ajeno, NOT_YOUR_TURN. Un intento en o después del plazo produce TURN_EXPIRED aunque el scheduler todavía no lo haya cerrado.
+
+El solicitante recibe ACTION_ACK y todos reciben GAME_UPDATED con:
+
+```json
+{"type":"MOVEMENT_TIMER_STARTED","data":{"rollId":"f81231b1-7a20-440d-8de0-11dc2f7d219b","startedAt":1800000003000,"deadline":1800000033000}}
+```
+
+Mostrar `max(0, deadline - horaServidorEstimada)` en milisegundos, convertir a segundos para la interfaz. El servidor es la autoridad; la latencia visual no extiende el plazo. Una confirmación duplicada mientras siga vigente la misma tirada no reinicia deadline. El reintento idéntico con mismo requestId obtiene duplicate=true. Tras reconectar, SYNC_REQUEST devuelve el mismo plazo; no volver a contar desde 30.
+
+Ejemplo de movimiento sumado, ambos dados pendientes [4,2], origen físico 6 y destino 12:
+
+```json
+{"type":"MOVE_REQUEST","gameId":"game-123","requestId":"sum-3-1","expectedVersion":8,"pieceId":"seat-0-piece-0","dieIndex":2,"dieValue":6,"fromPosition":6,"targetPosition":12}
+```
+
+Índice 2 consume ambos dados; no se permite si alguno ya se consumió. Los índices 0/1 permiten dos movimientos sucesivos de una misma ficha. Usar legalMoves tras cada ACK o SYNC, nunca asumir que una opción antigua sigue vigente.
+
+Si se agotan los 30 segundos con el dado 1 pendiente:
+
+```json
+{"type":"TURN_EXPIRED","data":{"playerId":"42","rollId":"f81231b1-7a20-440d-8de0-11dc2f7d219b","reason":"MOVEMENT_TIMEOUT","discardedDice":[1]}}
+```
+
+SOPLAR, cuando hay una sola ficha identificable y ninguna captura satisfactoria:
+
+```json
+{"type":"PIECE_BLOWN","data":{"pieceId":"seat-0-piece-0","playerId":"42"}}
+```
+
+Si hay varias candidatas, no se devuelve ninguna arbitrariamente:
+
+```json
+{"type":"BLOW_AMBIGUOUS","data":{"pieceIds":["seat-0-piece-0","seat-0-piece-1"]}}
+```
+
+El lote incluye el siguiente turno y el snapshot completo definitivo:
+
+```json
+{"type":"TURN_CHANGED","data":{"playerId":"84","turnNumber":4,"deadline":1800000093000}}
+```
+
+Los movimientos aceptados permanecen; los dados descartados no se reutilizan y las fichas sin mover no avanzan automáticamente. deadline del siguiente turno, antes de lanzar, pertenece a la espera de lanzamiento de 60 segundos: no es el plazo de movimiento. Si no se confirma animación, TURN_EXPIRED.reason="ANIMATION_TIMEOUT", se descartan dados y se avanza sin iniciar movimiento ni penalizar oportunidades inaccesibles de esa tirada. Los plazos de trivia/carta no pueden extender el turno.
+
+Eventos adicionales:
+
+```json
+{"type":"PIECE_RELEASED","data":{"pieceId":"seat-0-piece-0","from":null,"to":5}}
+```
+
+```json
+{"type":"ROLL_AVAILABLE","data":{"playerId":"42"}}
+```
+
+```json
+{"type":"CROWN_CHOICE_REQUIRED","data":{"playerId":"42"}}
+```
+
+Cada tirada adicional usa otro rollId y exige otra confirmación humana. Si aparece CROWN_CHOICE_REQUIRED, después de confirmar animación elegir una ficha propia de turn.crownEligible que siga BOARD:
+
+```json
+{"type":"CROWN_REQUEST","gameId":"game-123","requestId":"crown-3","expectedVersion":9,"pieceId":"seat-0-piece-0"}
+```
+
+El servidor publica:
+
+```json
+{"type":"PIECE_CROWNED","data":{"pieceId":"seat-0-piece-0","reason":"THREE_DOUBLES"}}
+```
+
+No se acepta HOME, CROWNED, rival ni una ficha recién liberada en esa tercera tirada. Tras elegir se reevalúan victoria y acciones restantes. Bots confirman internamente sin depender de Godot. La trivia del bot usa p nueva por pregunta y responde por TRIVIA_ANSWER normal; no existe un mensaje de respuesta automáticamente correcta.
+
+Errores nuevos: ANIMATION_PENDING, STALE_ROLL, CROWN_CHOICE_REQUIRED, NO_CROWN_CHOICE, INVALID_CROWN_PIECE y HOME_RELEASE_AUTOMATIC. El layout v4-100 rechaza estados antiguos con UNSUPPORTED_BOARD_LAYOUT; no borra ni migra partidas.
+
+El [ejemplo completo de GAME_UPDATED con todos los campos del snapshot](WS_DICE_EXAMPLE.json) muestra dos jugadores, sus ocho fichas y una tirada pendiente de animación. Los valores son ilustrativos, no credenciales ni evidencia de una sesión real. Se puede usar como fixture de deserialización de Godot.

@@ -26,7 +26,8 @@ eureka:
       defaultZone: ${EUREKA_URL}
 
 game:
-  turn-millis: ${GAME_TURN_MILLIS:60000}
+  turn-millis: ${GAME_TURN_MILLIS:30000}
+  animation-wait-millis: ${GAME_ANIMATION_WAIT_MILLIS:10000}
   trivia-millis: ${GAME_TRIVIA_MILLIS:15000}
   card-millis: ${GAME_CARD_MILLIS:15000}
   disconnect-grace-millis: ${GAME_DISCONNECT_GRACE_MILLIS:60000}

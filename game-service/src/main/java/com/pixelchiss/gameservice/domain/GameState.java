@@ -53,6 +53,18 @@ public class GameState {
         public String playerId;
         public long number = 1;
         public long deadline;
+        public int homeAttempts;
+        public int consecutiveDoubles;
+        public boolean captureSatisfied;
+        public Set<String> captureCandidates = new LinkedHashSet<>();
+        public Map<String, Set<String>> captureVictims = new LinkedHashMap<>();
+        public Set<String> crownEligible = new LinkedHashSet<>();
+        public String rollId;
+        public long rollPublishedAt;
+        public long animationDeadline;
+        public Long movementStartedAt;
+        public String animationStatus = "NONE";
+        public boolean crownChoiceRequired;
         public boolean rolled;
         public boolean doubles;
         public int maxDieValue = 6;

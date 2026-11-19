@@ -16,10 +16,10 @@ class BoardTest {
                 assertEquals(77,route.size());
                 assertEquals(76,new HashSet<>(route).size());
                 assertEquals(route.get(0),route.get(68));
-                assertEquals(2,Collections.frequency(route,seat*17));
+                assertEquals(2,Collections.frequency(route,(seat*17+5)));
                 assertEquals(68,new HashSet<>(route.subList(0,69)).size());
                 cells.addAll(route);
-                assertEquals(seat*17,route.getFirst());
+                assertEquals((seat*17+5),route.getFirst());
                 assertEquals(75+seat*8,route.getLast());
                 assertEquals(b.route(seat,0),route);
             }
@@ -28,7 +28,7 @@ class BoardTest {
             assertTrue(Collections.disjoint(lanes,lane));
             lanes.addAll(lane);
             assertEquals(4,b.capacity(75+seat*8));
-            assertEquals(2,b.capacity(seat*17));
+            assertEquals(4,b.capacity((seat*17+5)));
         }
         assertEquals(IntStream.range(0,100).boxed().collect(java.util.stream.Collectors.toSet()),cells);
         assertEquals(32,lanes.size());
@@ -36,7 +36,7 @@ class BoardTest {
         assertEquals(68,definitions.stream().filter(c -> c.kind().equals("TRACK")).count());
         assertEquals(28,definitions.stream().filter(c -> c.kind().equals("FINISH_LANE")).count());
         assertEquals(4,definitions.stream().filter(c -> c.kind().equals("CROWN")).count());
-        assertEquals("v3-100",b.definition().get("layout"));
+        assertEquals("v4-100",b.definition().get("layout"));
         assertEquals(100,b.definition().get("cellCount"));
     }
     @Test void confirmedSafeCellsAndSectorRelativeTrivia() {
@@ -45,7 +45,7 @@ class BoardTest {
         assertEquals(Set.of(8,25,42,59),Board.TRIVIA);
         for (int p=0;p<68;p++) {
             assertEquals(Board.SAFE.contains(p),b.protectedCell(p));
-            assertEquals(Board.SAFE.contains(p)?2:1,b.capacity(p));
+            assertEquals(Board.STARTS.contains(p)?4:Board.SAFE.contains(p)?2:4,b.capacity(p));
         }
         assertFalse(b.protectedCell(16));
         for (int p=68;p<100;p++) assertTrue(b.protectedCell(p));
@@ -54,8 +54,8 @@ class BoardTest {
         Board b = new Board();
         for (int seat=0;seat<4;seat++) {
             for (int p=0;p<68;p++) assertEquals((b.position(seat,0,p)+1)%68,b.position(seat,0,p+1));
-            assertEquals((seat*17+67)%68,b.position(seat,0,67));
-            assertEquals(seat*17,b.position(seat,0,68));
+            assertEquals(((seat*17+5)+67)%68,b.position(seat,0,67));
+            assertEquals((seat*17+5),b.position(seat,0,68));
             assertTrue(Board.SAFE.contains(b.position(seat,0,68)));
             assertEquals(68+seat*8,b.position(seat,0,69));
             assertEquals(75+seat*8,b.position(seat,0,76));

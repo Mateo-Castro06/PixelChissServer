@@ -121,6 +121,7 @@ public class TriviaRules extends RuleEngine {
         if (!game.status.equals("ACTIVE")) {
             return List.of();
         }
+        if (clock.millis() >= game.turn.deadline) return super.tick(game);
         var events = new ArrayList<Event>();
         boolean turnExpired = clock.millis() >= game.turn.deadline;
         if (game.trivia != null && clock.millis() >= game.trivia.deadline) {

@@ -1,0 +1,155 @@
+{
+  "type": "GAME_UPDATED",
+  "gameId": "game-123",
+  "version": 7,
+  "requestId": "roll-3-1",
+  "events": [
+    {
+      "type": "DICE_ROLLED",
+      "data": {
+        "playerId": "42",
+        "dice": [
+          4,
+          2
+        ]
+      }
+    },
+    {
+      "type": "DICE_ANIMATION_REQUIRED",
+      "data": {
+        "rollId": "f81231b1-7a20-440d-8de0-11dc2f7d219b",
+        "turnNumber": 3,
+        "animationDeadline": 1800000010000,
+        "required": true
+      }
+    }
+  ],
+  "state": {
+    "gameId": "game-123",
+    "version": 7,
+    "mapId": "classic",
+    "status": "ACTIVE",
+    "winnerId": null,
+    "players": [
+      {
+        "id": "42",
+        "seat": 0,
+        "color": "RED",
+        "bot": false,
+        "retired": false,
+        "disconnectedAt": null,
+        "turnsStarted": 1,
+        "effects": []
+      },
+      {
+        "id": "84",
+        "seat": 1,
+        "color": "BLUE",
+        "bot": false,
+        "retired": false,
+        "disconnectedAt": null,
+        "turnsStarted": 1,
+        "effects": []
+      }
+    ],
+    "pieces": [
+      {
+        "id": "seat-0-piece-0",
+        "ownerId": "42",
+        "number": 0,
+        "status": "BOARD",
+        "progress": 1,
+        "position": 6
+      },
+      {
+        "id": "seat-0-piece-1",
+        "ownerId": "42",
+        "number": 1,
+        "status": "HOME",
+        "progress": -1,
+        "position": null
+      },
+      {
+        "id": "seat-0-piece-2",
+        "ownerId": "42",
+        "number": 2,
+        "status": "HOME",
+        "progress": -1,
+        "position": null
+      },
+      {
+        "id": "seat-0-piece-3",
+        "ownerId": "42",
+        "number": 3,
+        "status": "HOME",
+        "progress": -1,
+        "position": null
+      },
+      {
+        "id": "seat-1-piece-0",
+        "ownerId": "84",
+        "number": 0,
+        "status": "BOARD",
+        "progress": 56,
+        "position": 10
+      },
+      {
+        "id": "seat-1-piece-1",
+        "ownerId": "84",
+        "number": 1,
+        "status": "HOME",
+        "progress": -1,
+        "position": null
+      },
+      {
+        "id": "seat-1-piece-2",
+        "ownerId": "84",
+        "number": 2,
+        "status": "HOME",
+        "progress": -1,
+        "position": null
+      },
+      {
+        "id": "seat-1-piece-3",
+        "ownerId": "84",
+        "number": 3,
+        "status": "HOME",
+        "progress": -1,
+        "position": null
+      }
+    ],
+    "turn": {
+      "playerId": "42",
+      "number": 3,
+      "deadline": 1800000010000,
+      "homeAttempts": 0,
+      "consecutiveDoubles": 0,
+      "captureSatisfied": false,
+      "captureCandidates": [],
+      "captureVictims": {},
+      "crownEligible": [
+        "seat-0-piece-0"
+      ],
+      "rollId": "f81231b1-7a20-440d-8de0-11dc2f7d219b",
+      "rollPublishedAt": 1800000000000,
+      "animationDeadline": 1800000010000,
+      "movementStartedAt": null,
+      "animationStatus": "WAITING",
+      "crownChoiceRequired": false,
+      "rolled": true,
+      "doubles": false,
+      "maxDieValue": 6,
+      "diceSelectionRequired": false,
+      "dice": [
+        4,
+        2
+      ],
+      "consumed": [
+        false,
+        false
+      ]
+    },
+    "trivia": null,
+    "card": null
+  }
+}

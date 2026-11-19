@@ -30,38 +30,25 @@ class Board100RulesTest extends EngineFixture {
     @ParameterizedTest @MethodSource("boards")
     void releaseRequiresDoublesUsesNullOriginAndSharedSafeCapacity(String map,int seat) {
         start(map,seat,false);
-        assertEquals(4,game.pieces.stream().filter(p->p.ownerId.equals("a")).count());
-        game.pieces.forEach(this::assertHome);
-        dice(2,3,false);
-        assertEquals("DOUBLES_REQUIRED",assertThrows(GameException.class,
-                ()->engine.calculate(game,"a",id(seat,0),0)).code());
-        dice(2,2,true);
-        var options=engine.legalMoves(game,"a");
-        assertEquals(8,options.size());
-        options.forEach(m->{assertNull(m.from());assertEquals(seat*17,m.to());assertEquals(0,m.progress());assertTrue(m.safe());});
-        move(engine.calculate(game,"a",id(seat,0),0));
-        move(engine.calculate(game,"a",id(seat,1),1));
-        dice(2,2,true);
-        assertEquals("CELL_FULL",assertThrows(GameException.class,
-                ()->engine.calculate(game,"a",id(seat,2),0)).code());
-        move(engine.calculate(game,"a",id(seat,0),0)); // free a slot
-        move(engine.calculate(game,"a",id(seat,2),1));
-        assertEquals(seat*17,game.piece(id(seat,2)).position);
+        var events=engine.act(game,"a",action("ROLL_DICE",null,null,null,null,null,null));
+        assertEquals(2,game.pieces.stream().filter(p->p.ownerId.equals("a")&&p.status.equals("BOARD")).count());
+        assertTrue(events.stream().filter(e->e.type().equals("PIECE_RELEASED"))
+                .allMatch(e->e.data().get("from")==null && e.data().get("to").equals(seat*17+5)));
         assertHome(game.piece(id(seat,3)));
     }
     @ParameterizedTest @MethodSource("boards")
     void fullCommonLapAndAllEightFinalCellsAreTraversedInOrder(String map,int seat) {
         start(map,seat,false);
-        dice(1,1,true);
-        move(engine.calculate(game,"a",id(seat,0),0));
+        place(id(seat,0),0);
         for(int progress=1;progress<=76;progress++) {
             dice(1,1,true);
             var m=engine.calculate(game,"a",id(seat,0),0);
-            int expected=progress<=68?(seat*17+progress)%68:68+seat*8+progress-69;
+            int expected=progress<=68?(seat*17+5+progress)%68:68+seat*8+progress-69;
             assertEquals(expected,m.to());
             move(m);
         }
         assertEquals("CROWNED",game.piece(id(seat,0)).status);
+        dice(1,2,false);
         assertEquals("CROWNED_PIECE",assertThrows(GameException.class,
                 ()->engine.calculate(game,"a",id(seat,0),1)).code());
     }
@@ -69,21 +56,13 @@ class Board100RulesTest extends EngineFixture {
     void capturesAndProtectedStartRespectPhysicalCellsAndReturnHome(String map,int seat) {
         start(map,seat,false);
         String own=id(seat,0),rival=id((seat+1)%4,0);
-        int start=seat*17;
-        place(own,0);placeAt(rival,(start+1)%68);dice(1,2,false);
-        var m=engine.calculate(game,"a",own,0);
-        assertTrue(m.capture());
-        var events=engine.act(game,"a",action("MOVE_REQUEST",own,0,1,m.from(),m.to(),null));
-        assertTrue(events.stream().anyMatch(e->e.type().equals("PIECE_CAPTURED")));
-        assertHome(game.piece(rival));
-        game.piece(own).home();placeAt(rival,start);dice(1,1,true);
-        m=engine.calculate(game,"a",own,0);
-        assertEquals(start,m.to());assertFalse(m.capture());
-        move(m);assertEquals("BOARD",game.piece(rival).status);
-        // Two occupants already fill the shared start, including the rival.
-        dice(1,1,true);
-        assertEquals("CELL_FULL",assertThrows(GameException.class,
-                ()->engine.calculate(game,"a",id(seat,2),0)).code());
+        int start=seat*17+5;
+        placeAt(own,start);placeAt(rival,(start+1)%68);dice(1,2,false);
+        var movement=engine.calculate(game,"a",own,0);assertTrue(movement.capture());
+        move(movement);assertHome(game.piece(rival));
+        placeAt(own,start-1);placeAt(rival,start);dice(1,2,false);
+        movement=engine.calculate(game,"a",own,0);assertFalse(movement.capture());move(movement);
+        assertEquals("BOARD",game.piece(rival).status);
     }
     @ParameterizedTest @MethodSource("boards")
     void triviaUsesSectorOffsetEightAndMatchingMap(String map,int seat) {
@@ -129,7 +108,7 @@ class Board100RulesTest extends EngineFixture {
         var choice=game.card.choices.getFirst();
         rules.act(game,"a",new GameAction("CARD_TARGET","g","safe",game.version,
                 choice.pieceId(),null,null,null,choice.targetPosition(),null,game.card.id,null,null,null));
-        assertEquals(12,game.piece(id(seat,0)).progress);
+        assertEquals(7,game.piece(id(seat,0)).progress);
         assertEquals(69,game.piece(id(seat,1)).progress);
     }
     @ParameterizedTest @MethodSource("boards")

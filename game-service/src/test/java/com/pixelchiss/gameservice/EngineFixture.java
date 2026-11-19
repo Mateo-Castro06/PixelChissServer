@@ -22,14 +22,19 @@ abstract class EngineFixture {
     protected GameAction action(String type,String piece,Integer index,Integer value,Integer from,Integer to,List<Integer> choose) {
         return new GameAction(type,"g",UUID.randomUUID().toString(),game.version,piece,index,value,from,to,choose,null,null,null,null);
     }
-    protected void roll() { engine.act(game,"a",action("ROLL_DICE",null,null,null,null,null,null)); }
+    protected void roll() {
+        engine.act(game,"a",action("ROLL_DICE",null,null,null,null,null,null));
+        if ("WAITING".equals(game.turn.animationStatus)) engine.act(game,"a",new GameAction(
+                "DICE_ANIMATION_COMPLETED",game.id,UUID.randomUUID().toString(),game.version,
+                null,null,null,null,null,null,game.turn.rollId,null,null,null));
+    }
     protected void place(String piece,int progress) {
         var p=game.piece(piece); p.status=progress==Board.FINISH?"CROWNED":"BOARD"; p.progress=progress;
         p.position=board.position(game.player(p.ownerId).seat,p.number,progress);
     }
     protected void placeAt(String piece, int position) {
         int seat = game.player(game.piece(piece).ownerId).seat;
-        place(piece, Math.floorMod(position - seat * Board.SECTOR_CELL_COUNT, Board.TRACK_CELL_COUNT));
+        place(piece, Math.floorMod(position - seat * Board.SECTOR_CELL_COUNT - 5, Board.TRACK_CELL_COUNT));
     }
     protected void move(RuleEngine.Move m) {
         engine.act(game,game.turn.playerId,action("MOVE_REQUEST",m.pieceId(),m.dieIndex(),m.dieValue(),m.from(),m.to(),null));

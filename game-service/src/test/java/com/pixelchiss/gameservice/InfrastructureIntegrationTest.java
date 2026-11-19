@@ -99,7 +99,7 @@ class InfrastructureIntegrationTest {
     @Test void realRedisLegacyLayoutIsRejectedBeforeReceiptsAndWithoutWrites() {
         String id=create();
         String key=PREFIX+":state:"+id;
-        for(String layout:Arrays.asList(null,"v1","v2-100","unknown")) {
+        for(String layout:Arrays.asList(null,"v1","v2-100","v3-100","unknown")) {
             var old=repository.find(id);
             old.boardLayout=layout;
             old.receipts.put("test-a:old",new GameState.Receipt("legacy",7));
@@ -139,9 +139,9 @@ class InfrastructureIntegrationTest {
             String id=create();
             assertTrue(games.system(id, state -> {
                 var own = state.piece("seat-0-piece-0");
-                own.progress=4;own.position=4;own.status="BOARD";
+                own.progress=67;own.position=4;own.status="BOARD";
                 var rival = state.piece("seat-1-piece-0");
-                rival.progress=56;rival.position=5;rival.status="BOARD";
+                rival.progress=51;rival.position=5;rival.status="BOARD";
                 var events = new ArrayList<RuleEngine.Event>();
                 ((TriviaRules) rules).grant(state,catalog.card(cardId),"test-a",events);
                 return events;
@@ -281,10 +281,14 @@ class InfrastructureIntegrationTest {
                     var state=games.load(id);assertEquals(actor,state.turn.playerId);
                     send(sockets[index],Map.of("type","ROLL_DICE","gameId",id,"requestId","roll-"+index,"expectedVersion",state.version));
                     inboxes[index].await("ACTION_ACK");
+                    var pending=games.load(id);
+                    send(sockets[index],new Action("DICE_ANIMATION_COMPLETED",id,"animation-"+index,pending.version,
+                            null,null,null,null,null,null,pending.turn.rollId,null,null,null));
+                    inboxes[index].await("ACTION_ACK");
                     var move=rules.calculate(games.load(id),actor,"seat-"+index+"-piece-0",0);
-                    assertNull(move.from());assertEquals(index*17,move.to());
+                    assertEquals(index*17+5,move.from());assertEquals(index*17+9,move.to());
                     send(sockets[index],new Action("MOVE_REQUEST",id,"move-"+index,games.load(id).version,
-                            move.pieceId(),0,move.dieValue(),null,move.to(),null,null,null,null,null));
+                            move.pieceId(),0,move.dieValue(),move.from(),move.to(),null,null,null,null,null));
                     inboxes[index].await("ACTION_ACK");
                     String publication;
                     do { publication=inboxes[1-index].await("GAME_UPDATED"); } while(!publication.contains("PIECE_MOVED"));
@@ -304,8 +308,8 @@ class InfrastructureIntegrationTest {
                 var state=json.readTree(reconnected.await("GAME_STATE")).path("state");
                 assertEquals(id,state.path("gameId").asString());assertEquals(map,state.path("mapId").asString());
                 assertEquals(count,state.path("players").size());
-                assertEquals(0,games.load(id).piece("seat-0-piece-0").position);
-                assertEquals(17,games.load(id).piece("seat-1-piece-0").position);
+                assertEquals(9,games.load(id).piece("seat-0-piece-0").position);
+                assertEquals(26,games.load(id).piece("seat-1-piece-0").position);
             } finally {socket.sendClose(1000,"done").join();}
         }
     }
@@ -323,13 +327,17 @@ class InfrastructureIntegrationTest {
                 var roll=Map.of("type","ROLL_DICE","gameId",id,"requestId","roll-1","expectedVersion",0);
                 send(wsA,roll);a.await("ACTION_ACK");String notification=b.await("GAME_UPDATED");
                 assertTrue(notification.contains("DICE_ROLLED"));assertTrue(notification.contains("[4,4]"));
+                var pending=games.load(id);
+                send(wsA,new Action("DICE_ANIMATION_COMPLETED",id,"animation",pending.version,
+                        null,null,null,null,null,null,pending.turn.rollId,null,null,null));
+                a.await("ACTION_ACK");b.await("GAME_UPDATED");
                 var m=rules.calculate(games.load(id),"test-a","seat-0-piece-0",0);
-                var move=new Action("MOVE_REQUEST",id,"move-1",1L,m.pieceId(),m.dieIndex(),m.dieValue(),m.from(),m.to(),null,null,null,null,null);
+                var move=new Action("MOVE_REQUEST",id,"move-1",2L,m.pieceId(),m.dieIndex(),m.dieValue(),m.from(),m.to(),null,null,null,null,null);
                 send(wsA,move);a.await("ACTION_ACK");assertTrue(b.await("GAME_UPDATED").contains("PIECE_MOVED"));
-                assertEquals(0,games.snapshot(id,"test-b").pieces().getFirst().position);
-                send(wsA,move);assertTrue(a.await("ACTION_ACK").contains("\"duplicate\":true"));assertEquals(2,games.load(id).version);
+                assertEquals(9,games.snapshot(id,"test-b").pieces().getFirst().position);
+                send(wsA,move);assertTrue(a.await("ACTION_ACK").contains("\"duplicate\":true"));assertEquals(3,games.load(id).version);
                 assertTrue(presence.connected(id,"test-a"));
-                send(wsB,Map.of("type","SYNC_REQUEST","gameId",id));assertTrue(b.await("GAME_STATE").contains("\"version\":2"));
+                send(wsB,Map.of("type","SYNC_REQUEST","gameId",id));assertTrue(b.await("GAME_STATE").contains("\"version\":3"));
             } finally {wsA.sendClose(1000,"done").join();wsB.sendClose(1000,"done").join();}
         }
     }

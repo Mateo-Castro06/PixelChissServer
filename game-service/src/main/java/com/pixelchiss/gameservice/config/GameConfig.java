@@ -21,13 +21,14 @@ public class GameConfig {
         return new GameService(repository, rules, fingerprints);
     }
     @Bean public Board board() {return new Board();}
-    @Bean public BotPolicy botPolicy(RuleEngine rules,GameCatalog catalog,@Value("${game.bot-trivia-accuracy:0.65}") double accuracy) {
-        var random=new java.security.SecureRandom();return new BotPolicy(rules,catalog,random::nextDouble,accuracy);
+    @Bean public BotPolicy botPolicy(RuleEngine rules,GameCatalog catalog) {
+        var random=new java.security.SecureRandom();return new BotPolicy(rules,catalog,random::nextDouble);
     }
     @Bean public RuleEngine rules(Board board,DiceSource dice,Clock clock,GameCatalog catalog,
-                                 @Value("${game.turn-millis:60000}") long timeout,
+                                 @Value("${game.turn-millis:30000}") long timeout,
                                  @Value("${game.trivia-millis:15000}") long trivia,
-                                 @Value("${game.card-millis:15000}") long card) {
-        return new TriviaRules(board,dice,clock,timeout,catalog,trivia,card);
+                                 @Value("${game.card-millis:15000}") long card,
+                                 @Value("${game.animation-wait-millis:10000}") long animation) {
+        return new TriviaRules(board,dice,clock,timeout,catalog,trivia,card).animationWaitMillis(animation);
     }
 }

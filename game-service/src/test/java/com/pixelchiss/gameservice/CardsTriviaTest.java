@@ -67,7 +67,7 @@ class CardsTriviaTest extends EngineFixture {
         assertThrows(GameException.class,()->cards.act(game,"a",action("ROLL_DICE",null,null,null,null,null,List.of(1,6))));
     }
     @Test void triviaHidesAnswerUntilResolvedAndPausesMoves() {
-        place("seat-0-piece-0",4);roll();move(cards.calculate(game,"a","seat-0-piece-0",0)); // cell8
+        placeAt("seat-0-piece-0",21);roll();move(cards.calculate(game,"a","seat-0-piece-0",0)); // cell8
         assertNotNull(game.trivia);
         String publicState=tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(GameView.of(game));
         assertFalse(publicState.contains("correctIndex"));
@@ -78,13 +78,13 @@ class CardsTriviaTest extends EngineFixture {
         assertThrows(GameException.class,()->cards.act(game,"a",answer));
     }
     @Test void triviaAndCardTimeoutAreControlledByServer() {
-        place("seat-0-piece-0",4);roll();move(cards.calculate(game,"a","seat-0-piece-0",0));
+        placeAt("seat-0-piece-0",21);roll();move(cards.calculate(game,"a","seat-0-piece-0",0));
         clock.now=game.trivia.deadline;cards.tick(game);assertNull(game.trivia);
         assertEquals("DOUBLES_PENALTY",game.player("a").effects.getFirst().code);
         place("seat-0-piece-1",4);grant("move-safe");clock.now=game.card.deadline;cards.tick(game);assertNull(game.card);
     }
     @Test void catalogFailureCannotKeepAnExpiredTurnBlocked() {
-        place("seat-0-piece-0",4);roll();move(cards.calculate(game,"a","seat-0-piece-0",0));
+        placeAt("seat-0-piece-0",21);roll();move(cards.calculate(game,"a","seat-0-piece-0",0));
         var unavailable=new SeedCatalog(){@Override public QuestionDefinition question(String id){throw new GameException("CATALOG_UNAVAILABLE","Unavailable");}};
         var timer=new TriviaRules(board,m->4,clock,60000,unavailable,15000,15000);
         clock.now=game.turn.deadline;var events=timer.tick(game);
@@ -100,13 +100,13 @@ class CardsTriviaTest extends EngineFixture {
     }
     @Test void diceLimitCountsExtraOwnTurnsButNotRivalTurns() {
         game.player("a").effects.add(new Effect("DICE_MAX_LIMIT",3,game.player("a").turnsStarted,3));
-        roll();move(cards.calculate(game,"a","seat-0-piece-0",0));move(cards.calculate(game,"a","seat-0-piece-1",1));
+        roll();move(cards.calculate(game,"a","seat-0-piece-0",2));
         assertEquals("a",game.turn.playerId);assertEquals(2,game.player("a").effects.getFirst().remainingTurns);
         expireTurn();assertEquals(1,game.player("a").effects.getFirst().remainingTurns);
         nextOwnTurn();assertEquals(1,game.player("a").effects.getFirst().remainingTurns);
         // The shared safe start holds two pieces: move both off before releasing the others.
-        place("seat-0-piece-0",3);place("seat-0-piece-1",4);
-        roll();move(cards.calculate(game,"a","seat-0-piece-2",0));move(cards.calculate(game,"a","seat-0-piece-3",1));
+        place("seat-0-piece-0",10);place("seat-0-piece-1",12);
+        roll();place("seat-0-piece-2",6);place("seat-0-piece-3",7);move(cards.calculate(game,"a","seat-0-piece-2",0));move(cards.calculate(game,"a","seat-0-piece-3",1));
         assertEquals("a",game.turn.playerId);assertTrue(game.player("a").effects.isEmpty());
         roll();assertArrayEquals(new int[]{4,4},game.turn.dice);
     }

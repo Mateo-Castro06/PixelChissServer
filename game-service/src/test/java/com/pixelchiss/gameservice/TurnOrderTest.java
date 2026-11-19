@@ -86,6 +86,8 @@ class TurnOrderTest extends EngineFixture {
     @Test void doublesRepeatCurrentSeatThenContinueClockwise() {
         initialize(participants(4), "player-2");
         engine.act(game, "player-2", action("ROLL_DICE", null, null, null, null, null, null));
+        engine.act(game,"player-2",new com.pixelchiss.gameservice.domain.GameAction("DICE_ANIMATION_COMPLETED","g","ack",game.version,
+                null,null,null,null,null,null,game.turn.rollId,null,null,null));
         move(engine.calculate(game, "player-2", "seat-2-piece-0", 0));
         move(engine.calculate(game, "player-2", "seat-2-piece-1", 1));
         assertEquals("player-2", game.turn.playerId);

@@ -1,75 +1,35 @@
-# Cartas, trivia, bots y almacenamiento
+# Motor y reglas definitivas
 
-## MongoDB
+El creador abre la partida y los asientos rotan en orden horario, omitiendo retirados. Humanos y bots ejecutan el mismo RuleEngine. El dominio conserva geometría, dados, ocupación, capturas, turnos y cartas; la aplicación persiste agregados aislados con CAS y publicación atómica Redis. Adaptadores REST/WS resuelven la identidad JWT. No se altera la SAGA de inicio ni los esquemas de Redis Streams.
 
-Colecciones `game_cards` y `game_questions`. Cada carta incluye ID estable, nombre, descripción, tipo BUFF/DEBUFF, código, parámetros, condiciones, necesidad de objetivo y mapa (`*` significa todas las temáticas). Cada pregunta incluye mapa, texto, opciones e índice correcto; no existe endpoint público de banco de respuestas.
+Véanse [tablero](BOARD.md), [protocolo Godot](WEBSOCKET.md) y [matriz inicial y evidencia](../../docs/AUDITORIA_REGLAS_DEFINITIVAS.md).
 
-`seed/catalog.json` contiene **6 cartas y 32 preguntas**: 16 de cultura general en `classic` y 16 de ciencia en `science`. `CatalogSeeder` inserta por `_id` con `$setOnInsert`. Para bases existentes usa la [migración con copia previa](../../docs/GUIA_ACTUALIZACION.md#migrar-mongodb). Las definiciones retiradas de `legacy-challenges.json` nunca se siembran ni se sortean; solo permiten resolver por ID un desafío pendiente antes de actualizar.
+Cuando no queda ninguna ficha BOARD (las coronadas se excluyen), cada tirada sin par consume uno de hasta tres intentos HOME. Tras la confirmación de animación puede repetirse la tirada hasta el tercer fallo. Un par libera según la tabla de BOARD. Hay liberación durante toda la partida. Intentos y pares consecutivos se persisten; reconectar no los reinicia.
 
-## Cartas y resolución
+Cada dado se consume por separado, en cualquier orden. La misma ficha puede usar ambos sucesivamente. `dieIndex=2` representa la suma y exige ambos disponibles; consume los dos. No hay rebote: exceder progreso 76 produce OVERSHOOT. Coronadas no se mueven; cuatro coronadas propias producen victoria atómica.
 
-| Carta / código | Tipo | Condiciones y efecto |
-|---|---|---|
-| `kill-next` / `CAPTURE_NEAREST_CELL` | BUFF | Para cada ficha propia en tablero, busca hacia delante hasta el fin de su recorrido común. Gana la menor distancia de progreso; si empatan, el menor número de ficha propia. Captura **todas** las fichas rivales de esa casilla común, incluso en seguro. La ficha atacante no se mueve. |
-| `kill-chosen` / `CAPTURE_CHOSEN_CELL` | BUFF | Elige una casilla común ocupada por rivales mediante `targetPosition`. Devuelve todas las fichas rivales de esa casilla a casa, incluso en seguro. No afecta fichas propias ni carriles privados. |
-| `advance-safe` / `MOVE_SAFE` | BUFF | Elige una ficha propia en tablero. Avanza al primer seguro con cupo por delante en su ruta común. No retrocede ni sale del tramo final. |
-| `skip-turn` / `SKIP_NEXT_TURN` | DEBUFF | Consume una vez el siguiente turno que se le asigne al afectado, incluido un turno extra si corresponde. El servidor emite `EFFECT_CONSUMED` y pasa al siguiente asiento activo. El número de turno cuenta el turno omitido. |
-| `instant-death` / `LOSE_LEADING_PIECE` | DEBUFF | Devuelve a casa una ficha propia no coronada con el mayor progreso; en empate, el menor número. Puede afectar una ficha propia en el carril final. |
-| `doubles-death` / `DOUBLES_PENALTY` | DEBUFF | Desde que se aplica hasta el fin del siguiente turno asignado al afectado, cada tirada con **dos dados iguales** de cualquier participante devuelve una ficha propia del afectado a casa. Incluye sus propios dobles. Se elige uniformemente entre fichas en tablero mediante `DiceSource`; si no hay candidatas no se hace sorteo. El efecto expira también si ese turno vence o se omite. |
+Un par permite otra tirada al agotar movimientos; END_TURN y timeout renuncian al premio. Las tiradas adicionales conservan el número de turno y el cumplimiento de captura, pero los efectos de duración por turno propio conservan el descuento anterior por repetición con par. Tres pares consecutivos habilitan CROWN_REQUEST sobre una ficha propia BOARD que estaba activa antes de liberar HOME en esa tirada. No se corona HOME, rival o coronada; el contador se consume una vez. Si no había elegible no se ofrece selección.
 
-Acierto: BUFF; fallo o timeout: DEBUFF. Las cartas se sortean entre las del tipo y mapa. Los dos efectos programados no se acumulan al reaplicarlos. No hay inventario ni acción cliente para solicitar un premio concreto.
+La captura ordinaria legal por dado o suma crea una obligación para ese turno. Se guardan las fichas que podían capturar y las víctimas/posiciones que acreditan esa oportunidad. Capturar una vez satisface toda la obligación, también durante tiradas adicionales. Los bots priorizan capturas; el servidor permite la omisión humana para evaluar SOPLAR al cerrar, nunca antes de una omisión efectiva. Una carta por sí sola no crea obligación.
 
-La selección se realiza con las opciones de `card.choices` y se revalida al recibir `CARD_TARGET`. Si no hay objetivo válido, se publica `CARD_DISCARDED`; un objetivo pendiente también se descarta al vencer su plazo. Las devoluciones a casa dejan la ficha en `HOME`, con `position=null` y `progress=-1`. Las cartas no consumen dados adicionales. Ver [protocolo](WEBSOCKET.md).
+SOPLAR devuelve a HOME la única candidata identificable si no se capturó. Si hay varias, emite BLOW_AMBIGUOUS sin elegir arbitrariamente. Si las víctimas que acreditaban la oportunidad desaparecieron por otra causa, no se aplica. Antes de confirmar animación no hay oportunidad ejercitable ni penalización por esa tirada. Las decisiones de cartas pueden requerir revisión funcional en casos que eliminen oportunidades; la matriz conserva los límites de validación.
 
-## Trivia
+## Plazos persistidos
 
-Movimiento ordinario a 8,25,42,59 selecciona pregunta temática. Se conserva el desplazamiento ocho en cada sector de 17 (`17*s+8`); ambos mapas usan las mismas casillas. `TRIVIA_QUESTION` y snapshot incluyen texto, opciones, challengeId y deadline, **sin `correctIndex`**. Se vincula al jugador activo y pausa acciones ordinarias.
+- Espera de lanzamiento: se conserva la protección de 60 segundos para quien aún no lanza, también entre tiradas adicionales. No es el reloj de movimiento.
+- Espera de animación: GAME_ANIMATION_WAIT_MILLIS, 10000 por defecto desde la tirada preparada para publicación atómica. movementStartedAt permanece null. Ningún movimiento se acepta durante WAITING.
+- Movimiento: GAME_TURN_MILLIS, 30000 por defecto desde confirmación válida del jugador activo para rollId. Una confirmación duplicada no cambia deadline. Los bots inician directamente este plazo.
 
-`TRIVIA_ANSWER` verifica identidad, challenge e índice antes del plazo. `TRIVIA_RESOLVED` revela acierto y respuesta correcta solo después de resolver; luego aplica o descarta carta. Timeout cuenta como fallo. Al vencer el turno se resuelven pendientes y avanza sin premio por dobles. Las preguntas pueden repetirse; no se agregó sistema de exclusión. Si el catálogo deja de estar disponible durante un timeout, el motor resuelve el fallo sin revelar una respuesta desconocida, descarta la carta con motivo `CATALOG_UNAVAILABLE` y permite avanzar el turno; no mantiene al jugador bloqueado esperando MongoDB.
+Cada tirada lleva UUID nuevo, rollPublishedAt, animationDeadline, animationStatus, movementStartedAt y deadline. La confirmación identifica rollId en el campo challengeId del protocolo existente. La versión CAS vincula la petición al estado actual. El actor se obtiene del JWT, nunca del payload. Un requestId repetido recupera el recibo y no ejecuta reglas de nuevo.
 
-## Bot estándar
+Al vencer se conservan movimientos aceptados, se descartan índices pendientes, se evalúa SOPLAR y se avanza sin movimientos automáticos. TURN_EXPIRED informa motivo, tirada y descartes; el mismo commit contiene penalizaciones, TURN_CHANGED y snapshot definitivo. Confirmaciones tardías no reactivan tiradas. La espera de animación vencida no inicia artificialmente el reloj de movimiento.
 
-`BotPolicy` consulta `RuleEngine.legalMoves`, genera el mismo `Action` y pasa por el mismo motor y CAS. Solo el ejecutor interno controla IDs marcados bot; conexiones humanas no pueden controlarlos.
+El scheduler recorre el índice persistido de partidas activas; tras reinicio usa fechas absolutas. Las acciones comparan reloj del servidor antes de mutar. CAS resuelve carreras con scheduler, bots, reconexión y END_TURN: solo una versión puede confirmarse. Los desafíos pendientes se descartan al vencer el turno sin ejecutar nuevos efectos de carta en el cierre.
 
-Puntuación: progreso+10, corona+1000, captura+400, seguro+250, liberación+140; exposición a un rival entre 1 y6 posiciones detrás resta100. Se eligen aleatoriamente opciones dentro de 180 puntos de la mejor, con pesos positivos crecientes según puntuación. Es una heurística local, sin búsqueda de futuros turnos.
+## Cartas y trivia
 
-Reevalúa después de cada dado confirmado, pudiendo combinar captura con otro dado y seguridad de otra ficha. No mueve siempre la primera. Si no hay movimientos, el motor avanza; el fallback termina turno. Para cartas elige solo opciones autorizadas; si recupera un efecto de elección de dados de una partida anterior, elige los máximos permitidos. Trivia simula acierto con probabilidad configurable 0.65 y, en fallo, elige otra opción. El servidor conoce la respuesta para simular la probabilidad, pero no la publica antes de resolver.
+Se conserva el catálogo de 32 preguntas y las seis cartas kill-next, kill-chosen, advance-safe, skip-turn, instant-death y doubles-death. No se modifica la siembra ni las preguntas. Las cartas con captura explícita sobre seguros siguen ignorando protección; no entran en corredores rivales. Los desafíos mantienen sus propios plazos limitados por el plazo de movimiento.
 
-## Estado y concurrencia
+En cada pregunta el bot obtiene p uniforme en [0,1) de una DoubleSupplier inyectable. TriviaSelection asigna p al índice correcto y (1-p)/(N-1) a cada incorrecto, sin redondeo decimal. Otra muestra selecciona por acumulación de pesos; luego TRIVIA_ANSWER se evalúa por TriviaRules como para humanos. La precisión media esperada es 50 %, no una precisión fija configurada. La selección admite p=1 en pruebas. No se expone la respuesta correcta pendiente por WS.
 
-Redis es la **única fuente autoritativa de partida**: jugadores, cuatro fichas por jugador, posición, turno, dados, consumos, efectos, desafíos, ganador y recibos. MongoDB no duplica ese estado.
-
-| Clave | Uso |
-|---|---|
-| Hash `pixelchiss:game:state:{gameId}` | JSON completo y versión |
-| Set `pixelchiss:game:active` | Partidas que necesitan mantenimiento |
-| ZSet `pixelchiss:game:presence:{gameId}:{playerId}` | Leases por conexión |
-| Pub/Sub `pixelchiss:game:events` | Eventos entre instancias |
-
-El repositorio devuelve copias deserializadas. El motor modifica una copia; Lua verifica versión, escribe, actualiza índice y publica atómicamente. Rechazos y carreras perdidas no alteran estado. La garantía no depende de locks locales.
-
-Se guardan los últimos 256 recibos por actor/requestId, con hash del payload y versión confirmada. Reintentos idénticos recuperan ACK sin ejecución ni publicación; reutilizar ID con otro contenido falla. Fuera de esa ventana, la versión antigua impide repetir la mutación. Cada nueva acción usa ID nuevo.
-
-Al reiniciar Game se recuperan snapshots, deadlines e índice desde Redis solo si `boardLayout="v3-100"`. `GameService` rechaza estados sin layout, antiguos o desconocidos con `UNSUPPORTED_BOARD_LAYOUT`, antes de reproducir recibos o ejecutar acciones, bots, mantenimiento y reconexiones. El JSON antiguo sigue deserializable para inspección, pero no se interpreta con geometría nueva. No se borra ni modifica al rechazarlo. El esquema de `GameInitialized` no contiene posiciones y conserva su versión 1. Pub/Sub no tiene cola pendiente; el despliegue exige detener productores antiguos y reconectar clientes (ver la guía de actualización). Pub/Sub no es un historial durable: Godot detecta huecos de versión y pide sincronización. Los eventos incluyen snapshot público compacto, sin el mapa de100 casillas.
-
-Durabilidad ante pérdida/reinicio de **Redis** depende de AOF/RDB externos. Compose usa AOF cada segundo para instalaciones nuevas. Si el volumen existente contiene solo RDB, el arranque conserva ese formato hasta la [conversión controlada](../../docs/GUIA_ACTUALIZACION.md#conservar-redis-al-activar-aof). Ninguno de los dos garantiza conservar la última acción tras un fallo abrupto. No hay TTL de partidas finalizadas ni copia histórica en MongoDB. La futura retención debe definirse explícitamente. Los scripts están diseñados para Redis standalone existente, no para Cluster.
-
-## Desconexiones
-
-Cierre WebSocket elimina lease. Las sesiones abiertas renuevan cada 5 segundos un lease de 15 segundos. Ping/Pong detecta inactividad; tras 30 segundos sin Pong se cierra. Expirar JWT también cierra y exige renovar mediante Auth y reconectar.
-
-Una sesión válida en cualquier instancia basta para considerar conectado al participante. La caída de un proceso deja vencer leases. Sin sesiones, el scheduler inicia gracia de 60 segundos y publica `PLAYER_DISCONNECTED` con `retireAt`. Reconectar cancela mediante actualización versionada y publica `PLAYER_RECONNECTED`.
-
-Al vencer la gracia aplica retiro idempotente, devuelve fichas a casa, elimina efectos y omite turnos. Quien nunca conectó recibe gracia desde el primer mantenimiento. No se reincorpora un retirado; los bots no necesitan WebSocket. No se confunde cierre de una de varias sesiones con retiro inmediato.
-
-## Responsabilidades tras la refactorización
-
-`RuleEngine` coordina validaciones, movimientos, capturas, coronación y victoria, sin transportes ni almacenamiento. `DiceRules` concentra autorización, rango y consumo de los dos dados y comparte el cálculo de efectos con el bot. `TurnManager` gestiona inicio/finalización, plazos y duración de efectos propios; `TurnOrder` selecciona por asiento horario, nunca por índice del array. `CardRules` calcula objetivos y aplica cartas inmediatas; `TriviaRules` conserva el ciclo de preguntas y recompensa sobre el motor existente.
-
-`BotPolicy` conserva puntuaciones y selección ponderada, con métodos separados para trivia, cartas, lanzamiento y movimiento. `GameService` valida acceso, conserva recibos y confirma mediante el repositorio CAS. El handler WebSocket autentica y despacha; delega la autorización de participantes al servicio. `GameScheduler` separa mantenimiento por partida y cambios de presencia. Las interfaces de persistencia y JWT, el runner de bots y las configuraciones operativas se conservan. No se añadió un framework de reglas ni una nueva jerarquía de servicios. Detalles y pruebas en [CLEAN_CODE.md](CLEAN_CODE.md).
-
-## Geometría de 100 casillas
-
-`Board` define 68 comunes y cuatro corredores de ocho. Progreso común 0–68: el 68 vuelve al seguro de salida propio tras completar la vuelta. Progreso final 69–76; corona exacta en 76. Los bucles de cartas incluyen el progreso común 68 y se detienen antes del 69 y no buscan objetivos en corredores. `advance-safe` usa los doce seguros y su cupo; `instant-death` puede devolver fichas no coronadas de cualquiera de las siete posiciones intermedias del corredor. `skip-turn` y `doubles-death` conservan duración y eventos. Las salidas comparten los seguros 0/17/34/51 con capacidad dos. Fórmulas, límites y acceso confirmado al corredor en [BOARD.md](BOARD.md).
-
-`LAST_COMMON_PROGRESS=68` y `FIRST_FINISH_PROGRESS=69` separan progreso de índice físico. `advance-safe` puede llevar al seguro de acceso en progreso 68, pero no ofrecerlo otra vez tras la llegada; `kill-next` puede capturar rivales allí según su regla de ignorar seguros, sin buscar en el corredor. La serialización y reconexión conservan el progreso para distinguir salida y regreso aunque `position` sea idéntica. El layout v3-100 también rechaza estados del borrador v2-100.
+La compilación o los tests con repositorio en memoria no acreditan integración Redis/MongoDB, recuperación de procesos, Gateway ni Godot real. La evidencia de ejecución se registra separadamente.

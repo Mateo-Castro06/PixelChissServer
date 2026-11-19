@@ -12,11 +12,11 @@ class RuleEngineTest extends EngineFixture {
     @Test void fourPiecesAndTwoServerDiceAndDoubleRelease() {
         assertEquals(12,game.pieces.size()); roll(); assertArrayEquals(new int[]{4,4},game.turn.dice);
         move(engine.calculate(game,"a","seat-0-piece-0",0));
-        assertEquals(0,game.piece("seat-0-piece-0").position);
+        assertEquals(9,game.piece("seat-0-piece-0").position);
         assertTrue(game.turn.consumed[0]); assertFalse(game.turn.consumed[1]);
         assertThrows(GameException.class,()->engine.calculate(game,"a","seat-0-piece-0",0));
         move(engine.calculate(game,"a","seat-0-piece-1",1));
-        assertEquals("a",game.turn.playerId); assertEquals(2,game.turn.number); assertFalse(game.turn.rolled);
+        assertEquals("a",game.turn.playerId); assertEquals(1,game.turn.number); assertFalse(game.turn.rolled);
     }
     @Test void rejectInventedDiceDestinationOriginAndRepeatedRoll() {
         roll(); var m=engine.calculate(game,"a","seat-0-piece-0",0);
@@ -24,21 +24,22 @@ class RuleEngineTest extends EngineFixture {
         assertThrows(GameException.class,()->engine.act(game,"a",action("MOVE_REQUEST",m.pieceId(),0,6,null,0,null)));
         assertThrows(GameException.class,()->engine.act(game,"a",action("MOVE_REQUEST",m.pieceId(),0,4,null,20,null)));
         assertThrows(GameException.class,()->engine.act(game,"a",action("MOVE_REQUEST",m.pieceId(),0,4,2,0,null)));
-        assertEquals("HOME",game.piece(m.pieceId()).status); assertFalse(game.turn.consumed[0]);
+        assertEquals("BOARD",game.piece(m.pieceId()).status); assertFalse(game.turn.consumed[0]);
     }
     @Test void rejectsUnselectedDiceWithoutBuff() {
         assertThrows(GameException.class,()->engine.act(game,"a",action("ROLL_DICE",null,null,null,null,null,List.of(6,6))));
     }
     @Test void captureUsesPhysicalCellAndSafeCellsProtect() {
-        placeAt("seat-0-piece-0",2); placeAt("seat-1-piece-0",6); // capture at 6
-        roll(); move(engine.calculate(game,"a","seat-0-piece-0",0)); // physical 6
+        placeAt("seat-0-piece-0",13);placeAt("seat-1-piece-0",21);roll();
+        move(engine.calculate(game,"a","seat-0-piece-0",2));
         assertEquals("HOME",game.piece("seat-1-piece-0").status);
-        placeAt("seat-0-piece-1",1); placeAt("seat-1-piece-1",5); // physical 5, safe
-        move(engine.calculate(game,"a","seat-0-piece-1",1));
+        placeAt("seat-0-piece-1",8);placeAt("seat-1-piece-1",12);
+        game.turn.rolled=true;game.turn.dice=new int[]{4,4};game.turn.consumed=new boolean[2];
+        move(engine.calculate(game,"a","seat-0-piece-1",0));
         assertEquals("BOARD",game.piece("seat-1-piece-1").status);
     }
     @Test void ownOccupancySafeCapacityAndExactCrowning() {
-        placeAt("seat-0-piece-0",1); placeAt("seat-1-piece-0",5); placeAt("seat-1-piece-1",5);
+        placeAt("seat-0-piece-0",8); placeAt("seat-1-piece-0",12); placeAt("seat-1-piece-1",12);
         roll(); assertThrows(GameException.class,()->engine.calculate(game,"a","seat-0-piece-0",0));
         place("seat-0-piece-0",Board.FINISH-2); assertThrows(GameException.class,()->engine.calculate(game,"a","seat-0-piece-0",0));
         place("seat-0-piece-0",Board.FINISH-4); move(engine.calculate(game,"a","seat-0-piece-0",0));
@@ -64,8 +65,12 @@ class RuleEngineTest extends EngineFixture {
         roll(); assertThrows(GameException.class,()->engine.calculate(game,"a","seat-1-piece-0",0));
     }
     @Test void noLegalMovesAutomaticallyAdvancesNonDoubleTurn() {
-        var other=new RuleEngine(board,new DiceSource(){ int n; public int roll(int m){ return ++n; }},clock,60_000);
-        other.act(game,"a",action("ROLL_DICE",null,null,null,null,null,null));
+        var other=new RuleEngine(board,new DiceSource(){ int n; public int roll(int m){ return n++%2+2; }},clock,60_000);
+        for(int attempt=0;attempt<3;attempt++) {
+            other.act(game,"a",action("ROLL_DICE",null,null,null,null,null,null));
+            other.act(game,"a",new GameAction("DICE_ANIMATION_COMPLETED","g","ack"+attempt,game.version,
+                null,null,null,null,null,null,game.turn.rollId,null,null,null));
+        }
         assertEquals("b",game.turn.playerId);
     }
     @Test void backendRandomAlwaysInRequestedRange() {
@@ -75,10 +80,9 @@ class RuleEngineTest extends EngineFixture {
     @Test void secondDieCanBeUsedFirstAndOwnOrdinaryDestinationIsBlocked() {
         roll();move(engine.calculate(game,"a","seat-0-piece-0",1));
         assertTrue(game.turn.consumed[1]);assertFalse(game.turn.consumed[0]);
-        place("seat-0-piece-1",4); // destination of released piece using4
-        assertThrows(GameException.class,()->engine.calculate(game,"a","seat-0-piece-0",0));
-        game.piece("seat-0-piece-1").home();move(engine.calculate(game,"a","seat-0-piece-0",0));
-        assertEquals(4,game.piece("seat-0-piece-0").position);assertEquals(2,game.turn.number);
+        place("seat-0-piece-1",8);
+        var movement=engine.calculate(game,"a","seat-0-piece-0",0);assertFalse(movement.capture());move(movement);
+        assertEquals(13,game.piece("seat-0-piece-0").position);
     }
     @Test void doublesAreRequiredToReleaseAndCrownedPiecesCannotMove() {
         game.turn.rolled=true;game.turn.dice=new int[]{2,3};

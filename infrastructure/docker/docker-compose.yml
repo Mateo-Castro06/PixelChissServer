@@ -100,6 +100,8 @@ services:
       EUREKA_URL: ${EUREKA_URL}
       JWT_PUBLIC_KEY_PATH: ${JWT_PUBLIC_KEY_PATH}
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/pixelchiss}
+      GAME_TURN_MILLIS: ${GAME_TURN_MILLIS:-30000}
+      GAME_ANIMATION_WAIT_MILLIS: ${GAME_ANIMATION_WAIT_MILLIS:-10000}
       GAME_SEED_ENABLED: ${GAME_SEED_ENABLED:-true}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       GAME_LOBBY_TOKEN: ${GAME_LOBBY_TOKEN:?Set a private Lobby-to-Game token of at least 32 characters}
