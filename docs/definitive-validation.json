@@ -1,0 +1,135 @@
+{
+  "recordedAt": "2026-11-19T00:02:16.841915+00:00",
+  "layout": "v4-100",
+  "suites": {
+    "game-service": {
+      "tests": 240,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "auth-service": {
+      "tests": 75,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "api-gateway": {
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "eureka-server": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lobby-service": {
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "twoHumans": [
+    {
+      "map": "classic",
+      "humans": 2,
+      "seats": [
+        0,
+        2
+      ],
+      "outOfTurnRejected": true,
+      "bothRolledMovedAndReconnected": true,
+      "peerMoveObserved": true
+    },
+    {
+      "map": "science",
+      "humans": 2,
+      "seats": [
+        0,
+        2
+      ],
+      "outOfTurnRejected": true,
+      "bothRolledMovedAndReconnected": true,
+      "peerMoveObserved": true
+    }
+  ],
+  "timersBotsAndRestart": [
+    {
+      "map": "classic",
+      "botTriviaOverBothWebSockets": true,
+      "normalEvaluation": true
+    },
+    {
+      "map": "science",
+      "botTriviaOverBothWebSockets": true,
+      "normalEvaluation": true
+    },
+    {
+      "map": "classic",
+      "phase": "animation",
+      "restartRecovered": true,
+      "bothJWTClients": true,
+      "lateActionsRejected": true,
+      "acceptedMovePreserved": false,
+      "blowApplied": false,
+      "gameId": "proof-deadline-a00e54fa71684a3fbeefe9a26354dccf"
+    },
+    {
+      "map": "science",
+      "phase": "animation",
+      "restartRecovered": true,
+      "bothJWTClients": true,
+      "lateActionsRejected": true,
+      "acceptedMovePreserved": false,
+      "blowApplied": false,
+      "gameId": "proof-deadline-6f4cc1dc62524e5491201a8b01b6eba7"
+    },
+    {
+      "map": "classic",
+      "phase": "movement",
+      "restartRecovered": true,
+      "bothJWTClients": true,
+      "lateActionsRejected": true,
+      "acceptedMovePreserved": true,
+      "blowApplied": true,
+      "gameId": "proof-deadline-8f38894deaf541658124561b4200849c"
+    },
+    {
+      "map": "science",
+      "phase": "movement",
+      "restartRecovered": true,
+      "bothJWTClients": true,
+      "lateActionsRejected": true,
+      "acceptedMovePreserved": true,
+      "blowApplied": true,
+      "gameId": "proof-deadline-f3d6b57e49b54b1ab7b24bc9c315fd86"
+    }
+  ],
+  "eda": {
+    "consumerGroup": "lobby-game-initialization-v1",
+    "pending": 0,
+    "lag": 0
+  },
+  "docker": {
+    "context": "default",
+    "developmentProject": "docker",
+    "isolatedProject": "pixelchiss-definitive",
+    "gameRebuilt": true,
+    "developmentHealthChecks": "healthy",
+    "redis": "PONG",
+    "mongoPing": 1,
+    "postgres": "accepting connections",
+    "isolatedStoppedWithVolumesPreserved": true,
+    "developmentGatewayAndJwtWebSocketVerified": true
+  },
+  "godotRealExecuted": false,
+  "sha256": {
+    "game-service/target/game-service-0.0.1-SNAPSHOT.jar": "82933dd6d34ebfd7b2864dcd478a660f1aea4d1f63b1c961ce07081755b9cf1e",
+    "game-service/src/main/resources/seed/catalog.json": "6112bf1778422449b81f92125dd0f592ed5951ee85c3e7e5c233491ba19cf7cf"
+  },
+  "functionalCommit": "9fb4d4645ad4397e2dda43a6125eb383357f5f12"
+}

@@ -1,3 +1,7 @@
+## Revisión de reglas v4-100
+
+Board, GameState, DiceRules, RuleEngine y TurnManager mantienen reglas en el dominio; GameService coordina commits CAS. El scheduler usa fechas absolutas persistidas y los adaptadores no deciden movimientos. La política probabilística se mantiene en BotPolicy/TriviaSelection, con DoubleSupplier inyectable. REST, JWT, Redis Streams y SAGA conservan sus rutas y esquemas. [Plazos y persistencia](../../game-service/docs/ENGINE.md), [API WS](../../game-service/docs/WEBSOCKET.md).
+
 # Puertos y servicios de PixelChiss
 
 | Componente | Puerto por defecto | Uso |
@@ -17,4 +21,4 @@ El Gateway descubre servicios en Eureka. Lobby llama a Auth y al endpoint privad
 
 Ver [diagrama y capas](../second-cut/architecture.md), [contratos HTTP](../MANUAL_INSTALACION.md#operaciones-rest) y [EDA/SAGA](../second-cut/start-saga.md). Los puertos publicados de desarrollo no constituyen una configuración de producción.
 
-Game utiliza la geometría `v3-100`, aislada en el dominio `Board`; el marcador persistido evita interpretar partidas antiguas con índices nuevos. HOME no ocupa posición física. No se modifican los puertos ni los contratos EDA/SAGA: véase [ADR-003](../decisions/ADR-003-board-layout-100.md).
+Game utiliza la geometría `v4-100`, aislada en el dominio `Board`; el marcador persistido evita interpretar partidas antiguas con índices nuevos. HOME no ocupa posición física. No se modifican los puertos ni los contratos EDA/SAGA: véase [ADR-003](../decisions/ADR-003-board-layout-100.md).

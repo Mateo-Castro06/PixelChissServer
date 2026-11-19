@@ -1,3 +1,7 @@
+## Validación de la revisión v4-100
+
+La evidencia histórica que sigue corresponde a v3-100. No demuestra las reglas definitivas. La matriz inicial y los resultados actuales están en [AUDITORIA_REGLAS_DEFINITIVAS](AUDITORIA_REGLAS_DEFINITIVAS.md). Las nuevas pruebas cubren plazos, omisiones y probabilidades, además del traslado completo de las rutas. Godot real y la correspondencia visual no se han ejecutado.
+
 # Tablero de 100 casillas — recorrido confirmado y evidencia
 
 Fecha: 2026-11-17. **Verificación del backend completada:** suites completas, bases reales aisladas, EDA/SAGA y dos identidades mediante Gateway/WebSocket pasan en ambos mapas. La geometría sigue la regla confirmada por Godot. Se usaron clientes automatizados; **no se ejecutó el cliente Godot real**. Resultados estructurados, hashes de catálogo y JARs en [board100-runtime.json](board100-runtime.json).

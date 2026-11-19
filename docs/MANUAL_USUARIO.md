@@ -1,3 +1,11 @@
+## Reglas vigentes v4-100
+
+Las fichas salen en 5/22/39/56. Un par libera hasta cuatro (1,1), tres (6,6) o dos (otros pares), sin liberar coronadas. Si todas las no coronadas están HOME hay tres intentos fallidos. Se pueden apilar cuatro propias en normales/trivia; una captura exacta devuelve todas las rivales. Seguros normales admiten dos; salidas cuatro. Son protegidos salvo cartas explícitas y captura especial al liberar HOME en salida propia.
+
+Una captura legal obliga a capturar al menos una vez en el turno. Omitirla permite SOPLAR sobre la ficha identificable; si hay varias candidatas no se elige al azar. Tres pares habilitan coronar una ficha previamente activa propia. La coronación normal es exacta.
+
+Godot tiene hasta 10 segundos para confirmar la animación; después comienzan 30 segundos de movimiento. Al vencer se conservan jugadas aceptadas, se pierden dados pendientes y se evalúa SOPLAR antes de avanzar. No se mueven fichas automáticamente. Reconectar no renueva plazos. Los bots responden trivia probabilísticamente (acierto medio esperado 50 %). [Reglas y recorrido](../game-service/docs/BOARD.md), [protocolo](../game-service/docs/WEBSOCKET.md). Esta sección sustituye reglas contradictorias del texto histórico siguiente.
+
 # Manual de usuario — PixelChiss
 
 Esta guía describe las operaciones soportadas por el servidor. La interfaz y los nombres de botones del cliente dependen de la versión de Godot de tu equipo.

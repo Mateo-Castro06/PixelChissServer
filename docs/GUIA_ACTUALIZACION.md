@@ -1,3 +1,11 @@
+## Actualización v4-100
+
+Actualizar Game y Godot conjuntamente: salidas 5/22/39/56, rutas `(17*s+5+p)%68` hasta p=68 y corredor p=69..76. Consultar [BOARD](../game-service/docs/BOARD.md). Los agregados antiguos se conservan y rechazan con UNSUPPORTED_BOARD_LAYOUT; crear otro gameId, sin vaciar Redis ni borrar volúmenes.
+
+Godot debe enviar DICE_ANIMATION_COMPLETED con challengeId=turn.rollId tras mostrar los dados y consumir MOVEMENT_TIMER_STARTED, TURN_EXPIRED, PIECE_RELEASED, PIECE_BLOWN, BLOW_AMBIGUOUS, ROLL_AVAILABLE y los eventos de coronación. [Ejemplos completos](../game-service/docs/WEBSOCKET.md). GAME_TURN_MILLIS=30000 y GAME_ANIMATION_WAIT_MILLIS=10000 por defecto; no sobrescribir .env.
+
+Antes de publicar: ejecutar las suites, integrar dos identidades por Gateway y WS en ambos mapas, probar plazos y reinicio, reconstruir Game y levantar con el mismo nombre Compose existente. No usar down -v. La [auditoría](AUDITORIA_REGLAS_DEFINITIVAS.md) distingue evidencia actual de la histórica siguiente.
+
 # Actualizar PixelChiss Server en Linux Mint / Ubuntu
 
 Esta guía parte de la versión publicada anterior a Hexagonal (la referencia remota verificada al preparar la entrega fue `f477367`). El último commit de esa versión retiró el catálogo de rutas antiguo; usa el [manual](MANUAL_INSTALACION.md#operaciones-rest) y Swagger como referencias vigentes.

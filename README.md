@@ -1,3 +1,7 @@
+## Reglas definitivas v4-100
+
+Salidas 5/22/39/56, capacidades diferenciadas, captura múltiple/SOPLAR, tres intentos HOME, suma de dados y trivia probabilística. El cliente debe confirmar cada animación antes del plazo de movimiento de 30 segundos; la confirmación vence a los 10 segundos. Véanse [matriz y estado de validación](docs/AUDITORIA_REGLAS_DEFINITIVAS.md), [motor](game-service/docs/ENGINE.md) y [contrato Godot](game-service/docs/WEBSOCKET.md). Las evidencias anteriores corresponden a despliegues anteriores y no acreditan esta revisión.
+
 # PixelChiss Server
 
 Backend multijugador de Ingeniería de Software II. Godot utiliza la API HTTP y el WebSocket del Gateway. El cliente se desarrolla en otro repositorio.
