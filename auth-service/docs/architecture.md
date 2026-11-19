@@ -68,3 +68,8 @@ producción ni se cambian los límites de las operaciones de repositorio.
 
 Las pruebas usan PostgreSQL real independiente, `flush` y `clear` para verificar
 lecturas desde la base en lugar de confiar sólo en objetos gestionados por JPA.
+
+
+## Adaptación LAN y retorno sin tokens en URL
+
+LoginController agrega inicio/canje Desktop y canje de handoff Web. LoginFlowService coordina LoginAttemptRepository (PostgreSQL, consumo CAS) y el puerto DesktopIdentityProvider; GoogleDesktopIdentityProvider encapsula intercambio HTTPS y validación del ID token. Pkce conserva la transformación S256 en el dominio de identidad. OAuth2LoginSuccessHandler ya no firma ni redirige tokens: valida la sesión/challenge y emite un handoff. Refresh, perfiles, JWT propios, claves y tablas anteriores se conservan. Es una adaptación de seguridad/conectividad, sin cambios al motor Game, EDA o SAGA.

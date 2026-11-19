@@ -9,6 +9,7 @@ class ClientLoginParamsFilter : OncePerRequestFilter() {
 
     companion object {
         const val STATE_ATTR = "CLIENT_LOGIN_STATE"
+        const val CHALLENGE_ATTR = "CLIENT_LOGIN_CHALLENGE"
         const val PORT_ATTR = "CLIENT_LOGIN_PORT"
         private val STATE_REGEX = Regex("^[A-Za-z0-9_-]{16,128}$")
     }
@@ -23,6 +24,7 @@ class ClientLoginParamsFilter : OncePerRequestFilter() {
     ) {
         val state = request.getParameter("client_state")
         val port = request.getParameter("client_port")?.toIntOrNull()
+        val challenge=request.getParameter("client_challenge")
 
         if (state == null ||
             !STATE_REGEX.matches(state) ||
@@ -41,6 +43,10 @@ class ClientLoginParamsFilter : OncePerRequestFilter() {
 
         session.setAttribute(STATE_ATTR, state)
         session.setAttribute(PORT_ATTR, port)
+        if (challenge != null) {
+            if (!com.pixelchiss.auth.domain.Pkce.validChallenge(challenge)) { response.sendError(400);return }
+            session.setAttribute(CHALLENGE_ATTR,challenge)
+        } else session.removeAttribute(CHALLENGE_ATTR)
 
         filterChain.doFilter(request, response)
     }

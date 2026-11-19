@@ -1,74 +1,31 @@
+> Actualización LAN y seguridad: el callback Web ya no entrega tokens en URL. Godot debe enviar client_challenge S256 y canjear el handoff por POST /api/auth/login/exchange; para LAN usar OAuth Desktop + PKCE y TLS. Véanse [integración Godot](../../docs/GODOT_INTEGRACION_LAN.md) y [manual LAN](../../docs/MANUAL_SERVIDOR_LAN.md). Las caracterizaciones y ejemplos históricos de tokens en callback no describen el comportamiento vigente.
+
 # Flujos, seguridad y contratos
 
 ## Inicio de sesión desde Godot
 
-1. Godot abre un listener local y un navegador hacia
-   `GET /oauth2/authorization/google?client_state=...&client_port=...` a través
-   del Gateway. Auth no incluye un endpoint REST propio de login con contraseña.
-2. [`ClientLoginParamsFilter`](../src/main/kotlin/com/pixelchiss/auth/security/ClientLoginParamsFilter.kt)
-   se ejecuta antes de `OAuth2AuthorizationRequestRedirectFilter`. Sólo procesa
-   URIs que empiezan con `/oauth2/authorization/`. `client_state` debe cumplir
-   `^[A-Za-z0-9_-]{16,128}$` y `client_port` debe ser entero entre 1024 y 65535.
-   Si falla, responde 400, `text/plain;charset=UTF-8`, con:
-   `Faltan client_state / client_port válidos. Inicia el login desde el juego.`
-   Si son válidos, los guarda en la sesión como `CLIENT_LOGIN_STATE` y
-   `CLIENT_LOGIN_PORT` y continúa la cadena. No se cambia este filtro.
-3. Spring Security construye la autorización Google con `response_type=code`,
-   client id, scopes `openid profile email`, redirect URI, `state`, nonce OIDC y
-   PKCE. Conserva la solicitud en la sesión HTTP y redirige el navegador a
-   `https://accounts.google.com/o/oauth2/v2/auth`.
-4. Google devuelve el navegador a `/login/oauth2/code/google`. Spring Security
-   correlaciona el state OAuth con la solicitud en sesión, intercambia el código
-   y autentica al usuario. Estos pasos pertenecen al framework: Auth no los
-   reemplaza ni implementa un callback REST adicional.
-5. [`OAuth2LoginSuccessHandler`](../src/main/kotlin/com/pixelchiss/auth/security/OAuth2LoginSuccessHandler.kt)
-   lee `sub`, `email`, `name` del `OAuth2User`, exigiendo los tres con
-   `requireNotNull`. Busca por Google id. Si existe, conserva los datos guardados;
-   si no, crea el usuario con esos atributos. No vincula usuarios por email.
-6. El handler genera un access token con el id/email persistidos y crea un
-   refresh token asociado al id. **Este orden se conserva:** sólo después lee
-   los parámetros del cliente desde la sesión y exige `String`/`Int` válidos.
-7. Invalida la sesión completa y codifica con `URLEncoder` UTF-8 los tokens y
-   state. Redirige con 302 a:
+El flujo de escritorio para LAN/local utiliza POST `/api/auth/desktop/start` y `/api/auth/desktop/exchange`. Godot genera PKCE S256 y abre su listener loopback; Auth fija `http://127.0.0.1:puerto/callback`, genera state/nonce, persiste un intento de cinco minutos y devuelve una autorización Google Desktop. El navegador del jugador recibe el código Google en su propio loopback; Godot lo envía por cuerpo HTTPS al anfitrión junto a state/verifier. Auth consume el intento atómicamente antes de intercambiar con Google, verifica firma/emisor/audiencia/nonce/expiración/correo verificado y emite la sesión PixelChiss exclusivamente en JSON no-store. El secreto Desktop opcional permanece en el anfitrión. Sin Desktop client ID configurado, inicio responde 503.
 
-   ```text
-   http://127.0.0.1:{client_port}/callback?accessToken={token}&refreshToken={refresh}&state={client_state}
-   ```
+La tabla login_attempts guarda hashes de códigos/states, challenge, nonce, redirect fijo, expiración y consumo, no códigos Google ni sus tokens. Consume una sola petición concurrente y mantiene expiración/uso único tras reinicios. Un fallo posterior del proveedor exige otra autorización. El servidor no toma una redirect URI libre del cliente.
 
-El cliente debe correlacionar el state de su callback y conservar los tokens.
-La implementación Godot no está disponible aquí para revisar cómo lo hace.
-La ruta, host loopback, nombres de query y orden de los parámetros se conservan.
-No se introducen cookies propias ni mecanismos de transporte nuevos: la sesión
-OAuth y sus cookies siguen gestionadas por Spring/Servlet.
+### Login Web local conservado
 
-## Dos states y PKCE
+1. Godot abre listener loopback y navegador a `/oauth2/authorization/google?client_state=...&client_port=...&client_challenge=...` por el Gateway local. client_challenge es S256 de un verifier propio de Godot.
+2. ClientLoginParamsFilter valida state/puerto como antes y, si se proporciona challenge, valida 43 caracteres Base64URL y lo guarda en sesión. Un inicio antiguo puede todavía alcanzar Google; un callback sin challenge válido falla con 400 sin emitir credenciales. El cliente debe actualizarse.
+3. Spring conserva su propio state, nonce OIDC y PKCE de Google Web, guarda la autorización en sesión y realiza el intercambio cuando Google vuelve al backend por `/login/oauth2/code/google`.
+4. OAuth2LoginSuccessHandler **primero** valida la sesión de retorno/challenge. Busca o crea el usuario por Google sub y emite un handoff de 60 segundos vinculado al challenge. No emite access/refresh antes de validar el retorno.
+5. Invalida la sesión y redirige solo a `http://127.0.0.1:puerto/callback?code=<handoff>&state=<client_state>`, con no-store/no-referrer y codificación de parámetros.
+6. Godot valida client_state y canjea por POST `/api/auth/login/exchange`, cuerpo code/codeVerifier. Solo entonces obtiene accessToken/refreshToken en JSON no-store. No hay credenciales de sesión en la URL. Handoff inválido/usado/vencido o verifier ajeno responde 401.
 
-`client_state` se entrega al callback local de Godot. El filtro valida su formato
-y el handler lo devuelve. Es distinto del `state` OAuth que genera y valida
-Spring Security para correlacionar la autorización de Google. Las pruebas
-comprueban que son distintos y que un state OAuth incorrecto causa redirección
-a `/login?error` sin intercambiar el código con Google.
+El login Web se conserva por HTTP loopback; el conector TLS LAN lo rechaza con 400 para no enviar al jugador remoto al callback del backend en localhost. LAN usa Desktop. No se sustituye el redirect Web registrado por una IP privada.
 
-Aunque no hay código PKCE propio ni configuración explícita en Auth, en la
-versión instalada **Spring Security 7.1.1** `ClientRegistration.ClientSettings`
-usa `requireProofKey=true` por defecto. La caracterización previa al refactor
-confirmó ese valor en el bean real y los parámetros de la autorización real:
+## States y PKCE
 
-- `code_challenge_method=S256`.
-- `code_challenge=BASE64URL(SHA256(code_verifier))`, sin padding.
-- `code_verifier` queda en los atributos de la autorización guardada en sesión;
-  no se incluye en la redirección del navegador.
-- El convertidor predeterminado de la solicitud de token incluye el mismo
-  verifier junto con `code` y `grant_type=authorization_code`.
+En Web son distintos el state OAuth de Spring y el client_state de Godot. También son distintas la prueba PKCE Web de Spring y la prueba de posesión PKCE del handoff Godot. En Desktop el state/nonce pertenecen al intento persistido y el challenge de Godot se utiliza tanto para Google como para el canje en Auth. No reutilizar verifiers entre intentos.
 
-Google verifica el challenge/verifier durante el intercambio. Las pruebas
-locales comprueban la generación y preparación de parámetros; no afirman haber
-realizado ese intercambio con Google. No se añade ni desactiva PKCE.
+La regresión de Spring Security comprueba requireProofKey, S256, el verifier guardado en autorización y su inclusión en la solicitud de token; no se elimina PKCE del flujo Web. El nuevo dominio Pkce también verifica el vector RFC7636. La validación criptográfica de ID tokens Desktop se prueba con JWT firmados de prueba y rechazos de firma/claims. No se efectuó login real contra Google ni se ejecutó Godot.
 
-[`application.yaml`](../src/main/resources/application.yaml) mantiene
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OAUTH_REDIRECT_URI` (por defecto
-`http://localhost:8081/login/oauth2/code/google`), los scopes y URIs Google
-de autorización, token y user-info. No se cambian proveedores ni callbacks.
+El cliente Web conserva GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET y OAUTH_REDIRECT_URI; el cliente Desktop utiliza otras variables: GOOGLE_DESKTOP_CLIENT_ID y, si lo requiere Google, GOOGLE_DESKTOP_CLIENT_SECRET. Ambos secretos pertenecen al anfitrión. Procedimiento completo en [manual LAN](../../docs/MANUAL_SERVIDOR_LAN.md) y [guía Godot](../../docs/GODOT_INTEGRACION_LAN.md).
 
 ## Spring Security y JWT
 
@@ -77,7 +34,7 @@ mantiene CSRF deshabilitado y permite:
 
 - Dispatcher `ERROR`.
 - `/actuator/health`, `/oauth2/**`, `/login/**`.
-- `/api/auth/refresh`, `/api/auth/logout`.
+- `/api/auth/refresh`, `/api/auth/logout`, `/api/auth/desktop/start`, `/api/auth/desktop/exchange`, `/api/auth/login/exchange`.
 - `/swagger-ui/**`, `/swagger-ui.html`, `/v3/api-docs/**`.
 
 Las demás solicitudes requieren autenticación, sin nuevas restricciones por
@@ -96,7 +53,7 @@ se obtiene RS256. No se fija un algoritmo nuevo ni se cambia el formato PEM.
 Los claims propios son exactamente `sub` (id de usuario como string), `email`,
 `iat` y `exp`. El access token dura 15 minutos. La verificación entrante pertenece
 al decoder de Spring, no a `JwtService`. No se agregan validadores de
-issuer/audience, ni se altera la tolerancia temporal predeterminada de Spring.
+issuer/audience a los JWT PixelChiss (los ID tokens Google Desktop sí se validan), ni se altera la tolerancia temporal predeterminada de Spring.
 [`JwtAuthenticationConverter`](../src/main/kotlin/com/pixelchiss/auth/security/JwtAuthenticationConverter.kt)
 retorna `JwtAuthenticationToken(jwt, emptyList())` y conserva subject como nombre
 del principal. El controlador convierte subject a `Long` para consultar perfiles.
@@ -158,8 +115,7 @@ exception advice ni se cambia la representación de errores de Spring Boot. La
 razón de la excepción no implica que Boot la incluya por defecto en su JSON de
 error; se conserva la configuración existente.
 
-El handler OAuth mantiene `requireNotNull` y su `IllegalArgumentException` para
-atributos Google o sesión incompletos; no los transforma en errores REST nuevos.
+El handler OAuth mantiene requireNotNull para atributos Google incompletos; una sesión de retorno/challenge inválida devuelve ahora 400 antes de emitir credenciales. Los nuevos canjes utilizan errores genéricos sin cuerpos del proveedor.
 Las excepciones de lectura de claves y de persistencia también conservan su
 propagación original.
 
@@ -171,6 +127,9 @@ por lectura de `api-gateway/src/main/resources/application.yaml`:
 
 | Ruta pública del Gateway | Ruta destino en Auth |
 | --- | --- |
+| `POST /api/auth/desktop/start` | Misma ruta |
+| `POST /api/auth/desktop/exchange` | Misma ruta |
+| `POST /api/auth/login/exchange` | Misma ruta |
 | `POST /api/refresh` | `POST /api/auth/refresh` |
 | `POST /api/logout` | `POST /api/auth/logout` |
 | `/oauth2/authorization/**` | Misma ruta |
@@ -179,8 +138,7 @@ por lectura de `api-gateway/src/main/resources/application.yaml`:
 | `PUT /api/auth/me/display-name` | Misma ruta |
 
 Gateway valida JWT para sus rutas privadas y Auth vuelve a validarlo. La sesión
-HTTP de OAuth debe acompañar el navegador en inicio y callback. No se modifica
-Gateway, forwarding, cookies, discovery ni la URI configurada para Google. La
+HTTP de OAuth debe acompañar el navegador en inicio y callback. Las rutas nuevas de canje se añaden al Gateway; cookies/discovery y la URI Web configurada se conservan. LAN añade TLS sin alterar los JWT propios. La
 prueba local de Auth no equivale a una ejecución de la cadena completa de
 Gateway/Eureka/Google/Godot.
 

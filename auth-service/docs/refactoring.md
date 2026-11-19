@@ -1,3 +1,5 @@
+> Registro histórico anterior a LAN. El retorno OAuth vigente utiliza un handoff PKCE de un solo uso, no tokens en la URL; véase [autenticación actual](authentication.md).
+
 # Refactorización de Auth
 
 ## Alcance y punto de partida

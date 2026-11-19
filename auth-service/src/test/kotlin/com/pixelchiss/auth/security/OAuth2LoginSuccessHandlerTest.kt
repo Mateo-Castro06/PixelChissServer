@@ -2,7 +2,7 @@ package com.pixelchiss.auth.security
 
 import com.pixelchiss.auth.entity.RefreshToken
 import com.pixelchiss.auth.entity.User
-import com.pixelchiss.auth.service.RefreshTokenService
+import com.pixelchiss.auth.service.LoginFlowService
 import com.pixelchiss.auth.service.UserService
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -18,14 +18,13 @@ import java.time.Instant
 
 class OAuth2LoginSuccessHandlerTest {
     private val users = mock(UserService::class.java)
-    private val jwt = mock(JwtService::class.java)
-    private val refreshTokens = mock(RefreshTokenService::class.java)
-    private val handler = OAuth2LoginSuccessHandler(users, jwt, refreshTokens)
+    private val login=mock(LoginFlowService::class.java)
+    private val handler = OAuth2LoginSuccessHandler(users, login)
     private val user = User(id = 42, googleId = "google-id", email = "stored@example.com", displayName = "Stored")
     private val refreshToken = RefreshToken(token = "refresh+/=", userId = 42, expiresAt = Instant.now().plusSeconds(60))
 
     @Test
-    fun `existing user retains stored identity and redirects with encoded tokens then invalidates session`() {
+    fun `existing user retains stored identity and redirects only a PKCE handoff code then invalidates session`() {
         `when`(users.findByGoogleId("google-id")).thenReturn(user)
         configureTokens()
         val request = requestWithClientSession()
@@ -34,26 +33,24 @@ class OAuth2LoginSuccessHandlerTest {
         handler.onAuthenticationSuccess(request, response, authentication())
         assertEquals(302, response.status)
         assertEquals(
-            "http://127.0.0.1:12345/callback?accessToken=access%2B%2F%3D&refreshToken=refresh%2B%2F%3D&state=client+state%2B",
+            "http://127.0.0.1:12345/callback?code=one-use-code&state=client+state%2B",
             response.redirectedUrl
         )
         assertTrue((session as org.springframework.mock.web.MockHttpSession).isInvalid)
         verify(users, never()).createUser(anyString(), anyString(), anyString())
-        verify(jwt).generateAccessToken(42, "stored@example.com")
-        verify(refreshTokens).create(42)
+        verify(login).issueWebGrant(42,"a".repeat(43))
     }
 
     @Test
-    fun `new user is created from Google attributes before issuing tokens`() {
+    fun `new user is created from Google attributes before issuing handoff code`() {
         `when`(users.findByGoogleId("google-id")).thenReturn(null)
         `when`(users.createUser("google-id", "google@example.com", "Google Name")).thenReturn(user)
         configureTokens()
         handler.onAuthenticationSuccess(requestWithClientSession(), MockHttpServletResponse(), authentication())
-        val order = inOrder(users, jwt, refreshTokens)
+        val order = inOrder(users, login)
         order.verify(users).findByGoogleId("google-id")
         order.verify(users).createUser("google-id", "google@example.com", "Google Name")
-        order.verify(jwt).generateAccessToken(42, "stored@example.com")
-        order.verify(refreshTokens).create(42)
+        order.verify(login).issueWebGrant(42,"a".repeat(43))
     }
 
     @ParameterizedTest
@@ -62,12 +59,12 @@ class OAuth2LoginSuccessHandlerTest {
         assertThrows(IllegalArgumentException::class.java) {
             handler.onAuthenticationSuccess(requestWithClientSession(), MockHttpServletResponse(), authentication(missing))
         }
-        verifyNoInteractions(users, jwt, refreshTokens)
+        verifyNoInteractions(users, login)
     }
 
     @ParameterizedTest
-    @ValueSource(strings = ["absent-session", "missing-state", "missing-port", "wrong-state-type", "wrong-port-type"])
-    fun `invalid callback session retains existing failure and issuance order`(case: String) {
+    @ValueSource(strings = ["absent-session", "missing-state", "missing-port", "wrong-state-type", "wrong-port-type", "missing-challenge"])
+    fun `invalid callback session never issues any credentials or grant`(case: String) {
         `when`(users.findByGoogleId("google-id")).thenReturn(user)
         configureTokens()
         val request = if (case == "absent-session") MockHttpServletRequest() else requestWithClientSession()
@@ -75,28 +72,28 @@ class OAuth2LoginSuccessHandlerTest {
         when (case) {
             "missing-state" -> session!!.removeAttribute(ClientLoginParamsFilter.STATE_ATTR)
             "missing-port" -> session!!.removeAttribute(ClientLoginParamsFilter.PORT_ATTR)
+            "missing-challenge" -> session!!.removeAttribute(ClientLoginParamsFilter.CHALLENGE_ATTR)
             "wrong-state-type" -> session!!.setAttribute(ClientLoginParamsFilter.STATE_ATTR, 42)
             "wrong-port-type" -> session!!.setAttribute(ClientLoginParamsFilter.PORT_ATTR, "12345")
         }
         val response = MockHttpServletResponse()
-        assertThrows(IllegalArgumentException::class.java) {
-            handler.onAuthenticationSuccess(request, response, authentication())
-        }
-        verify(jwt).generateAccessToken(42, "stored@example.com")
-        verify(refreshTokens).create(42)
+        handler.onAuthenticationSuccess(request, response, authentication())
+        assertEquals(400,response.status)
+        verifyNoInteractions(login)
+        verify(users,never()).findByGoogleId(anyString())
         assertNull(response.redirectedUrl)
-        if (session != null) assertFalse((session as org.springframework.mock.web.MockHttpSession).isInvalid)
+        if (session != null) assertTrue((session as org.springframework.mock.web.MockHttpSession).isInvalid)
     }
 
     private fun configureTokens() {
-        `when`(jwt.generateAccessToken(42, "stored@example.com")).thenReturn("access+/=")
-        `when`(refreshTokens.create(42)).thenReturn(refreshToken)
+        `when`(login.issueWebGrant(42,"a".repeat(43))).thenReturn("one-use-code")
     }
 
     private fun requestWithClientSession() = MockHttpServletRequest().apply {
         requireNotNull(getSession(true)).apply {
             setAttribute(ClientLoginParamsFilter.STATE_ATTR, "client state+")
             setAttribute(ClientLoginParamsFilter.PORT_ATTR, 12345)
+            setAttribute(ClientLoginParamsFilter.CHALLENGE_ATTR,"a".repeat(43))
         }
     }
 
