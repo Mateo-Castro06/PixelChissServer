@@ -119,7 +119,7 @@ public class RuleEngine {
         require(game.status.equals("ACTIVE"), "GAME_FINISHED", "Game is finished");
         require(!player.retired, "PLAYER_RETIRED", "Player has retired");
         require(game.turn.playerId.equals(actor), "NOT_YOUR_TURN", "Not your turn");
-        require(clock.millis() < game.turn.deadline, "TURN_EXPIRED", "Turn expired");
+        require(movementPaused(game) || clock.millis() < game.turn.deadline, "TURN_EXPIRED", "Turn expired");
         return player;
     }
 
@@ -146,13 +146,17 @@ public class RuleEngine {
         diceRules.roll(game, actor, action.chosenDice(), events);
         var turn = game.turn;
         turn.consumed = new boolean[2];
+        turn.homeRelease = false;
+        turn.extraRollAvailable = false;
+        turn.thirdDoubleReward = false;
         turn.rollId = java.util.UUID.randomUUID().toString();
-        turn.rollPublishedAt = clock.millis();
+        long publishedAt = clock.millis();
+        turn.rollPublishedAt = publishedAt;
         turn.movementStartedAt = null;
-        turn.animationDeadline = clock.millis() + animationMillis;
+        turn.animationDeadline = publishedAt + animationMillis;
         turn.animationStatus = game.player(actor).bot ? "COMPLETED" : "WAITING";
-        turn.deadline = game.player(actor).bot ? clock.millis() + movementMillis : turn.animationDeadline;
-        if (game.player(actor).bot) turn.movementStartedAt = clock.millis();
+        turn.deadline = game.player(actor).bot ? publishedAt + movementMillis : turn.animationDeadline;
+
         turn.consecutiveDoubles = turn.doubles ? turn.consecutiveDoubles + 1 : 0;
         boolean onlyHome = game.pieces.stream().filter(p -> p.ownerId.equals(actor))
                 .noneMatch(p -> p.status.equals("BOARD"));
@@ -164,13 +168,17 @@ public class RuleEngine {
         afterRoll(game, events);
         turn.crownEligible.removeIf(id -> !"BOARD".equals(game.piece(id).status));
         if (turn.consecutiveDoubles == 3) {
-            turn.consecutiveDoubles = 0;
+            turn.thirdDoubleReward = true;
+            Arrays.fill(turn.consumed, true);
             turn.crownChoiceRequired = !turn.crownEligible.isEmpty();
             if (turn.crownChoiceRequired) events.add(event("CROWN_CHOICE_REQUIRED", "playerId", actor));
         }
         events.add(event("DICE_ANIMATION_REQUIRED", "rollId", turn.rollId, "turnNumber", turn.number,
                 "animationDeadline", turn.animationDeadline, "required", !game.player(actor).bot));
-        if (game.player(actor).bot) rememberCaptures(game);
+        if (game.player(actor).bot && !turn.homeRelease && !turn.thirdDoubleReward) {
+            turn.movementStartedAt = publishedAt;
+            rememberCaptures(game);
+        }
         continueTurn(game, events);
     }
 
@@ -295,13 +303,17 @@ public class RuleEngine {
             boolean retryHome = !game.turn.doubles && game.turn.homeAttempts > 0 && game.turn.homeAttempts < 3
                     && game.pieces.stream().noneMatch(p -> p.ownerId.equals(game.turn.playerId) && p.status.equals("BOARD"));
             Arrays.fill(game.turn.consumed, true);
-            if (game.turn.doubles || retryHome) {
+            if (game.turn.thirdDoubleReward) {
+                finishTurn(game, false, events);
+            } else if (game.turn.doubles || retryHome) {
                 if (game.turn.doubles) turns.repeatRoll(game, events);
                 game.turn.rolled = false;
+                game.turn.extraRollAvailable = game.turn.doubles;
                 game.turn.animationStatus = "NONE";
                 game.turn.movementStartedAt = null;
                 game.turn.deadline = clock.millis() + 60_000;
-                events.add(event("ROLL_AVAILABLE", "playerId", game.turn.playerId));
+                events.add(event("ROLL_AVAILABLE", "playerId", game.turn.playerId, "rollId", game.turn.rollId,
+                        "extraRollAvailable", game.turn.extraRollAvailable, "consecutiveDoubles", game.turn.consecutiveDoubles));
             } else finishTurn(game, false, events);
         }
     }
@@ -318,7 +330,7 @@ public class RuleEngine {
     }
 
     public List<Event> tick(GameState game) {
-        if (!game.status.equals("ACTIVE") || clock.millis() < game.turn.deadline) {
+        if (!game.status.equals("ACTIVE") || movementPaused(game) || clock.millis() < game.turn.deadline) {
             return List.of();
         }
         var events = new ArrayList<Event>();
@@ -338,11 +350,17 @@ public class RuleEngine {
     private void confirmAnimation(GameState game, GameAction action, List<Event> events) {
         require(Objects.equals(game.turn.rollId, action.challengeId()) && game.turn.rollId != null,
                 "STALE_ROLL", "Confirmation must identify the current roll in challengeId");
-        if ("COMPLETED".equals(game.turn.animationStatus)) return;
+        if ("COMPLETED".equals(game.turn.animationStatus) || !game.turn.rolled) return;
         require("WAITING".equals(game.turn.animationStatus), "STALE_ROLL", "No animation pending");
         game.turn.animationStatus = "COMPLETED";
-        game.turn.movementStartedAt = clock.millis();
-        game.turn.deadline = clock.millis() + movementMillis;
+        long startedAt = clock.millis();
+        if (game.turn.homeRelease || game.turn.thirdDoubleReward) {
+            game.turn.deadline = startedAt + movementMillis;
+            continueTurn(game, events);
+            return;
+        }
+        game.turn.movementStartedAt = startedAt;
+        game.turn.deadline = startedAt + movementMillis;
         events.add(event("MOVEMENT_TIMER_STARTED", "rollId", game.turn.rollId,
                 "startedAt", game.turn.movementStartedAt, "deadline", game.turn.deadline));
         rememberCaptures(game);
@@ -350,14 +368,20 @@ public class RuleEngine {
     }
 
     private void releaseHome(GameState game, String actor, List<Event> events) {
+        if (game.pieces.stream().noneMatch(p -> p.ownerId.equals(actor) && p.status.equals("HOME"))) return;
+        game.turn.homeRelease = true;
+        Arrays.fill(game.turn.consumed, true);
         int limit = game.turn.dice[0] == 1 ? 4 : game.turn.dice[0] == 6 ? 3 : 2;
         int start = board.position(game.player(actor).seat, 0, 0);
         var own = occupants(game, start, null).stream().filter(p -> p.ownerId.equals(actor)).count();
         var home = game.pieces.stream().filter(p -> p.ownerId.equals(actor) && p.status.equals("HOME"))
                 .limit(Math.min(limit, Math.max(0, 4 - own))).toList();
+        events.add(event("HOME_RELEASE_RESOLVED", "rollId", game.turn.rollId,
+                "pieceIds", home.stream().map(p -> p.id).toList(), "consumed", game.turn.consumed));
         if (home.isEmpty()) return;
         for (var rival : occupants(game, start, null)) if (!rival.ownerId.equals(actor)) {
             rival.home();
+            game.turn.captureSatisfied = true;
             events.add(event("PIECE_CAPTURED", "pieceId", rival.id, "reason", "HOME_RELEASE"));
         }
         for (var piece : home) {
@@ -378,6 +402,35 @@ public class RuleEngine {
         game.turn.crownChoiceRequired = false;
         events.add(event("PIECE_CROWNED", "pieceId", piece.id, "reason", "THREE_DOUBLES"));
         if (!checkVictory(game, actor, events)) continueTurn(game, events);
+    }
+
+    protected boolean movementPaused(GameState game) {
+        return game.trivia != null && game.turn.movementRemainingMillis != null
+                && Objects.equals(game.turn.rollId, game.turn.pausedMovementRollId);
+    }
+
+    protected void pauseMovement(GameState game, List<Event> events) {
+        if (game.turn.movementStartedAt == null || game.turn.movementRemainingMillis != null) return;
+        game.turn.movementRemainingMillis = Math.max(0, game.turn.deadline - clock.millis());
+        game.turn.pausedMovementRollId = game.turn.rollId;
+        events.add(event("MOVEMENT_TIMER_PAUSED", "rollId", game.turn.rollId,
+                "remainingMillis", game.turn.movementRemainingMillis));
+    }
+
+    protected void resumeMovement(GameState game, List<Event> events, long resumedAt) {
+        Long remaining = game.turn.movementRemainingMillis;
+        String rollId = game.turn.pausedMovementRollId;
+        game.turn.movementRemainingMillis = null;
+        game.turn.pausedMovementRollId = null;
+        if (remaining == null || !game.status.equals("ACTIVE") || !game.turn.rolled
+                || game.turn.movementStartedAt == null || !Objects.equals(rollId, game.turn.rollId)) return;
+        game.turn.deadline = resumedAt + remaining;
+        if (game.turn.consumed[0] && game.turn.consumed[1]) {
+            game.turn.movementStartedAt = null;
+            return;
+        }
+        events.add(event("MOVEMENT_TIMER_RESUMED", "rollId", rollId,
+                "remainingMillis", remaining, "deadline", game.turn.deadline));
     }
 
     private void rememberCaptures(GameState game) {

@@ -79,7 +79,7 @@ class TurnOrderTest extends EngineFixture {
         expire(); assertEquals("player-3", game.turn.playerId);
         var bot = new BotPolicy(engine, new SeedCatalog(), () -> 0.0, 0.65);
         engine.act(game, "player-3", bot.next(game));
-        engine.act(game, "player-3", action("END_TURN", null, null, null, null, null, null));
+        expire();
         assertEquals("player-0", game.turn.playerId);
     }
 
@@ -88,8 +88,9 @@ class TurnOrderTest extends EngineFixture {
         engine.act(game, "player-2", action("ROLL_DICE", null, null, null, null, null, null));
         engine.act(game,"player-2",new com.pixelchiss.gameservice.domain.GameAction("DICE_ANIMATION_COMPLETED","g","ack",game.version,
                 null,null,null,null,null,null,game.turn.rollId,null,null,null));
-        move(engine.calculate(game, "player-2", "seat-2-piece-0", 0));
-        move(engine.calculate(game, "player-2", "seat-2-piece-1", 1));
+        assertTrue(game.turn.homeRelease);
+        assertTrue(game.turn.extraRollAvailable);
+        assertTrue(engine.legalMoves(game,"player-2").isEmpty());
         assertEquals("player-2", game.turn.playerId);
         assertEquals(2, game.player("player-2").turnsStarted);
         expire(); assertEquals("player-3", game.turn.playerId);

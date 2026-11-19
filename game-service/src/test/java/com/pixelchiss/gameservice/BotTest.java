@@ -23,12 +23,14 @@ class BotTest extends EngineFixture {
         assertEquals(second.targetPosition(),game.piece(second.pieceId()).position);
     }
     @Test void botPrefersCrownThenSafeAndCanReleaseDifferentPieces() {
-        place("seat-0-piece-0",Board.FINISH-4);placeAt("seat-0-piece-1",1);roll();
+        place("seat-0-piece-0",Board.FINISH-4);placeAt("seat-0-piece-1",1);rollForMovement();
         place("seat-0-piece-2",Board.FINISH);place("seat-0-piece-3",Board.FINISH);
         assertEquals("seat-0-piece-0",bot.next(game).pieceId());engine.act(game,"a",bot.next(game));
         assertEquals(5,bot.next(game).targetPosition());
-        create();game.player("a").bot=true;roll();var first=bot.next(game);engine.act(game,"a",first);
-        var second=bot.next(game);assertNotEquals(first.pieceId(),second.pieceId());engine.act(game,"a",second);
+        create();game.player("a").bot=true;roll();
+        assertEquals("ROLL_DICE",bot.next(game).type());
+        assertArrayEquals(new boolean[]{true,true},game.turn.consumed);
+        engine.act(game,"a",bot.next(game));
         assertEquals(4,game.pieces.stream().filter(p->p.ownerId.equals("a")&&p.status.equals("BOARD")).count());
     }
     @Test void noLegalMovesEndTurnAndBotsCannotBypassValidation() {
@@ -52,7 +54,7 @@ class BotTest extends EngineFixture {
         assertArrayEquals(new int[]{3,3},game.turn.dice);
     }
     @Test void weightedSelectionCanChooseAnotherReasonablePiece() {
-        roll();var first=bot.next(game);
+        rollForMovement();var first=bot.next(game);
         var alternative=new BotPolicy(engine,catalog,()->0.999,0.65).next(game);
         assertNotEquals(first.pieceId(),alternative.pieceId());
         engine.act(game,"a",alternative);assertEquals("BOARD",game.piece(alternative.pieceId()).status);

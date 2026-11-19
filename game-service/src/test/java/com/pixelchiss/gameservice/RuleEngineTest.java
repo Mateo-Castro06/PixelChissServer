@@ -11,15 +11,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class RuleEngineTest extends EngineFixture {
     @Test void fourPiecesAndTwoServerDiceAndDoubleRelease() {
         assertEquals(12,game.pieces.size()); roll(); assertArrayEquals(new int[]{4,4},game.turn.dice);
-        move(engine.calculate(game,"a","seat-0-piece-0",0));
-        assertEquals(9,game.piece("seat-0-piece-0").position);
-        assertTrue(game.turn.consumed[0]); assertFalse(game.turn.consumed[1]);
+        assertEquals(5,game.piece("seat-0-piece-0").position);
+        assertArrayEquals(new boolean[]{true,true},game.turn.consumed);
+        assertTrue(engine.legalMoves(game,"a").isEmpty());
         assertThrows(GameException.class,()->engine.calculate(game,"a","seat-0-piece-0",0));
-        move(engine.calculate(game,"a","seat-0-piece-1",1));
         assertEquals("a",game.turn.playerId); assertEquals(1,game.turn.number); assertFalse(game.turn.rolled);
     }
     @Test void rejectInventedDiceDestinationOriginAndRepeatedRoll() {
-        roll(); var m=engine.calculate(game,"a","seat-0-piece-0",0);
+        rollForMovement(); var m=engine.calculate(game,"a","seat-0-piece-0",0);
         assertThrows(GameException.class,()->engine.act(game,"a",action("ROLL_DICE",null,null,null,null,null,null)));
         assertThrows(GameException.class,()->engine.act(game,"a",action("MOVE_REQUEST",m.pieceId(),0,6,null,0,null)));
         assertThrows(GameException.class,()->engine.act(game,"a",action("MOVE_REQUEST",m.pieceId(),0,4,null,20,null)));
@@ -30,7 +29,7 @@ class RuleEngineTest extends EngineFixture {
         assertThrows(GameException.class,()->engine.act(game,"a",action("ROLL_DICE",null,null,null,null,null,List.of(6,6))));
     }
     @Test void captureUsesPhysicalCellAndSafeCellsProtect() {
-        placeAt("seat-0-piece-0",13);placeAt("seat-1-piece-0",21);roll();
+        placeAt("seat-0-piece-0",13);placeAt("seat-1-piece-0",21);rollForMovement();
         move(engine.calculate(game,"a","seat-0-piece-0",2));
         assertEquals("HOME",game.piece("seat-1-piece-0").status);
         placeAt("seat-0-piece-1",8);placeAt("seat-1-piece-1",12);
@@ -40,14 +39,14 @@ class RuleEngineTest extends EngineFixture {
     }
     @Test void ownOccupancySafeCapacityAndExactCrowning() {
         placeAt("seat-0-piece-0",8); placeAt("seat-1-piece-0",12); placeAt("seat-1-piece-1",12);
-        roll(); assertThrows(GameException.class,()->engine.calculate(game,"a","seat-0-piece-0",0));
+        rollForMovement(); assertThrows(GameException.class,()->engine.calculate(game,"a","seat-0-piece-0",0));
         place("seat-0-piece-0",Board.FINISH-2); assertThrows(GameException.class,()->engine.calculate(game,"a","seat-0-piece-0",0));
         place("seat-0-piece-0",Board.FINISH-4); move(engine.calculate(game,"a","seat-0-piece-0",0));
         assertEquals("CROWNED",game.piece("seat-0-piece-0").status);
     }
     @Test void victoryIsImmediateAndUnique() {
         for(int i=0;i<3;i++) place("seat-0-piece-"+i,Board.FINISH);
-        place("seat-0-piece-3",Board.FINISH-4); roll(); move(engine.calculate(game,"a","seat-0-piece-3",0));
+        place("seat-0-piece-3",Board.FINISH-4); rollForMovement(); move(engine.calculate(game,"a","seat-0-piece-3",0));
         assertEquals("FINISHED",game.status); assertEquals("a",game.winnerId);
         assertThrows(GameException.class,()->engine.act(game,"a",action("END_TURN",null,null,null,null,null,null)));
     }
@@ -62,7 +61,7 @@ class RuleEngineTest extends EngineFixture {
         assertThrows(GameException.class,()->engine.member(game,null));
         assertThrows(GameException.class,()->engine.member(game,"outsider"));
         assertThrows(GameException.class,()->engine.act(game,"b",action("ROLL_DICE",null,null,null,null,null,null)));
-        roll(); assertThrows(GameException.class,()->engine.calculate(game,"a","seat-1-piece-0",0));
+        rollForMovement(); assertThrows(GameException.class,()->engine.calculate(game,"a","seat-1-piece-0",0));
     }
     @Test void noLegalMovesAutomaticallyAdvancesNonDoubleTurn() {
         var other=new RuleEngine(board,new DiceSource(){ int n; public int roll(int m){ return n++%2+2; }},clock,60_000);
@@ -78,7 +77,7 @@ class RuleEngineTest extends EngineFixture {
         for(int i=0;i<500;i++) { int value=random.roll(6); assertTrue(value>=1&&value<=6); value=random.roll(3); assertTrue(value>=1&&value<=3); }
     }
     @Test void secondDieCanBeUsedFirstAndOwnOrdinaryDestinationIsBlocked() {
-        roll();move(engine.calculate(game,"a","seat-0-piece-0",1));
+        rollForMovement();move(engine.calculate(game,"a","seat-0-piece-0",1));
         assertTrue(game.turn.consumed[1]);assertFalse(game.turn.consumed[0]);
         place("seat-0-piece-1",8);
         var movement=engine.calculate(game,"a","seat-0-piece-0",0);assertFalse(movement.capture());move(movement);

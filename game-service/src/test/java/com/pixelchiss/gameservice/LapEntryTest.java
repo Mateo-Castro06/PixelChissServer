@@ -99,6 +99,7 @@ class LapEntryTest extends EngineFixture {
     void reconnectionRestoresCompletedLapInsteadOfTreatingAccessAsDeparture(String map,int seat) {
         start(map,seat,false);
         String piece=id(seat,0);place(piece,68);
+        activateHomeForMovement();
         game.player("a").disconnectedAt=clock.millis();
         var repository=new MemoryGames();repository.create(game,null);
         var service=new com.pixelchiss.gameservice.service.GameService(repository,engine,

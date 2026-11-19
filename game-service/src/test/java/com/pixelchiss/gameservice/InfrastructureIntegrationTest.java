@@ -117,6 +117,23 @@ class InfrastructureIntegrationTest {
             assertTrue(redis.opsForSet().isMember(PREFIX+":active",id));
         }
     }
+    @Test void realRedisRecoversReleaseCountersAndPausedTimers() {
+        String id=create();var state=repository.find(id);
+        state.turn.consecutiveDoubles=2;state.turn.homeAttempts=1;
+        state.turn.homeRelease=true;state.turn.extraRollAvailable=true;
+        state.turn.rollId="persisted-roll";state.turn.consumed=new boolean[]{true,true};
+        state.turn.movementRemainingMillis=18_000L;state.turn.pausedMovementRollId=state.turn.rollId;
+        state.trivia=new GameState.PendingTrivia();state.trivia.id="question";
+        state.trivia.deadline=System.currentTimeMillis()+15_000;
+        state.version++;
+        assertTrue(repository.commit(state,0,null));var restored=repository.find(id);
+        assertEquals(2,restored.turn.consecutiveDoubles);assertEquals(1,restored.turn.homeAttempts);
+        assertTrue(restored.turn.homeRelease);assertTrue(restored.turn.extraRollAvailable);
+        assertArrayEquals(new boolean[]{true,true},restored.turn.consumed);
+        assertEquals(18_000,restored.turn.movementRemainingMillis);
+        assertEquals(restored.turn.rollId,restored.turn.pausedMovementRollId);
+        assertEquals(state.trivia.deadline,restored.trivia.deadline);
+    }
     @Test void realRedisRejectsCommitOfUnknownGame() {
         GameRepositoryContractTest.verifyMissingCommit(repository, "absent-" + UUID.randomUUID());
     }
@@ -285,6 +302,7 @@ class InfrastructureIntegrationTest {
                     send(sockets[index],new Action("DICE_ANIMATION_COMPLETED",id,"animation-"+index,pending.version,
                             null,null,null,null,null,null,pending.turn.rollId,null,null,null));
                     inboxes[index].await("ACTION_ACK");
+                    prepareMovementRoll(id, actor, sockets[index], inboxes[index]);
                     var move=rules.calculate(games.load(id),actor,"seat-"+index+"-piece-0",0);
                     assertEquals(index*17+5,move.from());assertEquals(index*17+9,move.to());
                     send(sockets[index],new Action("MOVE_REQUEST",id,"move-"+index,games.load(id).version,
@@ -313,6 +331,25 @@ class InfrastructureIntegrationTest {
             } finally {socket.sendClose(1000,"done").join();}
         }
     }
+    private void prepareMovementRoll(String id, String actor, WebSocket socket, Inbox inbox) throws Exception {
+        var released=games.load(id);
+        assertTrue(released.turn.homeRelease);
+        assertTrue(released.turn.extraRollAvailable);
+        assertArrayEquals(new boolean[]{true,true},released.turn.consumed);
+        assertTrue(games.moves(id,actor).isEmpty());
+        games.system(id, state -> {
+            state.pieces.stream().filter(p -> p.ownerId.equals(actor) && p.status.equals("HOME"))
+                    .forEach(p -> {p.status="CROWNED";p.progress=Board.FINISH;p.position=new Board().position(state.player(actor).seat,p.number,Board.FINISH);});
+            return List.of(RuleEngine.Event.of("TEST_FIXTURE"));
+        });
+        send(socket,new Action("ROLL_DICE",id,"movement-roll",games.load(id).version,
+                null,null,null,null,null,null,null,null,null,null));
+        inbox.await("ACTION_ACK");
+        var waiting=games.load(id);
+        send(socket,new Action("DICE_ANIMATION_COMPLETED",id,"movement-animation",waiting.version,
+                null,null,null,null,null,null,waiting.turn.rollId,null,null,null));
+        inbox.await("ACTION_ACK");
+    }
     @Test void rawWebSocketAuthDiceMoveDuplicatesAndRedisPublicationSynchronizeTwoPlayers() throws Exception {
         String id=create();
         try(var client=HttpClient.newHttpClient()) {
@@ -331,13 +368,15 @@ class InfrastructureIntegrationTest {
                 send(wsA,new Action("DICE_ANIMATION_COMPLETED",id,"animation",pending.version,
                         null,null,null,null,null,null,pending.turn.rollId,null,null,null));
                 a.await("ACTION_ACK");b.await("GAME_UPDATED");
+                prepareMovementRoll(id, "test-a", wsA, a);
                 var m=rules.calculate(games.load(id),"test-a","seat-0-piece-0",0);
-                var move=new Action("MOVE_REQUEST",id,"move-1",2L,m.pieceId(),m.dieIndex(),m.dieValue(),m.from(),m.to(),null,null,null,null,null);
-                send(wsA,move);a.await("ACTION_ACK");assertTrue(b.await("GAME_UPDATED").contains("PIECE_MOVED"));
+                var move=new Action("MOVE_REQUEST",id,"move-1",games.load(id).version,m.pieceId(),m.dieIndex(),m.dieValue(),m.from(),m.to(),null,null,null,null,null);
+                send(wsA,move);a.await("ACTION_ACK");String moved;
+                do { moved=b.await("GAME_UPDATED"); } while(!moved.contains("PIECE_MOVED"));
                 assertEquals(9,games.snapshot(id,"test-b").pieces().getFirst().position);
-                send(wsA,move);assertTrue(a.await("ACTION_ACK").contains("\"duplicate\":true"));assertEquals(3,games.load(id).version);
+                send(wsA,move);assertTrue(a.await("ACTION_ACK").contains("\"duplicate\":true"));assertEquals(move.expectedVersion()+1,games.load(id).version);
                 assertTrue(presence.connected(id,"test-a"));
-                send(wsB,Map.of("type","SYNC_REQUEST","gameId",id));assertTrue(b.await("GAME_STATE").contains("\"version\":3"));
+                send(wsB,Map.of("type","SYNC_REQUEST","gameId",id));assertTrue(b.await("GAME_STATE").contains("\"version\":"+games.load(id).version));
             } finally {wsA.sendClose(1000,"done").join();wsB.sendClose(1000,"done").join();}
         }
     }

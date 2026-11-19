@@ -65,6 +65,11 @@ public class GameState {
         public Long movementStartedAt;
         public String animationStatus = "NONE";
         public boolean crownChoiceRequired;
+        public boolean homeRelease;
+        public boolean extraRollAvailable;
+        public boolean thirdDoubleReward;
+        public Long movementRemainingMillis;
+        public String pausedMovementRollId;
         public boolean rolled;
         public boolean doubles;
         public int maxDieValue = 6;

@@ -87,7 +87,8 @@ public class TriviaRules extends RuleEngine {
         pending.playerId = piece.ownerId;
         pending.prompt = question.prompt();
         pending.options = question.options();
-        pending.deadline = Math.min(game.turn.deadline, clock.millis() + triviaMillis);
+        pauseMovement(game, events);
+        pending.deadline = clock.millis() + triviaMillis;
         game.trivia = pending;
         events.add(event("TRIVIA_QUESTION", "question", pending));
     }
@@ -100,6 +101,7 @@ public class TriviaRules extends RuleEngine {
         game.trivia = null;
         events.add(event("TRIVIA_RESOLVED", "challengeId", pending.id, "playerId", pending.playerId,
                 "correct", correct, "correctIndex", question.correctIndex()));
+        resumeMovement(game, events, answer == null ? pending.deadline : clock.millis());
         var rewards = catalog.cards(game.mapId, correct ? "BUFF" : "DEBUFF");
         if (rewards.isEmpty()) {
             events.add(event("CARD_DISCARDED", "reason", "EMPTY_CATALOG"));
@@ -121,9 +123,9 @@ public class TriviaRules extends RuleEngine {
         if (!game.status.equals("ACTIVE")) {
             return List.of();
         }
-        if (clock.millis() >= game.turn.deadline) return super.tick(game);
+        if (!movementPaused(game) && clock.millis() >= game.turn.deadline) return super.tick(game);
         var events = new ArrayList<Event>();
-        boolean turnExpired = clock.millis() >= game.turn.deadline;
+
         if (game.trivia != null && clock.millis() >= game.trivia.deadline) {
             resolveExpiredTrivia(game, events);
         }
@@ -131,7 +133,7 @@ public class TriviaRules extends RuleEngine {
             events.add(event("CARD_DISCARDED", "cardId", game.card.cardId, "reason", "TIMEOUT"));
             game.card = null;
         }
-        if (turnExpired) {
+        if (!movementPaused(game) && clock.millis() >= game.turn.deadline) {
             events.addAll(super.tick(game));
         } else if (!events.isEmpty()) {
             continueTurn(game, events);
@@ -153,6 +155,7 @@ public class TriviaRules extends RuleEngine {
             events.add(event("TRIVIA_RESOLVED", "challengeId", pending.id, "playerId", pending.playerId,
                     "correct", false, "reason", "CATALOG_UNAVAILABLE"));
             events.add(event("CARD_DISCARDED", "reason", "CATALOG_UNAVAILABLE"));
+            resumeMovement(game, events, pending.deadline);
         }
     }
 }

@@ -22,6 +22,12 @@ abstract class EngineFixture {
     protected GameAction action(String type,String piece,Integer index,Integer value,Integer from,Integer to,List<Integer> choose) {
         return new GameAction(type,"g",UUID.randomUUID().toString(),game.version,piece,index,value,from,to,choose,null,null,null,null);
     }
+    // Movement-only scenarios must have no HOME pieces when rolling doubles.
+    protected void activateHomeForMovement() {
+        game.pieces.stream().filter(p -> p.ownerId.equals("a") && p.status.equals("HOME"))
+                .forEach(p -> place(p.id, 0));
+    }
+    protected void rollForMovement() { activateHomeForMovement(); roll(); }
     protected void roll() {
         engine.act(game,"a",action("ROLL_DICE",null,null,null,null,null,null));
         if ("WAITING".equals(game.turn.animationStatus)) engine.act(game,"a",new GameAction(

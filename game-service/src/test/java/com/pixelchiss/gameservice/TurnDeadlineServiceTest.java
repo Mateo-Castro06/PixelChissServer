@@ -17,6 +17,7 @@ class TurnDeadlineServiceTest extends ServiceFixture {
     void prepare() {
         engine=new RuleEngine(board,m->4,clock,30_000);
         place("seat-0-piece-0",10);
+        activateHomeForMovement();
         repo.states.put("g",repo.json.writeValueAsString(game));
         service=new GameService(repo,engine,new JsonPayloadFingerprints(repo.json));
         service.action("a",command("ROLL_DICE",game,null));
