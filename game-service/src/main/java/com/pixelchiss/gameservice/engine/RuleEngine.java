@@ -148,6 +148,7 @@ public class RuleEngine {
         turn.consumed = new boolean[2];
         turn.homeRelease = false;
         turn.releasedPieceIds.clear();
+        turn.captureLockedPieceIds.clear();
         turn.extraRollAvailable = false;
         turn.thirdDoubleReward = false;
         turn.rollId = java.util.UUID.randomUUID().toString();
@@ -190,6 +191,8 @@ public class RuleEngine {
         Piece piece = game.piece(pieceId);
         require(piece != null && piece.ownerId.equals(actor), "NOT_YOUR_PIECE", "Piece does not belong to you");
         require(!piece.status.equals("CROWNED"), "CROWNED_PIECE", "Crowned piece cannot move");
+        require(!game.turn.captureLockedPieceIds.contains(piece.id),
+                "PIECE_CAPTURE_LOCKED", "Capturing piece cannot move again in this roll");
         require(!game.turn.homeRelease || game.turn.crownEligible.contains(piece.id),
                 "PIECE_RELEASED_THIS_ROLL", "Only pieces active before this roll can use the remaining die");
         boolean release = piece.status.equals("HOME");
@@ -273,6 +276,7 @@ public class RuleEngine {
             return;
         }
         game.turn.captureSatisfied = true;
+        game.turn.captureLockedPieceIds.add(movement.pieceId());
         for (Piece victim : occupants(game, movement.to(), movement.pieceId())) {
             if (victim.ownerId.equals(game.turn.playerId)) continue;
             victim.home();

@@ -1,4 +1,35 @@
-# Liberación parcial y cierre de tres pares — 21 de noviembre de 2026
+# Bloqueo de capturadora por lanzamiento — 21 de noviembre de 2026
+
+Baseline: `3880063c3da63dcff7a7421fe8fbe4075ad92045`. El cambio de ejecución añade únicamente `Turn.captureLockedPieceIds`, lo limpia al lanzar y registra/valida la ficha que captura mediante dados en RuleEngine. No modifica otros microservicios, arquitectura, cartas, geometría, pares, coronación, plazos, Compose, firewall ni TLS. Los eventos existentes identifican víctima, atacante y dado; el único código de error nuevo es PIECE_CAPTURE_LOCKED.
+
+Con (4,3), capturar con cualquiera de los dados excluye a esa ficha de todas las opciones del sobrante. Otra ficha puede usarlo; sin otra opción se descarta y se resuelve el lanzamiento sin esperar timeout. El deadline no se reinicia. Humanos y bots usan calculate/legalMoves. La marca sobrevive a JSON, Redis, reintentos, desconexión/reconexión y reinicio de una JVM; se limpia en el siguiente lanzamiento o turno. Datos previos sin el campo siguen siendo legibles con conjunto vacío, sin adivinar capturas anteriores al despliegue. No cambia boardLayout v4-100 ni Streams.
+
+Se conserva explícitamente la política vigente de SOPLAR: captureSatisfied satisface la obligación del turno completo al capturar. No se introduce una obligación nueva por cada dado. Las capturas que siguen siendo legales con otra ficha aparecen en legalMoves; la capturadora bloqueada nunca aparece. Las capturas de cartas y la liberación especial conservan su semántica; la recién liberada sigue excluida del dado sobrante mediante la regla anterior.
+
+| Suite final ejecutada | Pruebas | Fallos / errores / omitidas |
+|---|---:|---|
+| Game con Redis/Mongo, WS directo, Gateway real, reinicio JVM y BotRunner | 330 | 0 / 0 / 0 |
+| Auth con PostgreSQL temporal | 87 | 0 / 0 / 0 |
+| Gateway | 13 | 0 / 0 / 0 |
+| Eureka | 1 | 0 / 0 / 0 |
+| Lobby, incluidas siete pruebas EDA/SAGA/Streams | 13 | 0 / 0 / 0 |
+| Herramienta LAN | 104 | 0 / 0 / 2 |
+
+Game incluye 27 casos de InfrastructureIntegrationTest. Las integraciones nuevas usan dos identidades JWT firmadas, dos conexiones WS por caso y ambos mapas, directamente en Game y a través del JAR Gateway sin modificarlo. Comprueban captura, consumo, bloqueo, publicación a otro jugador, SYNC/reconexión, mismo plazo, rechazo manipulado, reintento duplicado y movimiento de la otra ficha. BotRunner usa Redis real en ambos mapas y cierra el tercer par. Otra prueba arranca una JVM Game independiente, lee el agregado bloqueado, la detiene, vuelve a arrancarla y rechaza por WS mover la capturadora con el dado pendiente.
+
+Las dos omisiones LAN requieren PowerShell, ausente. Las integraciones optativas de firewall/TLS en Docker no se ejecutaron. Los contextos Docker normal y Desktop siguen sin daemon accesible: no se puede certificar la salud del despliegue ni de WSS/LAN físicos. Las pruebas de Gateway se hicieron mediante WS en loopback con puertos temporales; no acreditan Godot ni Windows reales.
+
+Antes del arreglo, CaptureRollLockTest reprodujo cuatro fallos esperados: la segunda jugada de la capturadora todavía era aceptada. La regresión de Board100RulesTest detectó ocho casos que reutilizaban el turno después de capturar con su única ficha activa. Se mantuvieron sus aserciones de geometría, se añadió la comprobación del nuevo cambio de turno y se inició un estado nuevo para el segundo escenario independiente. La fixture nueva de trivia se corrigió para capturar en 8 desde 5 con el dado 3, respetando el recorrido. No se relajaron aserciones para ocultar errores.
+
+Se reutilizaron únicamente binarios de pruebas ya descargados, creando datos **nuevos** en `/tmp/pixelchiss-capture-deps`: PostgreSQL 15440 (`auth_capture_tests`), Redis 16392 y MongoDB 27092 (`pixelchiss_capture_tests` / `pixelchiss_capture_saga_tests`), todos en loopback. El JAR SAGA temporal escuchó en 127.0.0.1:18096 con prefijo Redis exclusivo. Al terminar se comprobó UP en ese JAR y se detuvieron únicamente los procesos temporales, conservando sus datos y logs. No se usaron bases, partidas ni volúmenes de desarrollo. No se cambió la publicación PostgreSQL ni la propuesta de configuración local de la auditoría previa.
+
+Comandos: Game `mvn -o -Dmaven.repo.local=.build/m2 -Dgame.integration=true verify -B` con GAME_TEST_REDIS_URL, GAME_TEST_MONGO_URI y GAME_TEST_GATEWAY_JAR del entorno aislado; Auth `mvn -o verify -B` con AUTH_TEST_DATABASE_URL temporal; Gateway `mvn -o -Dmaven.repo.local=.build/m2 verify -B`; Eureka `mvn -o -Dmaven.repo.local=../api-gateway/.build/m2 verify -B`; Lobby `.venv/bin/python -m unittest discover -s tests -v` con SAGA_TEST_* y credencial interna de pruebas; LAN `python3 -m unittest discover -s infrastructure/lan -v`.
+
+Logs: `/tmp/pixelchiss-capture-game-final.log`, `/tmp/pixelchiss-capture-auth.log`, `/tmp/pixelchiss-capture-gateway.log`, `/tmp/pixelchiss-capture-eureka.log`, `/tmp/pixelchiss-capture-lobby.log`, `/tmp/pixelchiss-capture-lan.log`. Ejemplos emitidos: `target/capture-wire-game-{map}.json`, `target/capture-wire-gateway-{map}.json`, `target/capture-no-moves.json`. Procesos JVM: `target/capture-gateway-process.log` y `target/partial-release-restart-process.log`. El contrato y ejemplos están en [WEBSOCKET.md](WEBSOCKET.md#una-captura-por-ficha-y-lanzamiento).
+
+---
+
+# Validación anterior: liberación parcial y cierre de tres pares — 21 de noviembre de 2026
 
 Baseline: `ba8ebbbeda43461b14cea45134716b5f8f0ad7ae`. El cambio de ejecución se limita a `GameState.Turn` y `RuleEngine`; no modifica arquitectura, tablero, cartas, preguntas, Auth, Gateway, Lobby, EDA/SAGA, Compose, OAuth, firewall ni TLS. Las reglas y el orden del tercer par se describen en [ENGINE.md](ENGINE.md); los ocho ejemplos de contrato están en [WEBSOCKET.md](WEBSOCKET.md#ejemplos-ejecutables-liberación-parcial-y-tres-pares).
 

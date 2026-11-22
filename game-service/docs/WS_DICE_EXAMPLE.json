@@ -125,6 +125,7 @@
       "homeAttempts": 0,
       "consecutiveDoubles": 0,
       "captureSatisfied": false,
+      "captureLockedPieceIds": [],
       "captureCandidates": [],
       "captureVictims": {},
       "crownEligible": [

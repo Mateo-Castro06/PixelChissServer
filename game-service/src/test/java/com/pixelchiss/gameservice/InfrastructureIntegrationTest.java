@@ -21,6 +21,7 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.*;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -540,5 +541,170 @@ class InfrastructureIntegrationTest {
         if(!process.waitFor(10,TimeUnit.SECONDS)) {
             process.destroyForcibly();assertTrue(process.waitFor(10,TimeUnit.SECONDS));
         }
+    }
+    private String captureGame(String map) {
+        String id="it-"+UUID.randomUUID();ids.add(id);
+        games.create(new CreateGame(id,"capture-lock",map,input(id).participants(),"test-a").command());
+        games.system(id,state->{
+            for(int n=0;n<4;n++) {
+                var piece=state.piece("seat-0-piece-"+n);
+                piece.status=n<2?"BOARD":"CROWNED";
+                piece.progress=n==0?1:n==1?15:Board.FINISH;
+                piece.position=new Board().position(0,n,piece.progress);
+            }
+            for(int n=0;n<2;n++) {
+                var victim=state.piece("seat-1-piece-"+n);victim.status="BOARD";
+                victim.position=n==0?10:13;victim.progress=Math.floorMod(victim.position-22,68);
+            }
+            state.player("test-a").effects.add(new GameState.Effect("CHOOSE_DICE",1,1,6));
+            state.turn.diceSelectionRequired=true;
+            return List.of(RuleEngine.Event.of("TEST_FIXTURE"));
+        });
+        return id;
+    }
+    private void captureOverWebSocket(String id,URI uri,String sample) throws Exception {
+        try(var client=HttpClient.newHttpClient()) {
+            var a=new Inbox();var b=new Inbox();
+            var wsA=client.newWebSocketBuilder().buildAsync(uri,a).join();
+            var wsB=client.newWebSocketBuilder().buildAsync(uri,b).join();
+            try {
+                for(var entry:List.of(Map.entry(wsA,Map.entry(a,"test-a")),Map.entry(wsB,Map.entry(b,"test-b")))) {
+                    send(entry.getKey(),Map.of("type","AUTH","token",token(entry.getValue().getValue())));
+                    entry.getValue().getKey().await("AUTHENTICATED");
+                    send(entry.getKey(),Map.of("type","JOIN_GAME","gameId",id));entry.getValue().getKey().await("GAME_STATE");
+                }
+                send(wsA,new Action("ROLL_DICE",id,"capture-roll",games.load(id).version,
+                        null,null,null,null,null,List.of(4,3),null,null,null,null));a.await("ACTION_ACK");
+                var waiting=repository.find(id);String roll=waiting.turn.rollId;
+                send(wsA,new Action("DICE_ANIMATION_COMPLETED",id,"capture-animation",waiting.version,
+                        null,null,null,null,null,null,roll,null,null,null));a.await("ACTION_ACK");
+                long deadline=repository.find(id).turn.deadline;
+                var capture=new Action("MOVE_REQUEST",id,"capture",games.load(id).version,
+                        "seat-0-piece-0",0,4,6,10,null,null,null,null,null);
+                send(wsA,capture);var ack=json.readTree(a.await("ACTION_ACK"));
+                String publication;
+                do{publication=b.await("GAME_UPDATED");}while(!publication.contains("PIECE_CAPTURED"));
+                assertTrue(publication.contains("\"byPieceId\":\"seat-0-piece-0\""));
+                var recovered=new GameService(repository,rules,new JsonPayloadFingerprints(json));
+                assertEquals(Set.of("seat-0-piece-0"),recovered.load(id).turn.captureLockedPieceIds);
+                assertArrayEquals(new boolean[]{true,false},recovered.load(id).turn.consumed);
+                assertEquals(deadline,recovered.load(id).turn.deadline);
+                games.system(id,state->{state.player("test-a").disconnectedAt=System.currentTimeMillis();
+                    return List.of(RuleEngine.Event.of("TEST_DISCONNECTED"));});
+                send(wsA,Map.of("type","SYNC_REQUEST","gameId",id));var sync=json.readTree(a.await("GAME_STATE"));
+                assertFalse(sync.path("legalMoves").isEmpty());
+                sync.path("legalMoves").forEach(m->{assertEquals("seat-0-piece-1",m.path("pieceId").asString());
+                    assertEquals(1,m.path("dieIndex").asInt());assertEquals(3,m.path("dieValue").asInt());});
+                long version=recovered.load(id).version;
+                var forged=new Action("MOVE_REQUEST",id,"capture-forged",version,
+                        "seat-0-piece-0",1,3,10,13,null,null,null,null,null);
+                send(wsA,forged);var error=json.readTree(a.await("ERROR"));
+                assertEquals("PIECE_CAPTURE_LOCKED",error.path("code").asString());
+                assertEquals(version,recovered.load(id).version);assertEquals("BOARD",recovered.load(id).piece("seat-1-piece-1").status);
+                send(wsB,forged);assertTrue(b.await("ERROR").contains("NOT_YOUR_TURN"));
+                send(wsA,capture);assertTrue(a.await("ACTION_ACK").contains("\"duplicate\":true"));
+                assertEquals(version,recovered.load(id).version);
+                Files.writeString(Path.of("target/capture-wire-"+sample+".json"),json.writerWithDefaultPrettyPrinter()
+                        .writeValueAsString(Map.of("captureRequest",capture,"captureAck",ack,
+                                "capturePublication",json.readTree(publication),"synchronization",sync,"forgedRequest",forged,"error",error)));
+                send(wsA,new Action("MOVE_REQUEST",id,"other-piece",version,
+                        "seat-0-piece-1",1,3,20,23,null,null,null,null,null));a.await("ACTION_ACK");
+                assertEquals("test-b",recovered.load(id).turn.playerId);
+                assertTrue(recovered.load(id).turn.captureLockedPieceIds.isEmpty());
+            } finally {wsA.sendClose(1000,"done").join();wsB.sendClose(1000,"done").join();}
+        }
+    }
+    @ParameterizedTest @CsvSource({"classic","science"})
+    void captureLockUsesRealRedisAndTwoJwtGameWebSockets(String map) throws Exception {
+        captureOverWebSocket(captureGame(map),URI.create("ws://127.0.0.1:"+port+"/ws/game"),"game-"+map);
+    }
+    @ParameterizedTest @CsvSource({"classic","science"})
+    @EnabledIfEnvironmentVariable(named="GAME_TEST_GATEWAY_JAR",matches=".+")
+    void captureLockUsesRealGatewayAndGameWebSockets(String map) throws Exception {
+        int gatewayPort;
+        try(var reservation=new ServerSocket(0,1,InetAddress.getLoopbackAddress())) {gatewayPort=reservation.getLocalPort();}
+        var jar=Path.of(System.getenv("GAME_TEST_GATEWAY_JAR")).toAbsolutePath();assertTrue(Files.isRegularFile(jar));
+        var builder=new ProcessBuilder(ProcessHandle.current().info().command().orElseThrow(),"-jar",jar.toString(),
+                "--server.address=127.0.0.1","--server.port="+gatewayPort,"--eureka.client.enabled=false",
+                "--spring.cloud.discovery.client.simple.instances.GAME-SERVICE[0].uri=http://127.0.0.1:"+port);
+        builder.environment().putAll(Map.of("JWT_PUBLIC_KEY_PATH",Path.of("target/integration-public.pem").toAbsolutePath().toString(),
+                "EUREKA_URL","http://127.0.0.1:8761/eureka/"));
+        var child=builder.redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(
+                Path.of("target/capture-gateway-process.log").toFile())).start();
+        try(var client=HttpClient.newHttpClient()) {
+            long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(25);boolean ready=false;
+            while(System.nanoTime()<until&&child.isAlive()) {
+                try {
+                    var response=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+gatewayPort+"/actuator/health"))
+                            .timeout(Duration.ofSeconds(1)).GET().build(),HttpResponse.BodyHandlers.ofString());
+                    if(response.statusCode()==200){ready=true;break;}
+                }catch(java.io.IOException starting){ /* Isolated Gateway is starting. */ }
+                Thread.sleep(100);
+            }
+            assertTrue(ready,"Gateway unavailable; inspect target/capture-gateway-process.log");
+            captureOverWebSocket(captureGame(map),URI.create("ws://127.0.0.1:"+gatewayPort+"/api/game/ws"),"gateway-"+map);
+        } finally {stopRecoveryProcess(child);}
+    }
+    @Test void realJvmRestartKeepsCaptureLockAndRemainingDie() throws Exception {
+        String id=captureGame("classic");
+        games.action("test-a",new Action("ROLL_DICE",id,"restart-roll",games.load(id).version,
+                null,null,null,null,null,List.of(4,3),null,null,null,null).command());
+        var waiting=games.load(id);
+        games.action("test-a",new Action("DICE_ANIMATION_COMPLETED",id,"restart-animation",waiting.version,
+                null,null,null,null,null,null,waiting.turn.rollId,null,null,null).command());
+        games.action("test-a",new Action("MOVE_REQUEST",id,"restart-capture",games.load(id).version,
+                "seat-0-piece-0",0,4,6,10,null,null,null,null,null).command());
+        var persisted=repository.find(id);int childPort;
+        try(var reservation=new ServerSocket(0,1,InetAddress.getLoopbackAddress())) {childPort=reservation.getLocalPort();}
+        Process child=null;
+        try(var client=HttpClient.newHttpClient()) {
+            child=startRecoveryProcess(childPort,client);
+            var firstRead=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+childPort+"/api/game/games/"+id))
+                    .header("Authorization","Bearer "+token("test-a")).GET().build(),HttpResponse.BodyHandlers.ofString());
+            assertEquals(200,firstRead.statusCode());
+            assertEquals(1,json.readTree(firstRead.body()).path("turn").path("captureLockedPieceIds").size());
+            stopRecoveryProcess(child);child=null;
+            child=startRecoveryProcess(childPort,client);var inbox=new Inbox();
+            var ws=client.newWebSocketBuilder().buildAsync(URI.create("ws://127.0.0.1:"+childPort+"/ws/game"),inbox).join();
+            try {
+                send(ws,Map.of("type","AUTH","token",token("test-a")));inbox.await("AUTHENTICATED");
+                send(ws,Map.of("type","SYNC_REQUEST","gameId",id));var sync=json.readTree(inbox.await("GAME_STATE"));
+                assertEquals(persisted.turn.rollId,sync.path("state").path("turn").path("rollId").asString());
+                assertEquals(persisted.turn.deadline,sync.path("state").path("turn").path("deadline").asLong());
+                assertArrayEquals(new boolean[]{true,false},repository.find(id).turn.consumed);
+                assertEquals(Set.of("seat-0-piece-0"),repository.find(id).turn.captureLockedPieceIds);
+                assertFalse(sync.path("legalMoves").isEmpty());
+                sync.path("legalMoves").forEach(m->assertEquals("seat-0-piece-1",m.path("pieceId").asString()));
+                send(ws,new Action("MOVE_REQUEST",id,"restart-forged",games.load(id).version,
+                        "seat-0-piece-0",1,3,10,13,null,null,null,null,null));
+                assertTrue(inbox.await("ERROR").contains("PIECE_CAPTURE_LOCKED"));
+            }finally{ws.sendClose(1000,"done").join();}
+        }finally{if(child!=null)stopRecoveryProcess(child);}
+    }
+    @ParameterizedTest @CsvSource({"classic","science"})
+    void realRedisBotRunnerCapturesUsesAnotherPieceAndClosesThirdPair(String map) {
+        String id=captureGame(map);
+        games.system(id,state->{
+            state.player("test-a").bot=true;state.player("test-a").effects.clear();
+            state.player("test-a").effects.add(new GameState.Effect("DICE_MAX_LIMIT",5,1,4));
+            state.turn.diceSelectionRequired=false;state.turn.maxDieValue=4;
+            return List.of(RuleEngine.Event.of("TEST_FIXTURE"));
+        });
+        var policy=new com.pixelchiss.gameservice.bot.BotPolicy(rules,catalog,()->0.0);
+        var runner=new com.pixelchiss.gameservice.bot.BotRunner(
+                (com.pixelchiss.gameservice.application.ActiveGames)repository,games,policy);
+        runner.step();runner.step();var captured=repository.find(id);
+        assertEquals("HOME",captured.piece("seat-1-piece-0").status);
+        assertEquals(Set.of("seat-0-piece-0"),captured.turn.captureLockedPieceIds);
+        assertArrayEquals(new boolean[]{true,false},captured.turn.consumed);
+        var next=policy.next(captured);assertEquals("seat-0-piece-1",next.pieceId());assertEquals(1,next.dieIndex());
+        runner.step();assertTrue(repository.find(id).turn.extraRollAvailable);
+        runner.step();assertEquals(2,repository.find(id).turn.consecutiveDoubles);
+        assertTrue(repository.find(id).turn.captureLockedPieceIds.isEmpty());
+        for(int step=0;step<8&&repository.find(id).turn.playerId.equals("test-a");step++)runner.step();
+        var closed=repository.find(id);assertEquals("test-b",closed.turn.playerId);
+        assertEquals(0,closed.turn.consecutiveDoubles);assertEquals(3,closed.pieces.stream()
+                .filter(p->p.ownerId.equals("test-a")&&p.status.equals("CROWNED")).count());
+        assertNull(policy.next(closed));assertNull(closed.turn.movementStartedAt);
     }
 }

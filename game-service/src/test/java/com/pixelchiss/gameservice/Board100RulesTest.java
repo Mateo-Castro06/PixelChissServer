@@ -60,6 +60,8 @@ class Board100RulesTest extends EngineFixture {
         placeAt(own,start);placeAt(rival,(start+1)%68);dice(1,2,false);
         var movement=engine.calculate(game,"a",own,0);assertTrue(movement.capture());
         move(movement);assertHome(game.piece(rival));
+        assertEquals("b",game.turn.playerId); // Its only active piece captured; the remainder is now discarded.
+        start(map,seat,false); // The independent protected-start scenario needs a fresh turn.
         placeAt(own,start-1);placeAt(rival,start);dice(1,2,false);
         movement=engine.calculate(game,"a",own,0);assertFalse(movement.capture());move(movement);
         assertEquals("BOARD",game.piece(rival).status);

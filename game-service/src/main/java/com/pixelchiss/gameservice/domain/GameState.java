@@ -56,6 +56,7 @@ public class GameState {
         public int homeAttempts;
         public int consecutiveDoubles;
         public boolean captureSatisfied;
+        public Set<String> captureLockedPieceIds = new LinkedHashSet<>();
         public Set<String> captureCandidates = new LinkedHashSet<>();
         public Map<String, Set<String>> captureVictims = new LinkedHashMap<>();
         // Own BOARD pieces before HOME release; also authorizes partial-release movement.

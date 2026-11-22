@@ -414,3 +414,80 @@ El jugador a ya perdió el turno. Una solicitud nueva con la versión actual se 
 ```
 
 No hay cuarta tirada, penalización por el tercer par ni reinicio de relojes antiguos. El timeout de un movimiento pendiente descarta el dado y cierra el turno sin lanzamiento adicional, conforme a la política ya vigente.
+
+## Una captura por ficha y lanzamiento
+
+Una ficha que captura mediante un movimiento de dados no puede volver a usar dados de ese rollId. La misma regla se aplica a humanos y bots. El campo aditivo `turn.captureLockedPieceIds` contiene las fichas capturadoras bloqueadas; no son las víctimas. Se persiste atómicamente con el movimiento, el consumo y el recibo. No hay acciones ni eventos nuevos: solo el código ERROR `PIECE_CAPTURE_LOCKED`.
+
+`PIECE_CAPTURED.data.byPieceId` identifica al atacante de una captura ordinaria, y PIECE_MOVED.dieIndex identifica el dado consumido. Usar turn.dice/consumed y `GAME_STATE.legalMoves` para las opciones restantes. No inferir bloqueos solo de PIECE_CAPTURED: las capturas de cartas conservan sus reglas y pueden usar ese evento con cardId. La liberación especial sigue PIECE_RELEASED/HOME_RELEASE_RESOLVED y la exclusión de recién liberadas.
+
+Los ejemplos siguientes proceden de pruebas ejecutadas. La captura/reconexión/rechazo se obtuvo con dos JWT y dos WebSocket reales a través de Gateway y Game; el descarte se obtuvo de GameService con repositorio en memoria. Son fixtures de pruebas, no una sesión Godot ni una validación LAN. Los fragmentos de estado omiten campos irrelevantes; los objetos de events y ERROR se reproducen completos.
+
+### (4,3): captura con 4 y uso del 3 por otra ficha
+
+En esta fixture, A está en 6, B en 20 y las otras dos fichas están coronadas. Hay rivales en 10 y 13. La animación ya fue confirmada. Petición aceptada:
+
+```json
+{"type":"MOVE_REQUEST","gameId":"it-222b4125-eeda-415d-9351-27d54fed1442","requestId":"capture","expectedVersion":3,"pieceId":"seat-0-piece-0","dieIndex":0,"dieValue":4,"fromPosition":6,"targetPosition":10}
+```
+
+El mismo GAME_UPDATED incluye estos elementos de events, en este orden:
+
+```json
+{"type":"PIECE_CAPTURED","data":{"pieceId":"seat-1-piece-0","byPieceId":"seat-0-piece-0"}}
+{"type":"PIECE_MOVED","data":{"pieceId":"seat-0-piece-0","from":6,"to":10,"dieIndex":0,"status":"BOARD"}}
+```
+
+Extracto real de state.turn después de capturar:
+
+```json
+{"playerId":"test-a","rollId":"27a2da30-b4ac-48c2-ac61-0e5f8140d87d","dice":[4,3],"consumed":[true,false],"captureLockedPieceIds":["seat-0-piece-0"],"captureSatisfied":true,"rolled":true,"animationStatus":"COMPLETED","movementStartedAt":1795317138219,"deadline":1795317168219,"extraRollAvailable":false}
+```
+
+La marca no reinicia movementStartedAt ni deadline. Aunque A podría alcanzar al rival de 13 sumando tres casillas, ese movimiento está prohibido. Tras reconexión y SYNC_REQUEST, el array completo de legalMoves es:
+
+```json
+[{"pieceId":"seat-0-piece-1","dieIndex":1,"dieValue":3,"from":20,"to":23,"progress":18,"capture":false,"safe":false,"crown":false,"release":false}]
+```
+
+B puede gastar el dado 1 de valor 3 y avanzar de 20 a 23. No usar una lista de elegibles calculada o enviada por el cliente. Si primero se captura con el dado 1 de valor 3, queda el índice 0 de valor 4 y se aplica la misma exclusión.
+
+### Petición manipulada y reintentos
+
+```json
+{"type":"MOVE_REQUEST","gameId":"it-222b4125-eeda-415d-9351-27d54fed1442","requestId":"capture-forged","expectedVersion":6,"pieceId":"seat-0-piece-0","dieIndex":1,"dieValue":3,"fromPosition":10,"targetPosition":13}
+```
+
+```json
+{"type":"ERROR","requestId":"capture-forged","code":"PIECE_CAPTURE_LOCKED","message":"Capturing piece cannot move again in this roll","gameId":"it-222b4125-eeda-415d-9351-27d54fed1442","version":6}
+```
+
+El rechazo no cambia posición, versión ni consumo y no captura al rival de 13. Repetir la captura original con el mismo requestId/payload devuelve ACTION_ACK con duplicate=true, sin otra captura/publicación. Con requestId nuevo se revalida versión y dado. No enviar otro lanzamiento mientras rolled=true: ALREADY_ROLLED conserva también el bloqueo.
+
+### Sin otra ficha que pueda mover: descarte inmediato
+
+En esta segunda fixture las otras tres fichas están coronadas. La única activa captura con el 4. Esta es la publicación completa en cuanto a eventos, sin esperar timeout:
+
+```json
+{"type":"PIECE_CAPTURED","data":{"pieceId":"seat-1-piece-0","byPieceId":"seat-0-piece-0"}}
+{"type":"PIECE_MOVED","data":{"pieceId":"seat-0-piece-0","from":6,"to":10,"dieIndex":0,"status":"BOARD"}}
+{"type":"TURN_CHANGED","data":{"playerId":"b","turnNumber":2,"deadline":61000}}
+```
+
+El dado 3 se descarta: no existe un segundo PIECE_MOVED ni un evento DICE_DISCARDED nuevo. El ACK/GAME_UPDATED ya contiene el turno del siguiente jugador, con dice=[] y movementStartedAt=null. No interpretar los dados del turno nuevo como resultados pendientes del anterior. No hay SOPLAR por una opción prohibida ni movimiento automático de la capturadora.
+
+### Pares, temporizadores y alcance
+
+Con pares y sin movimientos legales para otras fichas, el servidor consume el sobrante y publica el ROLL_AVAILABLE existente. Conserva el contador, limpia el bloqueo al aceptar el próximo ROLL_DICE y reconstruye legalMoves; la ficha puede mover o capturar otra vez. El tercer par mantiene CROWN_REQUEST y su cierre obligatorio sin una cuarta tirada.
+
+Una liberación única sigue consumiendo el índice 0 y excluyendo la recién liberada. Si otra ficha captura con el índice 1, se resuelve ese dado y continúa el flujo de pares. Liberaciones múltiples, cartas, seguros, coronación y geometría permanecen iguales.
+
+La captura no reinicia los 30 segundos. Con otras opciones legales queda el mismo deadline; sin opciones se resuelve el lanzamiento inmediatamente. La trivia conserva sus 15 segundos, pausa/reanudación del saldo y bloqueo persistido. Reconectar no vuelve a habilitar la ficha ni reinicia el tiempo.
+
+SOPLAR conserva su semántica vigente: una captura satisface la obligación del turno completo mediante captureSatisfied. No se exige una segunda captura obligatoria después de haberla satisfecho. Las oportunidades anteriores a capturar siguen evaluándose con el historial existente; las opciones actuales se obtienen de legalMoves, que excluye las bloqueadas.
+
+### Persistencia y reproducción
+
+El campo nuevo usa [] al leer un agregado previo que no lo incluya. No se adivina qué ficha capturó antes del despliegue; las nuevas capturas quedan marcadas con esta versión. No cambia boardLayout v4-100 ni el esquema de Streams.
+
+Las pruebas unitarias son CaptureRollLockTest y CaptureRollPersistenceTest. Las integraciones generan target/capture-wire-game-{map}.json y target/capture-wire-gateway-{map}.json; CaptureRollPersistenceTest genera target/capture-no-moves.json. Para comprobar el puente real, construir primero Gateway y establecer GAME_TEST_GATEWAY_JAR a su JAR; ejecutar Game con game.integration=true y GAME_TEST_REDIS_URL/GAME_TEST_MONGO_URI de bases aisladas. Sin GAME_TEST_GATEWAY_JAR, los casos del puente se omiten explícitamente.
