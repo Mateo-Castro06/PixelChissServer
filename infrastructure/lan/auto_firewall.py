@@ -142,7 +142,7 @@ class Firewall:
         script += "$a=$r|Get-NetFirewallAddressFilter; $p=$r|Get-NetFirewallPortFilter; "
         script += "$out+=@{name=$r.Name;group=$r.Group;enabled=[string]$r.Enabled;action=[string]$r.Action;"
         script += "direction=[string]$r.Direction;profile=[string]$r.Profile;local=@($a.LocalAddress);remote=@($a.RemoteAddress);"
-        script += "port=[string]$p.LocalPort;protocol=[string]$p.Protocol}}; "
+        script += "port=[string]$p.LocalPort;protocol=[string]$p.Protocol}}}; "
         script += "if(@(Get-NetFirewallProfile | Where-Object {-not $_.Enabled}).Count){throw 'Firewall profile disabled'};"
         script += 'ConvertTo-Json -InputObject @($out) -Depth 5 -Compress'
         return json.loads(powershell(script).stdout)

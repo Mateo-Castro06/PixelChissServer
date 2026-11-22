@@ -4,7 +4,28 @@ Baseline: `c93f82a6e2d44a9396c3bf55a9c40bda2b7cffd6`. Fecha: 19 de noviembre de 
 
 [Evidencia estructurada y hashes de logs/fuentes](lan-auto-validation.json).
 
-## Ejecuciones finales
+## Corrección de consulta Windows (21 de noviembre de 2026)
+
+En `auto_firewall.py`, `windows_query()` generaba cinco llaves de apertura y cuatro de cierre. El fragmento `protocol=[string]$p.Protocol}};` cerraba el hashtable y el `if($r)`, pero dejaba abierto el `foreach`. Se corrigió a `protocol=[string]$p.Protocol}}};`, dejando la comprobación de perfiles y la serialización JSON fuera del bucle. El único cambio de código de ejecución es esa llave; no cambian reglas, autorizaciones, servicios ni datos.
+
+Se añadieron doce pruebas a la suite LAN existente:
+
+- Inspección de delimitadores y comillas de los scripts de consulta, creación en los tres perfiles, comprobación de administrador, elevación, consulta/retirada de reglas antiguas y reversión. También se decodifican e inspeccionan los payloads UTF-16LE, incluido el elevado. Las pruebas detectaron el fallo antes de aplicar el arreglo y ahora pasan; la variante original queda como caso negativo.
+- Uso automático del parser real `System.Management.Automation.Language.Parser` si se encuentra `powershell.exe`, `pwsh` o `powershell`. Solo analiza los scripts, sin ejecutarlos. Otra prueba ejecuta la consulta con funciones PowerShell locales de prueba que sustituyen todos los cmdlets de firewall: verifica arrays JSON con cero, una y tres reglas y el rechazo de perfiles deshabilitados.
+- CLI `firewall-check`: éxito, reglas ausentes/parciales/de ámbito incorrecto, JSON inválido, fallo de PowerShell y ejecutable ausente; comprueba códigos de salida y ausencia de escrituras/elevación. CLI `start --auto`: reutilización sin duplicados ni elevación, conservación de estado al repetir, restauración de configuración ante error, rechazo sin autorización y detención si se pierde la protección antes de publicar servicios. Las operaciones externas están sustituidas por mocks y los archivos son temporales.
+- Rechazo de una regla ajena con nombre administrado y retirada Windows limitada al grupo de esta instalación, conservando los nombres actuales.
+
+Comando ejecutado: `python3 -m unittest discover -s infrastructure/lan -v`. Resultado: **104 pruebas, 102 aprobadas, 2 omitidas, cero fallos/errores**. Las dos omitidas requieren PowerShell, que no está instalado en este entorno Linux. La inspección de delimitadores no sustituye al parser real ni acredita Windows Defender Firewall/UAC reales. No se modificó el firewall del anfitrión ni se ejecutó `start --auto` contra sus servicios. Las regresiones de servicios de la tabla histórica siguiente no se repitieron para este cambio limitado al generador y sus pruebas.
+
+Para ejecutar las pruebas en Windows, sin aplicar reglas:
+
+```powershell
+py -3 -m unittest discover -s infrastructure/lan -p test_firewall_scripts.py -v
+```
+
+Con una instalación LAN ya configurada, `py -3 infrastructure/lan/lan.py firewall-check` consulta el estado real sin aplicar reglas. Debe comprobarse en un anfitrión Windows; las pruebas de fixtures no certifican ese entorno. `start --auto` conserva su autorización interactiva para cualquier modificación del firewall.
+
+## Ejecuciones finales (19 de noviembre de 2026)
 
 | Suite | Pruebas | Fallos / errores / omitidas |
 |---|---:|---|

@@ -1,5 +1,6 @@
 """No real firewall/Compose writes: mutations are replaced by mocks or temp files."""
 import argparse
+import base64
 import contextlib
 import io
 import json
@@ -340,6 +341,30 @@ class FirewallTest(unittest.TestCase):
             self.fw.ensure()
         self.assertIn(self.fw.windows_names()[0],apply.call_args.args[0]);self.assertNotIn(self.fw.windows_names()[1],apply.call_args.args[0])
 
+    def test_windows_conflicting_owned_name_does_not_overwrite_foreign_rule(self):
+        self.fw.backend = 'windows'
+        foreign = {'name': self.fw.windows_names()[1], 'group': 'Another-application'}
+        with patch.object(self.fw, 'detect'), patch.object(self.fw, 'valid', return_value=False), \
+                patch.object(self.fw, 'consent'), patch.object(self.fw, 'windows_query', return_value=[foreign]), \
+                patch.object(self.fw, 'windows_elevated') as apply:
+            with self.assertRaisesRegex(support.LanError, 'regla inesperada'):
+                self.fw.ensure()
+            apply.assert_not_called()
+
+    def test_windows_cleanup_limits_removal_to_installation_and_keeps_current_names(self):
+        self.fw.backend = 'windows'
+        with patch.object(self.fw, 'valid', return_value=True), \
+                patch('auto_firewall.powershell', return_value=result('1')) as query, \
+                patch.object(self.fw, 'windows_elevated') as apply:
+            self.fw.retire_previous()
+        for script in (query.call_args.args[0], apply.call_args.args[0]):
+            self.assertIn("Get-NetFirewallRule -Group 'PixelChiss-" + self.fw.identity + "'", script)
+            self.assertIn('Where-Object {$_.Name -notin @(', script)
+            for name in self.fw.windows_names():
+                self.assertIn(support.ps_quote(name), script)
+        self.assertNotIn('Remove-NetFirewallRule', query.call_args.args[0])
+        self.assertIn(' | Remove-NetFirewallRule', apply.call_args.args[0])
+
     def test_native_nft_backend_detected_without_editing_docker_tables(self):
         with patch('auto_firewall.sys.platform','linux'),patch('auto_firewall.os.geteuid',return_value=0,create=True),patch.object(self.fw,'available',return_value=True),patch.object(self.fw,'privileged',return_value=result(json.dumps({'nftables':[{'table':{'name':'docker-bridges'}}]}))):
             self.fw.detect();self.assertEqual('nftables',self.fw.backend)
@@ -476,6 +501,160 @@ class StartWorkflowTest(unittest.TestCase):
 
     def execute(self):
         with contextlib.redirect_stdout(io.StringIO()):start.start(self.args)
+
+    def cli(self, command, *extra):
+        output, errors = io.StringIO(), io.StringIO()
+        argv = ['lan.py', command, '--tls-directory', str(self.directory), *extra]
+        with patch('sys.argv', argv), contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            code = lan.main()
+        return code, output.getvalue(), errors.getvalue()
+
+    def windows_firewall(self, selected=None):
+        obj = firewall.Firewall(start.identity(self.root, self.client.project), firewall.scope(selected or net(), 8443))
+        rows = []
+        for name, (action, remote, profiles) in zip(obj.windows_names(), obj.windows_expected()):
+            rows.append({'name': name, 'group': 'PixelChiss-' + obj.identity, 'enabled': 'True',
+                         'direction': 'Inbound', 'action': action, 'local': [obj.spec['host']],
+                         'port': '8443', 'protocol': 'TCP', 'remote': remote, 'profile': ', '.join(profiles)})
+        return obj, rows
+
+    def private_snapshot(self):
+        return {name: (self.directory / name).read_bytes() for name in
+                ('lan.env', 'server.p12', 'server.crt', 'ca.crt', 'auto-state.json', 'firewall-undo.txt')
+                if (self.directory / name).exists()}
+
+    def assert_no_service_changes(self):
+        self.client.build_images.assert_not_called()
+        self.client.start.assert_not_called()
+        self.client.wait_health.assert_not_called()
+        self.client.wait_discovery.assert_not_called()
+
+    def test_cli_windows_firewall_check_reports_states_without_writes(self):
+        obj, rows = self.windows_firewall()
+        broad = [dict(row) for row in rows]
+        broad[0]['remote'] = ['Any']
+        cases = [('valid', result(json.dumps(rows)), 0), ('absent', result('[]'), 1),
+                 ('partial', result(json.dumps(rows[:2])), 1),
+                 ('wrong-scope', result(json.dumps(broad)), 1),
+                 ('invalid-json', result('invalid private JSON'), 1),
+                 ('powershell-failure', result('private output', 1), 1),
+                 ('missing-executable', FileNotFoundError('private path'), 1)]
+        before = self.private_snapshot()
+        for name, response, expected in cases:
+            with self.subTest(state=name), patch('auto_start.Firewall', return_value=obj), \
+                    patch('auto_firewall.sys.platform', 'win32'), \
+                    patch('auto_support.subprocess.run', side_effect=[response]) as execute, \
+                    patch('auto_firewall.confirm') as consent:
+                code, output, errors = self.cli('firewall-check')
+                self.assertEqual(expected, code)
+                self.assertEqual(expected == 0, 'Firewall instalado y verificado' in output)
+                if expected:
+                    self.assertTrue(errors)
+                self.assertNotIn('private', errors)
+                consent.assert_not_called()
+                script = base64.b64decode(execute.call_args.args[0][-1]).decode('utf-16le')
+                self.assertNotRegex(script, r'New-NetFirewall|Remove-NetFirewall|Start-Process')
+                self.assertEqual(before, self.private_snapshot())
+                self.assertFalse((self.directory / 'transaction.json').exists())
+                self.assertFalse((self.directory / 'auto.lock').exists())
+                self.assert_no_service_changes()
+
+    def test_cli_windows_start_reuses_verified_rules_and_state_without_elevation(self):
+        obj, rows = self.windows_firewall()
+        scripts = []
+
+        def query_only(command, **kwargs):
+            script = base64.b64decode(command[-1]).decode('utf-16le')
+            scripts.append(script)
+            if '$out=@(); foreach' in script:
+                return result(json.dumps(rows))
+            if 'Where-Object {$_.Name -notin @(' in script:
+                return result('0')
+            self.fail('Unexpected PowerShell execution: ' + script)
+
+        with patch('auto_start.Firewall', return_value=obj), patch('auto_firewall.sys.platform', 'win32'), \
+                patch('auto_support.subprocess.run', side_effect=query_only), patch('auto_firewall.confirm') as consent:
+            for attempt in range(2):
+                code, output, errors = self.cli('start', '--auto')
+                self.assertEqual(0, code, errors)
+                self.assertIn('Firewall: verificado', output)
+                state = support.read_json(self.directory / 'auto-state.json')
+                self.assertEqual({'backend': 'windows', 'scope': obj.spec, 'tag': obj.tag}, state['firewall'])
+                if attempt == 0:
+                    before = self.private_snapshot()
+                    backups = list((self.directory / '.backups').iterdir())
+                else:
+                    self.assertEqual(before, self.private_snapshot())
+                    self.assertEqual(backups, list((self.directory / '.backups').iterdir()))
+            consent.assert_not_called()
+        self.assertTrue(scripts)
+        for script in scripts:
+            self.assertNotRegex(script, r'New-NetFirewall|Remove-NetFirewall|Start-Process')
+        self.client.start.assert_not_called()
+
+    def test_cli_windows_query_errors_roll_back_before_build_or_publication(self):
+        self.execute()  # Existing installation/state, all under this test's temporary directory.
+        before = self.private_snapshot()
+        env_before = (self.directory.parent / '.env').read_bytes()
+        obj, _ = self.windows_firewall(net('10.20.30.41'))
+        for response in (result('private parser output', 1), FileNotFoundError('private executable path')):
+            with self.subTest(error=type(response).__name__), \
+                    patch('auto_start.Firewall', return_value=obj), \
+                    patch('auto_start.network_for', return_value=net('10.20.30.41')), \
+                    patch('auto_firewall.sys.platform', 'win32'), \
+                    patch('auto_support.subprocess.run', side_effect=[response]) as execute, \
+                    patch('auto_firewall.confirm') as consent, \
+                    patch.object(obj, 'retire_previous') as retire:
+                self.client.reset_mock()
+                code, output, errors = self.cli('start', '--auto')
+                self.assertEqual(1, code)
+                self.assertIn('powershell.exe', errors)
+                self.assertNotIn('private', errors)
+                self.assertNotIn('Firewall: verificado', output)
+                self.assertEqual(before, self.private_snapshot())
+                self.assertEqual(env_before, (self.directory.parent / '.env').read_bytes())
+                self.assertFalse((self.directory / 'transaction.json').exists())
+                self.assertFalse((self.directory / 'auto.lock').exists())
+                self.assertTrue(list((self.directory / '.backups').iterdir()))
+                execute.assert_called_once()
+                consent.assert_not_called()
+                retire.assert_not_called()
+                self.assert_no_service_changes()
+
+    def test_cli_windows_lost_protection_stops_before_service_publication(self):
+        obj, rows = self.windows_firewall()
+        before = self.private_snapshot()
+        with patch('auto_start.Firewall', return_value=obj), patch('auto_firewall.sys.platform', 'win32'), \
+                patch('auto_support.subprocess.run', side_effect=[result(json.dumps(rows)), result('[]')]), \
+                patch('auto_firewall.confirm') as consent, patch.object(obj, 'retire_previous') as retire:
+            code, output, errors = self.cli('start', '--auto')
+            self.assertEqual(1, code)
+            self.assertIn('dejó de estar verificada', errors)
+            self.assertNotIn('Firewall: verificado', output)
+            self.assertEqual(before, self.private_snapshot())
+            self.assertFalse((self.directory / 'transaction.json').exists())
+            self.assertFalse((self.directory / 'auto.lock').exists())
+            consent.assert_not_called()
+            retire.assert_not_called()
+            self.client.start.assert_not_called()
+            self.client.wait_health.assert_not_called()
+
+    def test_cli_windows_missing_rules_require_authorization_before_changes(self):
+        obj, _ = self.windows_firewall()
+        before = self.private_snapshot()
+        with patch('auto_start.Firewall', return_value=obj), patch('auto_firewall.sys.platform', 'win32'), \
+                patch('auto_support.subprocess.run', return_value=result('[]')) as execute, \
+                patch('auto_firewall.confirm', side_effect=support.LanError('Operación cancelada')) as consent, \
+                patch.object(obj, 'retire_previous') as retire:
+            code, output, errors = self.cli('start', '--auto')
+            self.assertEqual(1, code)
+            self.assertIn('Operación cancelada', errors)
+            self.assertNotIn('Firewall: verificado', output)
+            self.assertEqual(before, self.private_snapshot())
+            execute.assert_called_once()
+            consent.assert_called_once()
+            retire.assert_not_called()
+            self.assert_no_service_changes()
 
     def test_first_adoption_preserves_project_secrets_and_existing_services(self):
         old=(self.directory.parent/'.env').read_bytes();self.execute()
