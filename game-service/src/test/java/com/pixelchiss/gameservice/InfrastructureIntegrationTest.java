@@ -380,4 +380,165 @@ class InfrastructureIntegrationTest {
             } finally {wsA.sendClose(1000,"done").join();wsB.sendClose(1000,"done").join();}
         }
     }
+    @ParameterizedTest @CsvSource({"classic","science"})
+    void partialReleaseRecoveryAndThreePairsUseTwoJwtWebSocketsWithoutFourthRoll(String map) throws Exception {
+        String id="it-"+UUID.randomUUID();ids.add(id);
+        games.create(new CreateGame(id,"partial-release",map,input(id).participants(),"test-a").command());
+        games.system(id,state->{
+            int[] positions={12,25,39};
+            for(int n=1;n<4;n++) {
+                var piece=state.piece("seat-0-piece-"+n);piece.status="BOARD";
+                piece.progress=positions[n-1]-5;piece.position=positions[n-1];
+            }
+            state.player("test-a").effects.add(new GameState.Effect("CHOOSE_DICE",1,1,6));
+            return List.of(RuleEngine.Event.of("TEST_FIXTURE"));
+        });
+        try(var client=HttpClient.newHttpClient()) {
+            var a=new Inbox();var b=new Inbox();
+            var wsA=client.newWebSocketBuilder().buildAsync(URI.create("ws://localhost:"+port+"/ws/game"),a).join();
+            var wsB=client.newWebSocketBuilder().buildAsync(URI.create("ws://localhost:"+port+"/ws/game"),b).join();
+            try {
+                for(var entry:List.of(Map.entry(wsA,Map.entry(a,"test-a")),Map.entry(wsB,Map.entry(b,"test-b")))) {
+                    send(entry.getKey(),Map.of("type","AUTH","token",token(entry.getValue().getValue())));
+                    entry.getValue().getKey().await("AUTHENTICATED");
+                    send(entry.getKey(),Map.of("type","JOIN_GAME","gameId",id));entry.getValue().getKey().await("GAME_STATE");
+                }
+                send(wsA,new Action("ROLL_DICE",id,"partial-roll",games.load(id).version,
+                        null,null,null,null,null,List.of(5,5),null,null,null,null));a.await("ACTION_ACK");
+                var waiting=repository.find(id);String rollId=waiting.turn.rollId;
+                assertArrayEquals(new boolean[]{true,false},waiting.turn.consumed);
+                assertEquals(Set.of("seat-0-piece-0"),waiting.turn.releasedPieceIds);
+                send(wsA,new Action("DICE_ANIMATION_COMPLETED",id,"partial-animation",waiting.version,
+                        null,null,null,null,null,null,rollId,null,null,null));a.await("ACTION_ACK");
+                // Fresh application service reads the real Redis aggregate, not an in-memory copy.
+                var recovered=new GameService(repository,rules,new JsonPayloadFingerprints(json));
+                long deadline=recovered.load(id).turn.deadline;
+                games.system(id,state->{state.player("test-a").disconnectedAt=System.currentTimeMillis();
+                    return List.of(RuleEngine.Event.of("TEST_DISCONNECTED"));});
+                send(wsA,Map.of("type","SYNC_REQUEST","gameId",id));var sync=json.readTree(a.await("GAME_STATE"));
+                assertEquals(rollId,sync.path("state").path("turn").path("rollId").asString());
+                assertEquals(deadline,recovered.load(id).turn.deadline);
+                assertFalse(sync.path("legalMoves").isEmpty());
+                sync.path("legalMoves").forEach(m->{assertNotEquals("seat-0-piece-0",m.path("pieceId").asString());
+                    assertEquals(1,m.path("dieIndex").asInt());assertEquals(5,m.path("dieValue").asInt());});
+                long version=recovered.load(id).version;
+                send(wsA,new Action("MOVE_REQUEST",id,"forged-release",version,"seat-0-piece-0",1,5,5,10,null,null,null,null,null));
+                assertTrue(a.await("ERROR").contains("PIECE_RELEASED_THIS_ROLL"));assertEquals(version,recovered.load(id).version);
+                var move=rules.calculate(recovered.load(id),"test-a","seat-0-piece-1",1);
+                var request=new Action("MOVE_REQUEST",id,"remaining",version,move.pieceId(),1,5,move.from(),move.to(),null,null,null,null,null);
+                send(wsA,request);a.await("ACTION_ACK");
+                send(wsA,request);assertTrue(a.await("ACTION_ACK").contains("\"duplicate\":true"));
+                assertTrue(recovered.load(id).turn.extraRollAvailable);assertEquals(1,recovered.load(id).turn.consecutiveDoubles);
+                for(int pair=2;pair<=3;pair++) {
+                    send(wsA,new Action("ROLL_DICE",id,"pair-"+pair,games.load(id).version,
+                            null,null,null,null,null,null,null,null,null,null));a.await("ACTION_ACK");
+                    var state=recovered.load(id);
+                    send(wsA,new Action("DICE_ANIMATION_COMPLETED",id,"animation-"+pair,state.version,
+                            null,null,null,null,null,null,state.turn.rollId,null,null,null));a.await("ACTION_ACK");
+                    assertEquals(pair,recovered.load(id).turn.consecutiveDoubles);
+                    if(pair==2) {
+                        // The formerly excluded piece is now an ordinary legal option.
+                        assertTrue(recovered.moves(id,"test-a").stream().anyMatch(m->m.pieceId().equals("seat-0-piece-0")));
+                        var sum=rules.calculate(recovered.load(id),"test-a","seat-0-piece-2",2);
+                        send(wsA,new Action("MOVE_REQUEST",id,"second-pair-move",recovered.load(id).version,
+                                sum.pieceId(),2,sum.dieValue(),sum.from(),sum.to(),null,null,null,null,null));a.await("ACTION_ACK");
+                    }
+                }
+                var reward=recovered.load(id);assertTrue(reward.turn.crownChoiceRequired);
+                assertTrue(recovered.moves(id,"test-a").isEmpty());assertArrayEquals(new boolean[]{true,true},reward.turn.consumed);
+                var crown=new Action("CROWN_REQUEST",id,"third-pair-crown",reward.version,
+                        "seat-0-piece-1",null,null,null,null,null,null,null,null,null);
+                send(wsA,crown);a.await("ACTION_ACK");send(wsA,crown);
+                assertTrue(a.await("ACTION_ACK").contains("\"duplicate\":true"));
+                var closed=recovered.load(id);assertEquals("test-b",closed.turn.playerId);assertEquals(0,closed.turn.consecutiveDoubles);
+                assertNull(closed.turn.rollId);assertNull(closed.turn.movementStartedAt);assertNull(closed.turn.movementRemainingMillis);
+                send(wsA,new Action("ROLL_DICE",id,"fourth-rejected",closed.version,
+                        null,null,null,null,null,null,null,null,null,null));
+                assertTrue(a.await("ERROR").contains("NOT_YOUR_TURN"));
+                send(wsB,Map.of("type","SYNC_REQUEST","gameId",id));
+                assertEquals("test-b",json.readTree(b.await("GAME_STATE")).path("state").path("turn").path("playerId").asString());
+                assertEquals(closed.version,recovered.load(id).version);
+            } finally {wsA.sendClose(1000,"done").join();wsB.sendClose(1000,"done").join();}
+        }
+    }
+    @Test void realJvmRestartKeepsPendingPartialDieAndRejectsReleasedPiece() throws Exception {
+        String id=create();
+        games.system(id,state->{
+            for(int n=1;n<4;n++) {
+                var piece=state.piece("seat-0-piece-"+n);piece.status="BOARD";
+                piece.progress=7+n*10;piece.position=piece.progress+5;
+            }
+            state.player("test-a").effects.add(new GameState.Effect("CHOOSE_DICE",1,1,6));
+            return List.of(RuleEngine.Event.of("TEST_FIXTURE"));
+        });
+        int childPort;
+        try(var reservation=new ServerSocket(0,1,InetAddress.getLoopbackAddress())) {childPort=reservation.getLocalPort();}
+        Process child=null;
+        try(var client=HttpClient.newHttpClient()) {
+            child=startRecoveryProcess(childPort,client);
+            var inbox=new Inbox();
+            var socket=client.newWebSocketBuilder().buildAsync(URI.create("ws://127.0.0.1:"+childPort+"/ws/game"),inbox).join();
+            try {
+                send(socket,Map.of("type","AUTH","token",token("test-a")));inbox.await("AUTHENTICATED");
+                send(socket,Map.of("type","JOIN_GAME","gameId",id));inbox.await("GAME_STATE");
+                send(socket,new Action("ROLL_DICE",id,"process-roll",games.load(id).version,
+                        null,null,null,null,null,List.of(5,5),null,null,null,null));inbox.await("ACTION_ACK");
+                var pending=games.load(id);
+                send(socket,new Action("DICE_ANIMATION_COMPLETED",id,"process-animation",pending.version,
+                        null,null,null,null,null,null,pending.turn.rollId,null,null,null));inbox.await("ACTION_ACK");
+            } finally {socket.sendClose(1000,"restart").join();}
+            var persisted=repository.find(id);
+            assertArrayEquals(new boolean[]{true,false},persisted.turn.consumed);
+            stopRecoveryProcess(child);child=null;
+            child=startRecoveryProcess(childPort,client);
+            var restoredInbox=new Inbox();
+            var restored=client.newWebSocketBuilder().buildAsync(URI.create("ws://127.0.0.1:"+childPort+"/ws/game"),restoredInbox).join();
+            try {
+                send(restored,Map.of("type","AUTH","token",token("test-a")));restoredInbox.await("AUTHENTICATED");
+                send(restored,Map.of("type","SYNC_REQUEST","gameId",id));
+                var sync=json.readTree(restoredInbox.await("GAME_STATE"));
+                assertEquals(persisted.turn.rollId,sync.path("state").path("turn").path("rollId").asString());
+                assertEquals(persisted.turn.deadline,sync.path("state").path("turn").path("deadline").asLong());
+                assertEquals(Set.of("seat-0-piece-0"),repository.find(id).turn.releasedPieceIds);
+                assertFalse(sync.path("legalMoves").isEmpty());
+                sync.path("legalMoves").forEach(m->{assertNotEquals("seat-0-piece-0",m.path("pieceId").asString());
+                    assertEquals(1,m.path("dieIndex").asInt());});
+                long version=games.load(id).version;
+                send(restored,new Action("MOVE_REQUEST",id,"process-forged",version,
+                        "seat-0-piece-0",1,5,5,10,null,null,null,null,null));
+                assertTrue(restoredInbox.await("ERROR").contains("PIECE_RELEASED_THIS_ROLL"));
+                assertEquals(version,games.load(id).version);
+            } finally {restored.sendClose(1000,"done").join();}
+        } finally {if(child!=null) stopRecoveryProcess(child);}
+    }
+    private Process startRecoveryProcess(int childPort,HttpClient client) throws Exception {
+        var builder=new ProcessBuilder(ProcessHandle.current().info().command().orElseThrow(),
+                "-cp",System.getProperty("java.class.path"),GameServiceApplication.class.getName(),
+                "--server.address=127.0.0.1","--server.port="+childPort,"--game.redis-prefix="+PREFIX,
+                "--eureka.client.enabled=false","--game.scheduling.enabled=false","--game.seed.enabled=false");
+        builder.environment().putAll(Map.of("REDIS_URL",System.getenv("GAME_TEST_REDIS_URL"),
+                "MONGODB_URI",System.getenv("GAME_TEST_MONGO_URI"),"EUREKA_URL","http://127.0.0.1:8761/eureka/",
+                "JWT_PUBLIC_KEY_PATH",Path.of("target/integration-public.pem").toAbsolutePath().toString(),
+                "GAME_LOBBY_TOKEN","integration-credential-32-characters"));
+        var process=builder.redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(
+                Path.of("target/partial-release-restart-process.log").toFile())).start();
+        try {
+            long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(25);
+            while(System.nanoTime()<until&&process.isAlive()) {
+                try {
+                    var response=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+childPort+"/actuator/health"))
+                            .timeout(Duration.ofSeconds(1)).GET().build(),HttpResponse.BodyHandlers.ofString());
+                    if(response.statusCode()==200&&json.readTree(response.body()).path("status").asString().equals("UP")) return process;
+                } catch(java.io.IOException unavailable) { /* Only this isolated child is still starting. */ }
+                Thread.sleep(100);
+            }
+            throw new AssertionError("Recovery process failed; inspect target/partial-release-restart-process.log");
+        } catch(Exception|AssertionError failure) {stopRecoveryProcess(process);throw failure;}
+    }
+    private void stopRecoveryProcess(Process process) throws InterruptedException {
+        process.destroy();
+        if(!process.waitFor(10,TimeUnit.SECONDS)) {
+            process.destroyForcibly();assertTrue(process.waitFor(10,TimeUnit.SECONDS));
+        }
+    }
 }

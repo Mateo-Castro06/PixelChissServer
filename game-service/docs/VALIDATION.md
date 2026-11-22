@@ -1,4 +1,37 @@
-> La evidencia histórica de este documento no acredita v3-100. Consulte [BOARD100_VALIDACION.md](../../docs/BOARD100_VALIDACION.md) para la ejecución actual y sus bloqueos.
+# Liberación parcial y cierre de tres pares — 21 de noviembre de 2026
+
+Baseline: `ba8ebbbeda43461b14cea45134716b5f8f0ad7ae`. El cambio de ejecución se limita a `GameState.Turn` y `RuleEngine`; no modifica arquitectura, tablero, cartas, preguntas, Auth, Gateway, Lobby, EDA/SAGA, Compose, OAuth, firewall ni TLS. Las reglas y el orden del tercer par se describen en [ENGINE.md](ENGINE.md); los ocho ejemplos de contrato están en [WEBSOCKET.md](WEBSOCKET.md#ejemplos-ejecutables-liberación-parcial-y-tres-pares).
+
+Una liberación consume el dado 0 y deja el 1, indivisible, para fichas propias que estaban BOARD antes de lanzar. Se reutiliza `crownEligible` para esa foto autoritativa y se añade únicamente `releasedPieceIds`. La restricción pertenece a `rollId`, sobrevive a persistencia/reconexión y se recalcula en la próxima tirada. Dos o más liberaciones consumen ambos dados. Sin movimiento legal se descarta el sobrante al confirmar animación, sin crear reloj ni obligación ficticia de captura. Los plazos de 10/30/15 segundos, la pausa de trivia, SOPLAR y las capturas especiales conservan su política.
+
+En el tercer par se libera HOME primero, se ejecutan los efectos de cartas ya existentes y se ofrece el premio para las fichas previamente activas que sigan BOARD. Tras confirmar animación se selecciona con CROWN_REQUEST; se corona una vez y se cierra explícitamente el turno. Si no hay elegibles se cierra al confirmar. No hay movimiento posterior ni cuarta tirada. Se conserva GAME_FINISHED cuando se alcanza la victoria.
+
+Se usaron PostgreSQL, Redis y MongoDB **nuevos y temporales**, extraídos bajo `/tmp/pixelchiss-partial-deps` sin instalar paquetes del sistema. Solo escucharon en loopback: 15439, 16391 y 27091. Auth usó `auth_partial_tests`; Game, `pixelchiss_partial_release_tests`; el JAR temporal de SAGA usó `pixelchiss_partial_saga_tests` y bases Redis 5/6. No se apuntaron pruebas a bases, volúmenes o partidas de desarrollo. Al terminar se comprobó UP en el JAR temporal y se detuvieron únicamente esos procesos, conservando los datos y logs de prueba.
+
+| Ejecución final | Pruebas | Fallos / errores / omitidas |
+|---|---:|---|
+| Game, con `game.integration=true`, Redis/Mongo/HTTP/WebSocket y reinicio JVM | 301 | 0 / 0 / 0 |
+| Auth con PostgreSQL aislado | 87 | 0 / 0 / 0 |
+| Gateway | 13 | 0 / 0 / 0 |
+| Eureka | 1 | 0 / 0 / 0 |
+| Lobby, incluyendo las siete pruebas EDA/SAGA/Streams | 13 | 0 / 0 / 0 |
+| Herramienta LAN | 104 | 0 / 0 / 2 |
+
+Las dos omisiones LAN requieren PowerShell, ausente en este entorno. Las integraciones optativas de TLS/firewall en Docker no se ejecutaron. Los ensayos iniciales encontraron restricciones de sockets/caché del sandbox, PostgreSQL de pruebas ausente y un JAR temporal que terminó con su sesión de arranque; las ejecuciones finales usaron sockets permitidos, bases temporales y proceso independiente. No se presentan esos intentos iniciales como aprobados ni se relajaron aserciones para ocultarlos. La prueba antigua que exigía consumir ambos dados al liberar una ficha se actualizó para cubrir la nueva regla, conservando los casos de liberación múltiple.
+
+La integración nueva prueba ambos mapas con dos JWT firmados y dos conexiones WebSocket reales: liberación única, rechazo manipulado, lectura de Redis desde un GameService nuevo, sincronización/reconexión con el mismo plazo, movimiento idempotente, tres pares, coronación única y rechazo de cuarta tirada. Otra prueba inicia una JVM independiente, lanza y confirma, termina ese proceso, lo arranca de nuevo y comprueba por WebSocket el dado pendiente, la elegibilidad y el mismo deadline. Las pruebas en memoria cubren además carreras CAS, JSON previo sin el campo nuevo, vencimientos, capturas y trivia.
+
+Un probe adicional reinició el JAR real con un dado pendiente **en ambos mapas**, usando dos identidades JWT/conexiones WS; conservó rollId/deadline, rechazó mover la recién liberada y aceptó un movimiento idempotente de otra ficha. Con el scheduler real, un bot obtuvo tres pares, usó el dado restante sobre una ficha previa, coronó exactamente una vez y cedió el turno sin una cuarta tirada. Resultado: `/tmp/pixelchiss-partial-deps/restart-probe-results.json`; log: `/tmp/pixelchiss-partial-restart-probe.log`.
+
+Comandos ejecutados desde cada módulo Java: Game `mvn -o -Dmaven.repo.local=.build/m2 -Dgame.integration=true verify -B`, Auth `mvn -o verify -B`, Gateway `mvn -o -Dmaven.repo.local=.build/m2 verify -B`, Eureka `mvn -o -Dmaven.repo.local=../api-gateway/.build/m2 verify -B`. Game recibió `GAME_TEST_REDIS_URL` y `GAME_TEST_MONGO_URI` de las bases temporales; Auth recibió `AUTH_TEST_DATABASE_URL`. Lobby ejecutó `.venv/bin/python -m unittest discover -s tests -v` con `SAGA_TEST_LOBBY_REDIS`, `SAGA_TEST_GAME_REDIS`, `SAGA_TEST_GAME_HTTP`, `SAGA_TEST_GAME_STREAM` y la credencial interna exclusiva de pruebas. LAN ejecutó `python3 -m unittest discover -s infrastructure/lan -v` desde la raíz.
+
+Logs finales: `/tmp/pixelchiss-partial-game-final.log`, `/tmp/pixelchiss-partial-auth-final.log`, `/tmp/pixelchiss-partial-gateway.log`, `/tmp/pixelchiss-partial-eureka.log`, `/tmp/pixelchiss-partial-lobby-final.log`, `/tmp/pixelchiss-partial-lan.log`. El proceso JVM de integración registra `target/partial-release-restart-process.log`. `PartialReleaseContractTest` genera `target/partial-release-wire-examples.json` con mensajes reales de pruebas; no acredita una sesión Godot/LAN.
+
+**Pendiente operativo:** los contextos Docker normal y Desktop no tienen daemon accesible, y no se encontró `lan-secrets/auto-state.json` en este entorno. No se reconstruyó ni recreó el Game del anfitrión, no se inició otro proyecto Compose y no se puede declarar saludable su LAN. Antes de desplegar, recuperar acceso a Docker, identificar proyecto/archivos Compose y env-file por sus etiquetas, comprobar partidas y aplicar únicamente la reconstrucción de Game conservando el overlay LAN, IP, puertos, certificados y volúmenes existentes. Godot real y Windows físico no se ejecutaron.
+
+---
+
+La evidencia histórica siguiente no acredita esta corrección. Consulte también [BOARD100_VALIDACION.md](../../docs/BOARD100_VALIDACION.md).
 
 # Validación operativa — 10 de octubre de 2026
 

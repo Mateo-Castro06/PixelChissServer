@@ -58,6 +58,7 @@ public class GameState {
         public boolean captureSatisfied;
         public Set<String> captureCandidates = new LinkedHashSet<>();
         public Map<String, Set<String>> captureVictims = new LinkedHashMap<>();
+        // Own BOARD pieces before HOME release; also authorizes partial-release movement.
         public Set<String> crownEligible = new LinkedHashSet<>();
         public String rollId;
         public long rollPublishedAt;
@@ -66,6 +67,7 @@ public class GameState {
         public String animationStatus = "NONE";
         public boolean crownChoiceRequired;
         public boolean homeRelease;
+        public Set<String> releasedPieceIds = new LinkedHashSet<>();
         public boolean extraRollAvailable;
         public boolean thirdDoubleReward;
         public Long movementRemainingMillis;

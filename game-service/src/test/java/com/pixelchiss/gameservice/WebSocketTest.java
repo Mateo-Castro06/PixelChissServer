@@ -2,6 +2,8 @@ package com.pixelchiss.gameservice;
 import com.pixelchiss.gameservice.persistence.JsonPayloadFingerprints;
 
 import com.pixelchiss.gameservice.domain.GameAction;
+import com.pixelchiss.gameservice.dto.Action;
+import com.pixelchiss.gameservice.engine.RuleEngine;
 
 
 import com.pixelchiss.gameservice.service.*;
@@ -16,6 +18,50 @@ import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class WebSocketTest extends ServiceFixture {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"classic","science"})
+    void manipulatedPartialReleaseMoveIsRejectedAndReconnectKeepsAuthoritativeOptions(String map) throws Exception {
+        engine=new RuleEngine(board,m->5,clock,30_000);
+        game=engine.create(new GameSetup("g","l",map,List.of(
+                new GameSetup.Participant("a",false,0),new GameSetup.Participant("b",false,1)),"a"));
+        for(int n=1;n<4;n++) placeAt("seat-0-piece-"+n,12+n*10);
+        repo=new MemoryGames();repo.create(game,null);service=new GameService(repo,engine,new JsonPayloadFingerprints(repo.json));
+        var decoder=mock(JwtDecoder.class);
+        var handler=new GameWebSocketHandler(repo.json,decoder,service,mock(PresenceService.class),clock);
+        var sessions=new HashMap<String,WebSocketSession>();
+        var sent=new HashMap<String,List<String>>();
+        for(String actor:List.of("a","b")) {
+            when(decoder.decode(actor)).thenReturn(Jwt.withTokenValue(actor).header("alg","RS256")
+                    .subject(actor).expiresAt(clock.instant().plusSeconds(900)).build());
+            var socket=mock(WebSocketSession.class);sessions.put(actor,socket);sent.put(actor,new ArrayList<>());
+            when(socket.getId()).thenReturn(actor);when(socket.isOpen()).thenReturn(true);
+            doAnswer(call->{sent.get(actor).add(call.getArgument(0,WebSocketMessage.class).getPayload().toString());return null;})
+                    .when(socket).sendMessage(any());
+            handler.afterConnectionEstablished(socket);
+            handler.handleTextMessage(socket,new TextMessage("{\"type\":\"AUTH\",\"token\":\""+actor+"\"}"));
+            handler.handleTextMessage(socket,new TextMessage("{\"type\":\"JOIN_GAME\",\"gameId\":\"g\"}"));
+        }
+        var socket=sessions.get("a");
+        handler.handleTextMessage(socket,new TextMessage("{\"type\":\"ROLL_DICE\",\"gameId\":\"g\",\"requestId\":\"roll\",\"expectedVersion\":0}"));
+        var waiting=service.load("g");
+        var ack=new Action("DICE_ANIMATION_COMPLETED","g","confirm",waiting.version,null,null,null,null,null,null,waiting.turn.rollId,null,null,null);
+        handler.handleTextMessage(socket,new TextMessage(repo.json.writeValueAsString(ack)));
+        long version=service.load("g").version;long deadline=service.load("g").turn.deadline;
+        var forged=new Action("MOVE_REQUEST","g","forged",version,"seat-0-piece-0",1,5,5,10,null,null,null,null,null);
+        handler.handleTextMessage(socket,new TextMessage(repo.json.writeValueAsString(forged)));
+        assertTrue(sent.get("a").getLast().contains("PIECE_RELEASED_THIS_ROLL"));
+        assertEquals(version,service.load("g").version);assertEquals(5,service.load("g").piece("seat-0-piece-0").position);
+        handler.handleTextMessage(sessions.get("b"),new TextMessage(repo.json.writeValueAsString(forged)));
+        assertTrue(sent.get("b").getLast().contains("NOT_YOUR_TURN"));
+        service.system("g",g->{g.player("a").disconnectedAt=clock.now;return List.of(RuleEngine.Event.of("DISCONNECTED"));});
+        handler.handleTextMessage(socket,new TextMessage("{\"type\":\"SYNC_REQUEST\",\"gameId\":\"g\"}"));
+        var sync=repo.json.readTree(sent.get("a").getLast());assertEquals("GAME_STATE",sync.path("type").asString());
+        assertEquals(waiting.turn.rollId,sync.path("state").path("turn").path("rollId").asString());
+        assertEquals(deadline,sync.path("state").path("turn").path("deadline").asLong());
+        assertFalse(sync.path("legalMoves").isEmpty());
+        sync.path("legalMoves").forEach(move->{assertNotEquals("seat-0-piece-0",move.path("pieceId").asString());
+            assertEquals(1,move.path("dieIndex").asInt());assertEquals(5,move.path("dieValue").asInt());});
+    }
     @Test void legacyLayoutJoinReturnsExplicitErrorWithoutPresenceOrMutation() throws Exception {
         game.boardLayout=null;
         repo.states.put("g",repo.json.writeValueAsString(game));

@@ -149,6 +149,7 @@
         false
       ],
       "homeRelease": false,
+      "releasedPieceIds": [],
       "extraRollAvailable": false,
       "thirdDoubleReward": false,
       "movementRemainingMillis": null,

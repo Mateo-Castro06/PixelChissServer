@@ -147,6 +147,7 @@ public class RuleEngine {
         var turn = game.turn;
         turn.consumed = new boolean[2];
         turn.homeRelease = false;
+        turn.releasedPieceIds.clear();
         turn.extraRollAvailable = false;
         turn.thirdDoubleReward = false;
         turn.rollId = java.util.UUID.randomUUID().toString();
@@ -175,7 +176,7 @@ public class RuleEngine {
         }
         events.add(event("DICE_ANIMATION_REQUIRED", "rollId", turn.rollId, "turnNumber", turn.number,
                 "animationDeadline", turn.animationDeadline, "required", !game.player(actor).bot));
-        if (game.player(actor).bot && !turn.homeRelease && !turn.thirdDoubleReward) {
+        if (game.player(actor).bot && hasMovementDice(game)) {
             turn.movementStartedAt = publishedAt;
             rememberCaptures(game);
         }
@@ -189,6 +190,8 @@ public class RuleEngine {
         Piece piece = game.piece(pieceId);
         require(piece != null && piece.ownerId.equals(actor), "NOT_YOUR_PIECE", "Piece does not belong to you");
         require(!piece.status.equals("CROWNED"), "CROWNED_PIECE", "Crowned piece cannot move");
+        require(!game.turn.homeRelease || game.turn.crownEligible.contains(piece.id),
+                "PIECE_RELEASED_THIS_ROLL", "Only pieces active before this roll can use the remaining die");
         boolean release = piece.status.equals("HOME");
         int progress;
         if (release) {
@@ -354,7 +357,7 @@ public class RuleEngine {
         require("WAITING".equals(game.turn.animationStatus), "STALE_ROLL", "No animation pending");
         game.turn.animationStatus = "COMPLETED";
         long startedAt = clock.millis();
-        if (game.turn.homeRelease || game.turn.thirdDoubleReward) {
+        if (!hasMovementDice(game) || (game.turn.homeRelease && legalMoves(game, game.turn.playerId).isEmpty())) {
             game.turn.deadline = startedAt + movementMillis;
             continueTurn(game, events);
             return;
@@ -376,8 +379,12 @@ public class RuleEngine {
         var own = occupants(game, start, null).stream().filter(p -> p.ownerId.equals(actor)).count();
         var home = game.pieces.stream().filter(p -> p.ownerId.equals(actor) && p.status.equals("HOME"))
                 .limit(Math.min(limit, Math.max(0, 4 - own))).toList();
+        home.forEach(p -> game.turn.releasedPieceIds.add(p.id));
+        // Index 0 pays for a single release; index 1 remains indivisible. The
+        // third pair goes directly to its existing crown phase after release.
+        if (home.size() == 1 && game.turn.consecutiveDoubles < 3) game.turn.consumed[1] = false;
         events.add(event("HOME_RELEASE_RESOLVED", "rollId", game.turn.rollId,
-                "pieceIds", home.stream().map(p -> p.id).toList(), "consumed", game.turn.consumed));
+                "pieceIds", home.stream().map(p -> p.id).toList(), "consumed", game.turn.consumed.clone()));
         if (home.isEmpty()) return;
         for (var rival : occupants(game, start, null)) if (!rival.ownerId.equals(actor)) {
             rival.home();
@@ -401,7 +408,11 @@ public class RuleEngine {
         piece.status = "CROWNED";
         game.turn.crownChoiceRequired = false;
         events.add(event("PIECE_CROWNED", "pieceId", piece.id, "reason", "THREE_DOUBLES"));
-        if (!checkVictory(game, actor, events)) continueTurn(game, events);
+        if (!checkVictory(game, actor, events)) finishTurn(game, false, events);
+    }
+
+    private boolean hasMovementDice(GameState game) {
+        return !game.turn.thirdDoubleReward && (!game.turn.consumed[0] || !game.turn.consumed[1]);
     }
 
     protected boolean movementPaused(GameState game) {

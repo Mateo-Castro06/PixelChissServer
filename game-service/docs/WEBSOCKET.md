@@ -53,7 +53,7 @@ Mover (ejemplo orientativo sujeto a origen/recorrido reales):
 }
 ```
 
-HOME se libera automáticamente al obtener par, mediante PIECE_RELEASED con from=null; no requiere MOVE_REQUEST. El servidor recalcula, nunca acepta posición por el solo envío. `dieIndex` identifica 0 o 1, o 2 para consumir la suma de ambos; si no hay HOME, incluso dados iguales pueden consumirse por separado. Si el par libera HOME, ambos están consumidos y legalMoves queda vacío. Puede usar ambos en cualquier orden, con nueva acción/versión por movimiento. `legalMoves` devuelve pieceId, dieIndex, dieValue, from, to, progress, capture, safe, crown y release.
+HOME se libera automáticamente al obtener par, mediante PIECE_RELEASED con from=null; no requiere MOVE_REQUEST. El servidor recalcula, nunca acepta posición por el solo envío. `dieIndex` identifica 0 o 1, o 2 para consumir la suma de ambos; si no hay HOME, incluso dados iguales pueden consumirse por separado. Si se libera exactamente una ficha, se consume el dado 0 y queda el dado 1 para fichas previamente activas; la recién liberada queda excluida. Si se liberan dos o más, ambos dados se consumen. El tercer par pasa directamente al premio, sin movimiento. `legalMoves` devuelve pieceId, dieIndex, dieValue, from, to, progress, capture, safe, crown y release.
 
 Responder trivia (índice base0):
 
@@ -233,13 +233,15 @@ El [ejemplo completo de GAME_UPDATED con todos los campos del snapshot](WS_DICE_
 
 ## Liberación prioritaria y trivia independiente (actualización de pares)
 
-`turn.homeRelease=true` identifica una tirada dedicada exclusivamente a HOME. El lote de ROLL_DICE contiene DICE_ROLLED, PIECE_RELEASED por ficha, capturas especiales si proceden y:
+`turn.homeRelease=true` identifica una tirada con liberación prioritaria de HOME. El lote de ROLL_DICE contiene DICE_ROLLED, HOME_RELEASE_RESOLVED, capturas especiales si proceden, PIECE_RELEASED por ficha y DICE_ANIMATION_REQUIRED. Por ejemplo:
 
 ```json
 {"type":"HOME_RELEASE_RESOLVED","data":{"rollId":"roll-home-1","pieceIds":["seat-0-piece-0","seat-0-piece-1"],"consumed":[true,true]}}
 ```
 
-Este evento resume una transición atómica: no se envía una acción para cada ficha. Los límites son 4 para (1,1), 3 para (6,6), 2 para los demás pares, siempre limitados por HOME disponible. No hay sobrantes. Godot anima la tirada y confirma su rollId con DICE_ANIMATION_COMPLETED dentro de 10 segundos. La confirmación de liberación NO emite MOVEMENT_TIMER_STARTED: normalmente produce ROLL_AVAILABLE, `rolled=false`, `extraRollAvailable=true`, dados consumidos y legalMoves vacío. No ofrecer MOVE_REQUEST ni END_TURN antes del nuevo lanzamiento. Cada nueva tirada reemplaza rollId y reinicia sus marcadores; reintentar una confirmación anterior no habilita movimientos. Con tercer par, mostrar la selección de corona correspondiente.
+Este evento resume una transición atómica: no se envía una acción para cada ficha. Los límites siguen siendo 4 para (1,1), 3 para (6,6), 2 para los demás pares, limitados por HOME disponible. Godot anima la tirada y confirma su rollId con DICE_ANIMATION_COMPLETED dentro de 10 segundos. Con una sola liberada, `consumed=[true,false]`: tras confirmar, MOVEMENT_TIMER_STARTED habilita 30 segundos para el dado 1 si existen movimientos legales. No ofrecer el índice 0, la suma ni fracciones. Con dos o más liberadas, o sin movimiento legal para el sobrante, se consumen ambos dados y se emite ROLL_AVAILABLE sin MOVEMENT_TIMER_STARTED. El tercer par conserva la selección de corona en vez de permitir movimiento.
+
+El nuevo campo `turn.releasedPieceIds` enumera las liberadas en esa tirada. Durante una liberación única, `crownEligible` contiene las fichas que estaban activas antes de lanzar, tanto del recorrido común como del corredor final; el servidor cruza ese conjunto con el estado actual y las reglas de movimiento. Godot debe obtener las opciones de `GAME_STATE.legalMoves` con JOIN_GAME/SYNC_REQUEST después de confirmar; ACTION_ACK/GAME_UPDATED contienen el estado pero no añaden ese array. El servidor rechaza `PIECE_RELEASED_THIS_ROLL` si se intenta mover la recién liberada. Una reconexión conserva rollId, consumo, elegibilidad y deadline. Cada nueva tirada reemplaza rollId, limpia releasedPieceIds y recalcula crownEligible: la ficha liberada puede moverse entonces. No enviar otra tirada mientras rolled=true; esperar ROLL_AVAILABLE y el estado confirmado. Reintentar una confirmación anterior no habilita movimientos.
 
 `turn.consecutiveDoubles` conserva 1/2 entre tiradas, llega a 3 en el premio y se reinicia con no par o cierre. `turn.homeAttempts` es independiente. `turn.thirdDoubleReward` identifica el premio pendiente; `crownEligible` conserva las activas previas. El snapshot es la autoridad para reconexión y deduplicación por versión.
 
@@ -263,3 +265,152 @@ Usar el nuevo deadline, sin restaurar 30 segundos. Los campos de pausa vuelven a
 No se cambian acciones ni rutas. Los nuevos campos/eventos son aditivos; el cliente debe tolerarlos. Las pruebas del servidor usan clientes WebSocket simulados, no acreditan ejecución del cliente Godot real.
 
 Si el scheduler o proceso vuelve después del vencimiento de trivia, el saldo de movimiento se reanuda desde trivia.deadline, no desde la hora tardía del procesamiento. Si también se agotó ese saldo, el mismo commit resuelve trivia y cierra el turno. Un reinicio no regala segundos adicionales.
+
+## Ejemplos ejecutables: liberación parcial y tres pares
+
+Estos ejemplos se copiaron de `PartialReleaseContractTest`, que ejecuta GameService y el handler WebSocket con persistencia y transporte en memoria. No son capturas de una sesión LAN. El test genera `target/partial-release-wire-examples.json` con solicitudes, ACK, publicaciones y sincronizaciones completos. Los bloques de eventos siguientes contienen elementos completos de `GAME_UPDATED.events`, uno por línea; no son tipos nuevos de mensaje. Los tiempos vienen del reloj de prueba.
+
+Para regenerarlos: `mvn -o -Dmaven.repo.local=.build/m2 -Dtest=PartialReleaseContractTest test` desde game-service.
+
+
+### 1. Una ficha HOME y (5,5)
+
+A sale a 5; el índice 0 se consume. B, C y D estaban en 12, 25 y 39. Tras confirmar, solo pueden usar el índice 1 de valor 5. A no figura entre las opciones.
+
+```json
+{"type":"DICE_ROLLED","data":{"playerId":"a","dice":[5,5]}}
+{"type":"HOME_RELEASE_RESOLVED","data":{"rollId":"a46de193-babe-4aa4-8d95-d87fb6c022c2","pieceIds":["seat-0-piece-0"],"consumed":[true,false]}}
+{"type":"PIECE_RELEASED","data":{"pieceId":"seat-0-piece-0","from":null,"to":5}}
+{"type":"DICE_ANIMATION_REQUIRED","data":{"rollId":"a46de193-babe-4aa4-8d95-d87fb6c022c2","turnNumber":1,"animationDeadline":11000,"required":true}}
+```
+
+```json
+{"type":"MOVEMENT_TIMER_STARTED","data":{"rollId":"a46de193-babe-4aa4-8d95-d87fb6c022c2","startedAt":1000,"deadline":31000}}
+```
+
+El array real de `GAME_STATE.legalMoves` después de confirmar es:
+
+```json
+[{"pieceId":"seat-0-piece-1","dieIndex":1,"dieValue":5,"from":12,"to":17,"progress":12,"capture":false,"safe":true,"crown":false,"release":false},{"pieceId":"seat-0-piece-2","dieIndex":1,"dieValue":5,"from":25,"to":30,"progress":25,"capture":false,"safe":false,"crown":false,"release":false},{"pieceId":"seat-0-piece-3","dieIndex":1,"dieValue":5,"from":39,"to":44,"progress":39,"capture":false,"safe":false,"crown":false,"release":false}]
+```
+
+
+### 2. Dos fichas HOME y (5,5)
+
+Se liberan dos fichas y se consumen ambos dados. La confirmación habilita otro lanzamiento; no abre movimiento.
+
+```json
+{"type":"DICE_ROLLED","data":{"playerId":"a","dice":[5,5]}}
+{"type":"HOME_RELEASE_RESOLVED","data":{"rollId":"fc796c8c-a7d5-4506-99ae-6d1b045ef300","pieceIds":["seat-0-piece-0","seat-0-piece-1"],"consumed":[true,true]}}
+{"type":"PIECE_RELEASED","data":{"pieceId":"seat-0-piece-0","from":null,"to":5}}
+{"type":"PIECE_RELEASED","data":{"pieceId":"seat-0-piece-1","from":null,"to":5}}
+{"type":"DICE_ANIMATION_REQUIRED","data":{"rollId":"fc796c8c-a7d5-4506-99ae-6d1b045ef300","turnNumber":1,"animationDeadline":11000,"required":true}}
+```
+
+```json
+{"type":"ROLL_AVAILABLE","data":{"playerId":"a","rollId":"fc796c8c-a7d5-4506-99ae-6d1b045ef300","extraRollAvailable":true,"consecutiveDoubles":1}}
+```
+
+
+### 3. Una ficha HOME y (1,1)
+
+La capacidad máxima sigue siendo cuatro; al existir una sola HOME se libera una y queda un único dado de valor 1 para las previamente activas.
+
+```json
+{"type":"DICE_ROLLED","data":{"playerId":"a","dice":[1,1]}}
+{"type":"HOME_RELEASE_RESOLVED","data":{"rollId":"a0e44a99-9189-467b-983d-246c3d9b2ffe","pieceIds":["seat-0-piece-0"],"consumed":[true,false]}}
+{"type":"PIECE_RELEASED","data":{"pieceId":"seat-0-piece-0","from":null,"to":5}}
+{"type":"DICE_ANIMATION_REQUIRED","data":{"rollId":"a0e44a99-9189-467b-983d-246c3d9b2ffe","turnNumber":1,"animationDeadline":11000,"required":true}}
+```
+
+```json
+{"type":"MOVEMENT_TIMER_STARTED","data":{"rollId":"a0e44a99-9189-467b-983d-246c3d9b2ffe","startedAt":1000,"deadline":31000}}
+```
+
+
+### 4. Una ficha HOME y (6,6)
+
+La capacidad máxima sigue siendo tres; al existir una sola HOME se libera una y queda un único dado de valor 6 para las previamente activas.
+
+```json
+{"type":"DICE_ROLLED","data":{"playerId":"a","dice":[6,6]}}
+{"type":"HOME_RELEASE_RESOLVED","data":{"rollId":"87cbec35-bbc8-496f-98f1-ac439bc2ae3f","pieceIds":["seat-0-piece-0"],"consumed":[true,false]}}
+{"type":"PIECE_RELEASED","data":{"pieceId":"seat-0-piece-0","from":null,"to":5}}
+{"type":"DICE_ANIMATION_REQUIRED","data":{"rollId":"87cbec35-bbc8-496f-98f1-ac439bc2ae3f","turnNumber":1,"animationDeadline":11000,"required":true}}
+```
+
+```json
+{"type":"MOVEMENT_TIMER_STARTED","data":{"rollId":"87cbec35-bbc8-496f-98f1-ac439bc2ae3f","startedAt":1000,"deadline":31000}}
+```
+
+
+### 5. Liberación sin movimientos legales
+
+Las otras tres fichas están coronadas. La liberada no puede usar el dado pendiente. Después de animar, se descarta ese dado, sin reloj de movimiento ni SOPLAR, y queda disponible otro lanzamiento:
+
+```json
+{"type":"DICE_ROLLED","data":{"playerId":"a","dice":[5,5]}}
+{"type":"HOME_RELEASE_RESOLVED","data":{"rollId":"aaedd583-da75-4d4f-a0a9-4c4550a47338","pieceIds":["seat-0-piece-0"],"consumed":[true,false]}}
+{"type":"PIECE_RELEASED","data":{"pieceId":"seat-0-piece-0","from":null,"to":5}}
+{"type":"DICE_ANIMATION_REQUIRED","data":{"rollId":"aaedd583-da75-4d4f-a0a9-4c4550a47338","turnNumber":1,"animationDeadline":11000,"required":true}}
+```
+
+```json
+{"type":"ROLL_AVAILABLE","data":{"playerId":"a","rollId":"aaedd583-da75-4d4f-a0a9-4c4550a47338","extraRollAvailable":true,"consecutiveDoubles":1}}
+```
+
+El estado confirmado tiene consumed=[true,true], rolled=false, extraRollAvailable=true y movementStartedAt=null. No confundirlo con omitir una captura legal: esa omisión conserva SOPLAR.
+
+
+### 6. Secuencia de tres pares
+
+La primera tirada libera una ficha; el dado restante mueve B de 12 a 17. La segunda usa ambos dados con C de 25 a 35. Después de cada resolución aparece ROLL_AVAILABLE con el contador correspondiente:
+
+```json
+{"type":"PIECE_MOVED","data":{"pieceId":"seat-0-piece-1","from":12,"to":17,"dieIndex":1,"status":"BOARD"}}
+{"type":"ROLL_AVAILABLE","data":{"playerId":"a","rollId":"4936ec0d-a268-4114-bcbd-a36a0585333d","extraRollAvailable":true,"consecutiveDoubles":1}}
+```
+
+```json
+{"type":"PIECE_MOVED","data":{"pieceId":"seat-0-piece-2","from":25,"to":35,"dieIndex":2,"status":"BOARD"}}
+{"type":"ROLL_AVAILABLE","data":{"playerId":"a","rollId":"e106b558-fd0e-45ea-a830-7ae572357eca","extraRollAvailable":true,"consecutiveDoubles":2}}
+```
+
+La tercera tirada sustituye el movimiento por la selección de corona y consume ambos dados:
+
+```json
+{"type":"DICE_ROLLED","data":{"playerId":"a","dice":[5,5]}}
+{"type":"CROWN_CHOICE_REQUIRED","data":{"playerId":"a"}}
+{"type":"DICE_ANIMATION_REQUIRED","data":{"rollId":"33c2a78c-6e6a-43b8-ac9e-2791fb0eae47","turnNumber":1,"animationDeadline":11000,"required":true}}
+```
+
+Orden con HOME en el tercer par: DICE_ROLLED → HOME_RELEASE_RESOLVED/capturas de salida/PIECE_RELEASED → efectos de cartas existentes → CROWN_CHOICE_REQUIRED, si hay elegibles → DICE_ANIMATION_REQUIRED. Primero se confirma la animación. La confirmación conserva la selección pendiente sin emitir MOVEMENT_TIMER_STARTED; si no hay elegibles cierra el turno. No se añade una fase de movimiento al premio.
+
+
+### 7. Coronación seleccionada y cambio de turno
+
+```json
+{"type":"CROWN_REQUEST","gameId":"g","requestId":"example-19","expectedVersion":8,"pieceId":"seat-0-piece-3"}
+```
+
+```json
+{"type":"PIECE_CROWNED","data":{"pieceId":"seat-0-piece-3","reason":"THREE_DOUBLES"}}
+{"type":"TURN_CHANGED","data":{"playerId":"b","turnNumber":2,"deadline":61000}}
+```
+
+La selección admite fichas propias que ya estaban BOARD antes de lanzar y sigan activas, también en corredor final; excluye HOME, coronadas, rivales y recién liberadas. El cierre reemplaza el turno, reinicia el contador y deja rollId, movementStartedAt y pausas anteriores a null. Si completa las cuatro coronadas, se conserva GAME_FINISHED en lugar de iniciar otro turno. Un reintento idéntico devuelve el ACK original con duplicate=true, sin otra coronación.
+
+
+### 8. Rechazo de una cuarta tirada
+
+El jugador a ya perdió el turno. Una solicitud nueva con la versión actual se rechaza; una solicitud antigua puede recibir STALE_VERSION antes de validar el turno:
+
+```json
+{"type":"ROLL_DICE","gameId":"g","requestId":"fourth-roll","expectedVersion":9}
+```
+
+```json
+{"type":"ERROR","requestId":"fourth-roll","code":"NOT_YOUR_TURN","message":"Not your turn","gameId":"g","version":9}
+```
+
+No hay cuarta tirada, penalización por el tercer par ni reinicio de relojes antiguos. El timeout de un movimiento pendiente descarta el dado y cierra el turno sin lanzamiento adicional, conforme a la política ya vigente.

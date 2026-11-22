@@ -26,7 +26,7 @@ class PairsAndTriviaTimersTest extends EngineFixture {
         create();activateHomeForMovement();game.player("a").bot=true;
         rawRoll();assertEquals(30_000,game.turn.deadline-game.turn.movementStartedAt);
     }
-    @Test void everyPairConsumesBothDiceForAnyHomeCountWithoutMovementTimerOrFictitiousCapture() {
+    @Test void eachPairConsumesOneDieForOneReleaseAndBothForMultipleReleases() {
         for(int value=1;value<=6;value++) for(int home=1;home<=4;home++) {
             source(value,value);
             for(int n=home;n<4;n++) place(own(n),10+n);
@@ -35,11 +35,17 @@ class PairsAndTriviaTimersTest extends EngineFixture {
             int expected=Math.min(home,value==1?4:value==6?3:2);
             assertEquals(expected,events.stream().filter(e->e.type().equals("PIECE_RELEASED")).count());
             assertTrue(game.turn.homeRelease);
-            assertArrayEquals(new boolean[]{true,true},game.turn.consumed);
+            assertArrayEquals(new boolean[]{true,home!=1},game.turn.consumed);
             assertTrue(engine.legalMoves(game,"a").isEmpty());
             assertThrows(GameException.class,()->rawRoll());
             var confirmed=confirm();
-            assertTrue(confirmed.stream().noneMatch(e->e.type().equals("MOVEMENT_TIMER_STARTED")));
+            assertEquals(home==1,confirmed.stream().anyMatch(e->e.type().equals("MOVEMENT_TIMER_STARTED")));
+            if(home==1) {
+                assertNotNull(game.turn.movementStartedAt);
+                assertFalse(game.turn.extraRollAvailable);assertTrue(game.turn.rolled);
+                assertTrue(engine.legalMoves(game,"a").stream().allMatch(m->m.dieIndex()==1&&!m.pieceId().equals(own(0))));
+                move(engine.legalMoves(game,"a").getFirst());
+            }
             assertNull(game.turn.movementStartedAt);
             assertTrue(game.turn.extraRollAvailable);assertFalse(game.turn.rolled);
             assertTrue(game.turn.captureCandidates.isEmpty());
