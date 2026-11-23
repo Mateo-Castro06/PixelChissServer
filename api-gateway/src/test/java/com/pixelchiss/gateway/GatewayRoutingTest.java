@@ -63,6 +63,7 @@ class GatewayRoutingTest {
         }
     }
     @Test void authenticationAndPrivateRoutesStayProtected() throws Exception {
+        assertEquals(401, request("GET", "/.well-known/pixelchiss/ca", null).statusCode()); // LAN profile only
         assertEquals(401, request("GET", "/api/game/board", null).statusCode());
         assertEquals(401, request("GET", "/api/game/board", "invalid").statusCode());
         assertEquals(401, request("GET", "/api/game/board", GatewayTestKeys.token(-120)).statusCode());

@@ -76,7 +76,8 @@ def init(args, create_ca=True):
         return
     fingerprint = hashlib.sha256(ssl.PEM_cert_to_DER_cert((directory / 'ca.crt').read_text())).hexdigest()
     print(f'Certificates created in {directory}. Keep ca.p12, server.p12 and lan.env private.')
-    print(f'Share ONLY ca.crt. Confirm the certificate DER SHA256 by a trusted channel: {fingerprint}')
+    print(f'CA certificate DER SHA256 (share via an independent trusted channel): {fingerprint}')
+    print(f'Public CA discovery after LAN startup: https://{host}:{tls_port}/.well-known/pixelchiss/ca; players need no manual file copy.')
     print(f'LAN endpoint: https://{host}:{tls_port}; local endpoint remains http://127.0.0.1:8080')
     print('Configure GOOGLE_DESKTOP_CLIENT_ID on the host, apply the scoped firewall rules, then follow docs/MANUAL_SERVIDOR_LAN.md.')
 

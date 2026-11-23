@@ -89,13 +89,17 @@ def start(args):
         docker.config()
         firewall = Firewall(identity(root, docker.project), scope(network, port))
         builds, hashes = docker.build_plan(previous.get('sources', {}), args.rebuild)
+        # Older installations may have images but no recorded source baseline. Upgrade
+        # this Gateway once so start --auto cannot advertise a resource absent from it.
+        if previous.get('caDiscoveryVersion') != 1 and 'api-gateway' not in builds:
+            builds.append('api-gateway')
         # Stage certificate first. Common CA requests stop here before changing production configuration.
         pending = auto_tls.prepare(directory, network.address, args.image, args.signed_certificate)
         env_text = (directory / 'lan.env').read_text(encoding='utf-8')
         new_text = update_env(env_text, {'LAN_BIND_ADDRESS': network.address, 'LAN_HTTPS_PORT': port})
         changed_files = new_text != env_text or pending is not None
         state_fields = {'version': 1, 'project': docker.project, 'network': network.to_dict(), 'port': port,
-                        'sources': hashes, 'caFingerprint': fingerprint(directory / 'ca.crt')}
+                        'sources': hashes, 'caFingerprint': fingerprint(directory / 'ca.crt'), 'caDiscoveryVersion': 1}
         state_changed = any(previous.get(k) != v for k, v in state_fields.items())
         tx = Transaction(directory)
         begun = False
@@ -173,9 +177,12 @@ def start(args):
         print('Certificado: válido; CA conservada. Firewall: verificado. Docker: saludable.')
         print(f'REST Godot: https://{network.address}:{port}')
         print(f'WebSocket Godot: wss://{network.address}:{port}/api/game/ws')
+        print(f'Descubrimiento CA: https://{network.address}:{port}/.well-known/pixelchiss/ca')
         print('Acceso local: http://127.0.0.1:' + str(auto_docker.local_gateway_port(config)))
         print('Certificado público: ' + str(directory / 'ca.crt'))
         print('Huella CA (DER SHA256): ' + fingerprint(directory / 'ca.crt'))
+        print('Comunica IP, puerto y esta huella COMPLETA a los jugadores por un canal independiente y confiable. '
+              'Godot descarga la CA; cada jugador debe comparar la huella antes de confirmarla. No hay que copiar archivos.')
         print('Reversión del firewall: ' + str(directory / 'firewall-undo.txt'))
         print('Listo desde este anfitrión. El login Google real y el acceso desde otro computador requieren sus propias pruebas.')
 
@@ -204,7 +211,9 @@ def inspect_command(args):
     host, port = lan.private_host(args.host or values['LAN_BIND_ADDRESS']), lan.port(args.port or values.get('LAN_HTTPS_PORT', '8443'))
     if args.command == 'url':
         print(f'REST: https://{host}:{port}\nWebSocket: wss://{host}:{port}/api/game/ws')
+        print(f'Descubrimiento CA: https://{host}:{port}/.well-known/pixelchiss/ca')
         print('CA pública: ' + str(directory / 'ca.crt') + '\nHuella DER SHA256: ' + fingerprint(directory / 'ca.crt'))
+        print('Comparte la huella completa por un canal independiente y confiable; descargar la CA no autentica al anfitrión.')
         return
     if args.command == 'cert-check':
         result = auto_tls.verify(directory, host, args.image)
@@ -229,6 +238,9 @@ def inspect_command(args):
         return
     print('Proyecto Compose: ' + docker.project)
     print('Configuración: https://' + host + ':' + str(port))
+    print(f'Descubrimiento CA: https://{host}:{port}/.well-known/pixelchiss/ca')
+    print('Huella CA (DER SHA256): ' + fingerprint(directory / 'ca.crt'))
+    print('Estado TLS/firewall: consulta diagnose para verificarlos en vivo; status solo consulta contenedores y configuración.')
     for name, c in docker.containers().items():
         state = c.get('State', {})
         print(name + ': ' + ('ejecutando' if state.get('Running') else 'detenido') + ', ' + state.get('Health', {}).get('Status', 'sin healthcheck'))

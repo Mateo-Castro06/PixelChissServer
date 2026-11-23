@@ -8,6 +8,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.tomcat.servlet.TomcatServletWebServerFactory;
 import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -43,10 +44,11 @@ public class LanConnectors {
         registration.setOrder(org.springframework.core.Ordered.HIGHEST_PRECEDENCE);
         return registration;
     }
-    @Bean WebServerFactoryCustomizer<TomcatServletWebServerFactory> localConnector() {
+    @Bean WebServerFactoryCustomizer<TomcatServletWebServerFactory> localConnector(
+            @Value("${pixelchiss.lan.local-port:8082}") int localPort) {
         return factory -> {
             Connector connector = new Connector("org.apache.coyote.http11.Http11NioProtocol");
-            connector.setPort(8082);
+            connector.setPort(localPort);
             factory.addAdditionalConnectors(connector);
         };
     }

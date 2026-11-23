@@ -1,5 +1,43 @@
 # Validación del inicio automático LAN
 
+## Descubrimiento de CA por HTTPS (23 de noviembre de 2026)
+
+Esta revisión parte de `fd086fc` y añade únicamente el recurso de descubrimiento del Gateway, su montaje público de CA y la integración con herramientas LAN. No modifica Auth, Lobby, Game, Eureka, datos, OAuth ni firewall. Los resultados de noviembre 19/21 que siguen son históricos; no acreditan el entorno actual. [Evidencia de esta revisión](lan-ca-validation.json).
+
+| Suite de esta revisión | Total | Aprobadas | Fallos | Errores | Omitidas |
+|---|---:|---:|---:|---:|---:|
+| LAN, archivos temporales y mocks | 113 | 111 | 0 | 0 | 2 |
+| Gateway, incluido HTTPS/WSS real con JDK y CA desechable | 20 | 20 | 0 | 0 | 0 |
+| Game, sin habilitar integración externa | 321 | 301 | 0 | 0 | 20 |
+| Auth, subconjunto unitario | 47 | 47 | 0 | 0 | 0 |
+| Lobby | 13 | 6 | 0 | 0 | 7 |
+
+**Intento adicional que no pasó por infraestructura ausente:** `mvn -o verify -q` de Auth ejecutó 87 casos: 47 aprobados y 40 errores de contexto porque PostgreSQL de pruebas en 127.0.0.1:55432 rechazó conexiones. No se presenta como regresión aprobada ni se cuentan esos 47 dos veces. Se repitió únicamente el subconjunto unitario con éxito. No se inició otra instalación de bases ni se tocaron volúmenes. Las primeras ejecuciones de Gateway detectaron errores de implementación/fixture, que se corrigieron antes de la ejecución final aprobada.
+
+Comandos finales ejecutados desde la raíz o el directorio indicado:
+
+```sh
+python3 -m unittest discover -s infrastructure/lan -v
+# api-gateway/ (fuera del sandbox por bloqueo de sockets locales):
+mvn -o -Dmaven.repo.local=.build/m2 verify -q
+# game-service/:
+mvn -o -Dmaven.repo.local=.build/m2 test -q
+# auth-service/ (fuera del sandbox por caché Kotlin):
+mvn -o -Dtest=RefreshTokenServiceTest,OAuth2LoginSuccessHandlerTest,GoogleDesktopIdentityTest,JwtServiceTest,ClientLoginParamsFilterTest test -q
+# lobby-service/ (fuera del sandbox; ejecución inicial bloqueada y cancelada):
+timeout 90 .venv/bin/python -m unittest discover -s tests -v
+```
+
+Gateway crea claves exclusivas de prueba con el keytool local y levanta conectores en puertos efímeros. Comprueba GET sin credenciales, PEM parseable, SHA-256 DER/caId, conjunto exacto de campos públicos, headers no-store/nosniff, CA ausente/inválida/hoja/tamaño excesivo y errores 503 saneados. Rechaza métodos de escritura, cuerpos, parámetros y sufijos/recorridos para claves, PKCS12 y env. Tras comparar contra su fuente local independiente prueba HTTPS estricto; CA desconocida/ajena e identidad fuera del SAN fallan. PKIX rechaza hoja vencida; el recurso rechaza CA vencida. La renovación simulada de hoja cambia SAN manteniendo idénticos DER/caId de CA. WSS real con CA verificada transmite un frame por el proxy hacia un eco de prueba y rechaza CA desconocida. **Ese eco no ejecuta reglas ni OAuth de Game.** Se conservan pruebas de rutas Auth/Desktop, JWT, HTTP local sin recurso LAN, rechazo de login Web sobre TLS y ocultación de métricas públicas.
+
+La suite LAN comprueba que el montaje solo admite server.p12 y ca.crt de lectura; HTTP 8080 y servicios internos no pueden publicarse en LAN. Los fixtures conservan proyecto Compose, idempotencia, reglas ajenas, perfiles Windows, subred/IP, renovación conservando CA y mantenimiento/recuperación. Se simula manipulación de respuesta y huellas: la comprobación de preparación usa TLS estricto y contrasta la descarga con ca.crt local. Se prueba la construcción única del Gateway para adoptar el recurso, sin repetirla en arranques sin cambios. No se implementa una decisión de confianza de usuario dentro del backend: corresponde a Godot.
+
+También pasó la resolución real, de solo lectura, de los dos Compose con los env-files existentes (`config --format json`, salida capturada sin imprimir secretos), seguida de `validate_config`: una única publicación TLS privada, HTTP/servicios internos en loopback y los dos montajes TLS de solo lectura. Esto no necesita daemon ni valida tráfico de contenedores en ejecución. Se comprobó además con OpenSSL que el PEM del ejemplo documental es parseable y con Python que su SHA-256 DER coincide con ambos campos del JSON.
+
+**Límites actuales:** no hay daemon Docker (`docker ps` elevado informa socket inexistente). No se ejecutó Compose/start --auto real, ni se cambiaron servicios, firewall, certificados/configuración de instalación, claves JWT, Google, bases o demo-rum. Las dos omisiones LAN requieren PowerShell; Windows real/UAC/Defender no se comprobaron. Game omite 20 casos de integración sin bases/servidores aislados, y Lobby omite siete que requieren Redis/Game. No se ejecutaron tests TLS/firewall dentro de contenedores. Linux/JDK en este entorno sí ejecutó HTTPS/WSS, pero eso no acredita acceso desde otro computador, cambio físico de red, un ejecutable Godot o login Google real. Deben realizarse las pruebas cliente de [la guía de cambios](GODOT_LAN_CERTIFICADOS_CAMBIOS.md#i-pruebas-obligatorias-para-godot).
+
+## Evidencia histórica de la automatización previa
+
 Baseline: `c93f82a6e2d44a9396c3bf55a9c40bda2b7cffd6`. Fecha: 19 de noviembre de 2026. Esta entrega amplía la herramienta LAN existente; no modifica código de Auth, Gateway, Lobby, Game o Eureka, contratos Godot ni reglas del motor. No hay migraciones de datos ni nuevas variables obligatorias en `.env`.
 
 [Evidencia estructurada y hashes de logs/fuentes](lan-auto-validation.json).

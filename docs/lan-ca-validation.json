@@ -1,0 +1,80 @@
+{
+  "date": "2026-11-23",
+  "baseline": "fd086fc",
+  "environment": {
+    "host": "Linux",
+    "docker": "No daemon available; elevated docker ps failed with no socket",
+    "physical_lan": false,
+    "windows": false,
+    "godot": false,
+    "real_google_login": false
+  },
+  "suites": [
+    {
+      "name": "Gateway",
+      "tests": 20,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log_sha256": "e56d2640ec5cdf99f1578b25fc9c891512624aa0cfc33147cbf70259f2c98da5"
+    },
+    {
+      "name": "Game",
+      "tests": 321,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 20,
+      "log_sha256": "23ddfec74dc3ffcf67aef648506ab4d2ee05e3281fea0a8f8ce92e5dc75287de"
+    },
+    {
+      "name": "LAN Python (temporary files and mocks)",
+      "tests": 113,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 2,
+      "reason": "PowerShell unavailable"
+    },
+    {
+      "name": "Auth unit",
+      "tests": 47,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "Lobby",
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 7,
+      "reason": "Integration requires isolated Redis and Game"
+    }
+  ],
+  "unavailable_validation": [
+    {
+      "name": "Auth full verify",
+      "tests": 87,
+      "errors": 40,
+      "failures": 0,
+      "cause": "Dedicated PostgreSQL 127.0.0.1:55432 refused connection; unit subset passed separately"
+    },
+    "Game integration: 20 cases skipped without game.integration=true and isolated databases",
+    "Docker TLS/firewall namespace integration not run: no daemon",
+    "Original sandbox Lobby run stopped after hanging at local ASGI request; external run completed",
+    "Windows Defender/UAC and Linux host firewall not changed or exercised",
+    "No physical LAN, Godot executable or real Google login executed"
+  ],
+  "log_sha256": {
+    "pixelchiss-ca-lan.log": "50f6d908da97d9b9271071eb111359e7bab0083844c26b2f37caa4851693cf51",
+    "pixelchiss-ca-gateway.log": "e56d2640ec5cdf99f1578b25fc9c891512624aa0cfc33147cbf70259f2c98da5",
+    "pixelchiss-ca-game.log": "23ddfec74dc3ffcf67aef648506ab4d2ee05e3281fea0a8f8ce92e5dc75287de",
+    "pixelchiss-ca-auth.log": "cee38929b84e5cb3c4c779f5729ddde0129d95aa52b66467d95757e5f093a0f6",
+    "pixelchiss-ca-auth-unit.log": "a6ddf5f3f36f0f8d3fc0e8c773aaba09984c9bfff8888de0c01a7cb66bcc0698",
+    "pixelchiss-ca-lobby-external.log": "947b0e872a34d21f72dd4952d163cc943402608b6e52ad5b9f990ee51006b953"
+  },
+  "read_only_checks": [
+    "Resolved existing base + LAN Compose with existing env files and validated configuration without printing secrets; no daemon used",
+    "Parsed documented public test CA with OpenSSL and matched DER SHA-256 with fingerprintSha256/caId",
+    "git diff --check; Markdown code fences and relative file links valid"
+  ]
+}

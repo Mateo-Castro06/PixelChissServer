@@ -389,7 +389,7 @@ class DockerPolicyTest(unittest.TestCase):
         directory=Path('/private/lan')
         services={n:{} for n in docker.CORE}
         services['api-gateway']={'environment':{'SPRING_PROFILES_ACTIVE':'lan'},'ports':[{'host_ip':'10.20.30.40','target':8080,'published':'8443'},{'host_ip':'127.0.0.1','target':8082,'published':'8080'}],
-            'volumes':[{'target':'/app/tls/server.p12','source':str(directory/'server.p12'),'read_only':True}]}
+            'volumes':[{'target':'/app/tls/'+name,'source':str(directory/name),'read_only':True} for name in ('server.p12','ca.crt')]}
         services['auth-service']={'environment':{'GOOGLE_DESKTOP_CLIENT_ID':'fixture.apps.googleusercontent.com'}}
         return {'services':services,'networks':{'private':{'driver':'bridge'}}},directory
 
@@ -405,6 +405,22 @@ class DockerPolicyTest(unittest.TestCase):
     def test_compose_never_mounts_ca_private_directory_into_gateway(self):
         config,path=self.config();config['services']['api-gateway']['volumes'][0]['target']='/app/tls'
         with self.assertRaises(support.LanError):docker.validate_config(config,path)
+
+    def test_public_ca_mount_is_required_readonly_and_from_selected_directory(self):
+        for mutation in ('missing', 'writable', 'wrong-source', 'private-key'):
+            config,path=self.config();mounts=config['services']['api-gateway']['volumes']
+            if mutation == 'missing':mounts.pop()
+            elif mutation == 'writable':mounts[1]['read_only']=False
+            elif mutation == 'wrong-source':mounts[1]['source']='/other/ca.crt'
+            else:mounts.append({'target':'/app/tls/ca.p12','source':str(path/'ca.p12'),'read_only':True})
+            with self.subTest(mutation=mutation),self.assertRaises(support.LanError):docker.validate_config(config,path)
+
+    def test_all_internal_services_and_plaintext_gateway_remain_loopback(self):
+        for service,port in [('api-gateway',8082),('postgres',5432),('mongodb',27017),('redis',6379),
+                             ('eureka-server',8761),('prometheus',9090),('grafana',3000),('auth-service',8081),('lobby-service',8083)]:
+            config,path=self.config()
+            config['services'].setdefault(service,{})['ports']=[{'host_ip':'0.0.0.0','target':port,'published':str(port)}]
+            with self.subTest(service=service),self.assertRaises(support.LanError):docker.validate_config(config,path)
 
     def test_compose_rejects_direct_routing_network(self):
         config,path=self.config();config['networks']['private']['driver_opts']={'com.docker.network.bridge.gateway_mode_ipv4':'nat-unprotected'}
@@ -501,6 +517,33 @@ class StartWorkflowTest(unittest.TestCase):
 
     def execute(self):
         with contextlib.redirect_stdout(io.StringIO()):start.start(self.args)
+
+    def test_url_provides_discovery_and_local_fingerprint_without_docker(self):
+        code,output,errors=self.cli('url')
+        self.assertEqual(0,code,errors)
+        self.assertIn('https://10.20.30.40:8443/.well-known/pixelchiss/ca',output)
+        self.assertIn('same-ca',output)
+        self.assertIn('independiente',output)
+        self.client.config.assert_not_called()
+
+    def test_start_reports_discovery_and_independent_full_fingerprint(self):
+        with contextlib.redirect_stdout(io.StringIO()) as output:start.start(self.args)
+        self.assertIn('https://10.20.30.40:8443/.well-known/pixelchiss/ca',output.getvalue())
+        self.assertIn('huella COMPLETA',output.getvalue())
+        self.assertIn('No hay que copiar archivos',output.getvalue())
+
+    def test_discovery_upgrade_builds_only_gateway_once_and_checks_maintenance(self):
+        self.client.changes.side_effect=lambda builds: ['api-gateway'] if 'api-gateway' in builds else []
+        self.client.build_plan.side_effect=lambda *args: ([], {'api-gateway':'current'})
+        self.execute()
+        self.client.build_images.assert_called_once_with(['api-gateway'])
+        self.client.start.assert_called_once()
+        self.client.active_games.assert_called()
+        self.assertEqual(1,support.read_json(self.directory/'auto-state.json')['caDiscoveryVersion'])
+        self.client.build_images.reset_mock();self.client.start.reset_mock()
+        self.execute()
+        self.client.build_images.assert_called_once_with([])
+        self.client.start.assert_not_called()
 
     def cli(self, command, *extra):
         output, errors = io.StringIO(), io.StringIO()

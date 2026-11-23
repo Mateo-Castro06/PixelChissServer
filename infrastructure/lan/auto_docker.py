@@ -10,7 +10,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from auto_support import LanError, run
+from auto_support import LanError, fingerprint, run
 
 CORE = ('eureka-server', 'auth-service', 'game-service', 'lobby-service', 'api-gateway')
 
@@ -271,10 +271,12 @@ def validate_config(config, directory):
     if not 1024 <= int(external[0]['published']) <= 65535:
         raise LanError('Puerto LAN inválido.')
     mounts = [m for m in gateway.get('volumes', []) if m.get('target', '').startswith('/app/tls')]
-    if len(mounts) != 1 or mounts[0].get('target') != '/app/tls/server.p12' or not mounts[0].get('read_only'):
-        raise LanError('Gateway debe montar únicamente server.p12 de solo lectura.')
-    if Path(mounts[0]['source']).resolve() != (directory / 'server.p12').resolve():
-        raise LanError('LAN_TLS_DIRECTORY no coincide con el directorio privado seleccionado.')
+    expected = {'/app/tls/server.p12': 'server.p12', '/app/tls/ca.crt': 'ca.crt'}
+    if len(mounts) != 2 or {m.get('target') for m in mounts} != set(expected) or any(not m.get('read_only') for m in mounts):
+        raise LanError('Gateway debe montar solo server.p12 y la CA pública ca.crt, ambos de solo lectura.')
+    for mount in mounts:
+        if Path(mount['source']).resolve() != (directory / expected[mount['target']]).resolve():
+            raise LanError('LAN_TLS_DIRECTORY no coincide con el directorio privado seleccionado.')
     env = config['services']['auth-service']['environment']
     if not env.get('GOOGLE_DESKTOP_CLIENT_ID') or not env['GOOGLE_DESKTOP_CLIENT_ID'].endswith('.apps.googleusercontent.com'):
         raise LanError('Falta GOOGLE_DESKTOP_CLIENT_ID real en .env. No se publicará LAN.')
@@ -298,8 +300,25 @@ def gateway_health(host, port, ca, local_port=8080, timeout=60):
                 with urllib.request.urlopen(url, context=tls, timeout=5) as response:
                     if json.load(response).get('status') != 'UP':
                         raise OSError('No saludable')
+            # Read through normal strict TLS, then compare against the trusted local file.
+            # This also catches stale images/missing public-file mounts before reporting ready.
+            with urllib.request.urlopen(f'https://{host}:{port}/.well-known/pixelchiss/ca',
+                                        context=context, timeout=5) as response:
+                payload = response.read(32769)
+                if len(payload) > 32768:
+                    raise ValueError('Descubrimiento demasiado grande')
+                document = json.loads(payload)
+                if (not isinstance(document, dict) or type(document.get('protocolVersion')) is not int
+                        or not isinstance(document.get('caPem'), str)):
+                    raise ValueError('Documento de descubrimiento inválido')
+                expected = fingerprint(ca)
+                candidate = hashlib.sha256(ssl.PEM_cert_to_DER_cert(document['caPem'])).hexdigest()
+                if (document.get('protocolVersion') != 1 or candidate != expected
+                        or document.get('fingerprintSha256') != expected
+                        or document.get('caId') != 'sha256:' + expected):
+                    raise ValueError('CA pública no coincide con la CA local')
             return
-        except (OSError, ValueError):
+        except (OSError, ValueError, KeyError, TypeError):
             if time.monotonic() >= deadline:
-                raise LanError('Gateway no respondió correctamente por HTTPS validado y HTTP local.') from None
+                raise LanError('Gateway no respondió correctamente por HTTPS validado, descubrimiento CA y HTTP local.') from None
             time.sleep(2)

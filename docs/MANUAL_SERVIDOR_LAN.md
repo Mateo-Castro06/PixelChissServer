@@ -22,7 +22,7 @@ No se necesita recordar la IP ni editar archivos al cambiar de Wi-Fi. El asisten
 
 1. Instalar Python **3.9 o posterior**, Git, Docker Engine >=28 y Compose >=2.24.4. En Windows usar Docker Desktop con contenedores Linux. No ejecutar todo Python como administrador/root: el asistente solicita privilegios únicamente para las operaciones de firewall.
 2. Preparar `.env`, claves JWT y credenciales Google reales siguiendo las secciones posteriores. La automatización **no edita `.env` ni inventa OAuth**. Falta de Desktop client ID detiene el inicio. El secreto Desktop existente se conserva.
-3. Para una CA individual nueva, ejecutar start --auto y confirmar expresamente `CREAR CA`. La imagen JDK se descarga si falta. Si ya hay certificados, no se crea otra CA.
+3. Flujo recomendado sin administrador central: cada anfitrión conserva su propia CA. Ejecutar start --auto y confirmar expresamente `CREAR CA` solo en la primera preparación. La imagen JDK se descarga si falta. Si ya hay certificados, no se crea otra CA.
 4. Para la CA común del equipo en un anfitrión nuevo, recibir solo su certificado público verificado y ejecutar `start --auto --ca-certificate RUTA_CA_PUBLICA.crt`. Se crea la clave de servidor y una CSR privada para traslado público al administrador; nunca se solicita su ca.p12. Si no hay firma todavía, el comando se detiene antes de publicar LAN.
 5. Verificar que el directorio y las claves privadas sean del usuario anfitrión. En Linux: directorio 700, lan.env/PKCS12 600; en Windows sin permisos de acceso para Everyone, Users o Authenticated Users. El asistente comprueba protección y se detiene si es insuficiente; no cambia ACL/permisos de archivos existentes automáticamente.
 
@@ -37,9 +37,18 @@ No se necesita recordar la IP ni editar archivos al cambiar de Wi-Fi. El asisten
 - Verifica y, si hace falta, solicita autorización para aplicar firewall limitado a esa IP/puerto/subred. Solo entonces permite privilegios de sistema. Comprueba la protección instalada antes de publicar y conserva las reglas anteriores hasta que HTTPS esté saludable.
 - Usa los dos Compose y los dos env-files existentes. Construye imágenes faltantes o cuyos archivos de construcción hayan cambiado desde el último inicio automático exitoso. En la primera adopción reutiliza imágenes existentes; si proceden de una revisión desconocida, usar `--rebuild` para reconstruir expresamente los cinco servicios. No reconstruye por cambios solo documentales. Una instalación nueva construye las imágenes que falten.
 - Reutiliza servicios sin cambios y no los recrea. Renueva Gateway si cambió su certificado aunque su IP sea la misma. Si se recrearon Redis/Mongo, reinicia Game para renovar conexiones; se conserva su estado. Si el monitoreo ya existía, también aplica el override de Prometheus, sin iniciar servicios opcionales que antes no existían.
-- Espera healthchecks, valida los puertos realmente publicados y comprueba tanto HTTPS con la CA como HTTP local. Deja el backend funcionando y muestra REST/WSS, certificado público, huella DER SHA256 y ubicación de la reversión de firewall.
+- Espera healthchecks, valida los puertos realmente publicados y comprueba HTTPS estricto, HTTP local y el descubrimiento contra la CA pública local. Deja el backend funcionando y muestra IP/puerto, REST/WSS, URL de descubrimiento, estado TLS/firewall, huella DER SHA256 completa y reversión de firewall.
+- Al adoptar por primera vez el protocolo de descubrimiento, reconstruye solo la imagen Gateway si todavía no estaba prevista su construcción, incluso si existía una imagen sin baseline registrada. Se mantienen la comprobación de partidas y el consentimiento de mantenimiento. Los siguientes inicios reutilizan esa imagen mientras no cambien sus fuentes.
 
 El asistente no es un monitor residente: **cada ejecución** detecta la red actual. No puede mantener intactos los WebSocket durante un cambio de IP. Tras la migración, los jugadores usan la nueva dirección y reconectan/sincronizan con el estado persistido. No hay cambios en los contratos ni reglas del juego.
+
+### Datos para compartir con jugadores: sin archivos manuales
+
+Ejecutar `python3 infrastructure/lan/lan.py url` (Windows: `py -3 ... url`) para volver a consultar IP/puerto, URLs y huella sin reiniciar ni acceder al daemon Docker. Comunicar IP, puerto y **los 64 caracteres de la huella** en persona o mediante un canal independiente y confiable. No enviarlos únicamente desde el mismo recurso de descubrimiento.
+
+El recurso es `GET https://IP:8443/.well-known/pixelchiss/ca` (o el puerto configurado), sin JWT ni Google previo. Devuelve únicamente CA PEM pública, SHA-256 DER, caId y versión. La descarga inicial no autentica al anfitrión: Godot debe mantener la candidata no confiable hasta la comparación independiente y abrir después conexiones nuevas HTTPS/WSS estrictas. No copiar ca.crt ni instalarlo en Windows/Linux. El mismo ejecutable puede guardar CA de varios anfitriones. El [contrato completo](GODOT_INTEGRACION_LAN.md#descubrimiento-automático-de-ca-y-primera-conexión-a-un-anfitrión-lan) y los [cambios para Godot](GODOT_LAN_CERTIFICADOS_CAMBIOS.md) describen lo pendiente en el cliente.
+
+No hay puertos adicionales: solo el Gateway TLS en la IP privada y puerto autorizado. HTTP 8080 sigue limitado a loopback; no se publican bases, Eureka ni métricas en LAN. Las reglas, autorizaciones de firewall, stop y recover permanecen bajo el ciclo existente. El montaje adicional solo contiene ca.crt público. Si la CA no está preparada, el recurso devuelve 503 sin detalles privados; si no arranca TLS puede no haber respuesta HTTP. `diagnose` comprueba el recurso usando la CA local y validación TLS normal.
 
 ### Firma de una CA común: reanudar el mismo inicio
 
@@ -82,7 +91,7 @@ python3 infrastructure/lan/lan.py stop
 python3 infrastructure/lan/lan.py recover
 ```
 
-En PowerShell usar `py -3` en cada línea. Los comandos network/status/cert-check/firewall-check/url/diagnose no escriben configuración ni reglas ni recrean servicios. La comprobación del firewall necesita permisos de lectura privilegiada en Linux; si no están disponibles, devuelve pendiente sin solicitar ni aplicar cambios. `cert-check --host IP` permite verificar expresamente otro SAN. `url` muestra la dirección **configurada**, no promete disponibilidad. `status` enumera contenedores; `diagnose` también comprueba TLS, red, firewall y Gateway y termina con error si falta verificación. Stop pide confirmación y detiene únicamente el proyecto seleccionado, conservando todos sus datos.
+En PowerShell usar `py -3` en cada línea. Los comandos network/status/cert-check/firewall-check/url/diagnose no escriben configuración ni reglas ni recrean servicios. La comprobación del firewall necesita permisos de lectura privilegiada en Linux; si no están disponibles, devuelve pendiente sin solicitar ni aplicar cambios. `cert-check --host IP` permite verificar expresamente otro SAN. `url` muestra direcciones REST/WSS/descubrimiento y huella local completa **sin consultar Docker**; no promete disponibilidad. `status` enumera contenedores y también muestra descubrimiento/huella; `diagnose` también comprueba TLS, red, firewall y Gateway y termina con error si falta verificación. Stop pide confirmación y detiene únicamente el proyecto seleccionado, conservando todos sus datos.
 
 Antes de modificar archivos, el asistente guarda copias privadas de lan.env, server.p12, server.crt y auto-state.json en `.backups`. Un journal permite recuperar una operación interrumpida. Las sustituciones son atómicas, y un error intenta restaurar los archivos y la configuración previa de contenedores cuando era posible; si la IP anterior ya no existe, informa de que no pudo reactivarla. Mantiene protecciones de firewall en los fallos. Nunca elimina volúmenes ni estados de dominio para recuperarse.
 
@@ -173,7 +182,7 @@ Fuente: [Google OAuth para aplicaciones Desktop](https://developers.google.com/i
 
 Linux: `ip -brief address` o `hostname -I`. Windows PowerShell: `Get-NetIPConfiguration` o `ipconfig`. Elegir la IPv4 privada del adaptador conectado a la misma red de los jugadores, no loopback, VPN ni un bridge Docker. No depender del nombre del adaptador. Consultar su prefijo/subred real para el firewall; no suponer que toda red usa /24.
 
-Reservar opcionalmente esa dirección por DHCP en el router para que no cambie. No abrir puertos WAN/UPnP. Si cambia la IP, el certificado debe cubrir la nueva dirección: preparar material nuevo en otra carpeta y conservar el anterior como respaldo. Con CA de equipo, firmar la nueva CSR con la misma CA e instalarla: los clientes conservan su confianza. Con una CA nueva independiente, también hay que distribuir/verificar su CA pública. La herramienta no sobrescribe material existente.
+Reservar opcionalmente esa dirección por DHCP en el router para que no cambie. No abrir puertos WAN/UPnP. Si cambia la IP, el certificado debe cubrir la nueva dirección: usar `start --auto`, que prepara una renovación validada y conserva respaldos, CA y clave. Con CA de equipo sin clave local, obtener la firma de su CSR como se explica arriba. Los clientes conservan la confianza en la CA. Una rotación explícita a otra CA exige nueva descarga y verificación independiente; no se provoca por cambiar IP.
 
 ## 5. Generar certificados por anfitrión
 
@@ -193,7 +202,7 @@ py -3 infrastructure/lan/lan.py init --host DIRECCION_PRIVADA
 
 La herramienta crea `infrastructure/docker/lan-secrets/`: CA privada, servidor PKCS12, certificados públicos y `lan.env` con LAN_BIND_ADDRESS, LAN_HTTPS_PORT=8443 y contraseña aleatoria. No modifica `.env`. Los ficheros privados permanecen ignorados por Git. En Linux restringe permisos; en Windows conservarlos en el perfil privado del usuario con ACL adecuada (no carpetas compartidas ni sincronización pública).
 
-El certificado incluye SAN de la IP elegida, localhost y 127.0.0.1. La clave CA queda en ca.p12 bajo custodia del administrador y no se monta en Gateway: Compose monta únicamente server.p12, sin ca.p12 ni lan.env. Distribuir **solo ca.crt** y comprobar la huella SHA256 del certificado DER que imprime la herramienta por un canal autenticado (no el hash del texto PEM). Godot debe confiar explícitamente en esa CA para ese anfitrión, conservando verificación de IP. No es necesario instalarla globalmente si Godot usa TLSOptions.client(ca). No se usa un certificado público ni ACME/Let's Encrypt para IP privada. El certificado servidor dura un año; planificar renovación antes de caducar, sin borrar datos del backend.
+El certificado incluye SAN de la IP elegida, localhost y 127.0.0.1. La clave CA queda en ca.p12 bajo custodia del administrador y no se monta en Gateway: Compose monta únicamente server.p12 y el certificado público ca.crt en archivos separados de solo lectura, sin ca.p12 ni lan.env. El Gateway entrega la CA pública automáticamente por HTTPS; comunicar a los jugadores la huella SHA256 completa del certificado DER que imprime la herramienta por un canal independiente autenticado (no el hash del texto PEM). No copiar archivos a los jugadores. Godot debe confiar explícitamente en esa CA para ese anfitrión, conservando verificación de IP. No es necesario instalarla globalmente si Godot usa TLSOptions.client(ca). No se usa un certificado público ni ACME/Let's Encrypt para IP privada. El certificado servidor dura un año; planificar renovación antes de caducar, sin borrar datos del backend.
 
 ### CA del equipo: cambiar de anfitrión cambiando solo la dirección
 
@@ -219,7 +228,7 @@ python3 infrastructure/lan/lan.py install --ca-certificate RUTA_CA_PUBLICA.crt -
 
 El PKCS12 de servidor conserva la clave generada en ese anfitrión; no se envía al administrador ni a los clientes. Los certificados públicos pueden transportarse por un canal verificado. Con los anfitriones ya preparados y la CA común confiada, Godot solo cambia IP (y puerto si se personalizó), sin cambiar ejecutable, microservicios, OAuth redirect o confianza TLS. Debe iniciar sesión en el nuevo backend porque su persistencia es independiente.
 
-La alternativa de generar una CA independiente en cada anfitrión con init también funciona, pero exige importar/verificar su nueva CA en los clientes la primera vez; **no** ofrece cambio de solo dirección. No aceptar una CA desconocida automáticamente para evitar ese paso. La estrategia recomendada para el equipo es CA común, claves de servidor distintas y firma administrada. Rotar la CA exige redistribuir confianza explícitamente.
+La CA individual por anfitrión es el flujo recomendado para servidores independientes: Godot descarga la candidata, el jugador compara su huella una vez y la aplicación conserva varias CA. No requiere importación manual ni otro ejecutable. La CA común y estos comandos auxiliares siguen siendo una opción para instalaciones ya administradas. En ambos casos, una CA desconocida exige comparación independiente y una rotación explícita exige nueva verificación.
 
 ## 6. Firewall: obligatorio antes de aceptar jugadores
 
@@ -283,7 +292,7 @@ En LAN el mismo Gateway usa TLS en su puerto interno 8080 y un conector HTTP int
 
 ## 8. Probar y jugar
 
-En el anfitrión: `curl http://127.0.0.1:8080/actuator/health` (en PowerShell usar curl.exe o Invoke-RestMethod). Desde otro equipo, con una copia verificada de ca.crt:
+En el anfitrión: `curl http://127.0.0.1:8080/actuator/health` (en PowerShell usar curl.exe o Invoke-RestMethod). El cliente Godot debe descargar y verificar la CA según el capítulo siguiente. Para diagnóstico técnico opcional con curl y una CA pública ya verificada (no es un paso requerido al jugador):
 
 ```sh
 curl --cacert ca.crt https://DIRECCION_PRIVADA:8443/actuator/health
@@ -291,7 +300,7 @@ curl --cacert ca.crt https://DIRECCION_PRIVADA:8443/actuator/health
 
 Debe responder UP sin omitir validación TLS. `/api/game/board` sin JWT debe rechazar con 401. HTTP sobre el puerto TLS no debe aceptar sesiones. Ante certificado no válido, corregir CA/SAN/fecha; nunca usar `-k` como solución de juego.
 
-En Godot remoto seleccionar LAN, introducir IP y puerto y configurar la CA verificada. Iniciar Google desde el navegador de **cada jugador**; el listener callback es local a ese jugador. Crear una sala, compartir su código, unirse, marcar ready, votar e iniciar. Consultar [los endpoints y pasos del cliente](GODOT_INTEGRACION_LAN.md). Para jugar solo, usar local y añadir bots; ambos mapas y todas las reglas se conservan.
+En Godot remoto seleccionar LAN, introducir IP/puerto y verificar la huella de la CA descargada en la primera conexión. El equipo Godot debe incorporar este flujo; no hay proyecto cliente en este repositorio. Iniciar Google desde el navegador de **cada jugador**; el listener callback es local a ese jugador. Crear una sala, compartir su código, unirse, marcar ready, votar e iniciar. Consultar [los endpoints y pasos del cliente](GODOT_INTEGRACION_LAN.md). Para jugar solo, usar local y añadir bots; ambos mapas y todas las reglas se conservan.
 
 Comprobar manualmente una partida entre dos computadores físicos, reconexión y cambio de anfitrión. Un probe en la propia IP del anfitrión o desde otro contenedor no acredita una partida física entre Windows/Linux.
 
@@ -315,5 +324,5 @@ Mantener el mismo proyecto; Compose vuelve a publicar solo loopback. Retirar la 
 - **401 de código/PKCE:** verifier/state equivocado, intento usado o vencido. Iniciar una autorización nueva; no desactivar PKCE.
 - **Game unhealthy tras recrear bases:** comprobar Redis/Mongo saludables y reiniciar solo game-service para renovar conexiones antiguas, sin borrar datos.
 - **500/502/503 al arrancar:** esperar propagación de Eureka; si persiste, revisar salud y logs sin credenciales. Mantener DNS interno Docker.
-- **Cambió el anfitrión:** con CA común y anfitriones previamente preparados, cambiar solo dirección/puerto en Godot e iniciar sesión de nuevo. Con CAs independientes, importar y verificar además la CA pública del nuevo anfitrión. No se trasladan automáticamente usuarios, volúmenes o partidas.
+- **Cambió el anfitrión:** con CA común y anfitriones previamente preparados, cambiar solo dirección/puerto en Godot e iniciar sesión de nuevo. Con CAs independientes, descargar y verificar una vez la CA del nuevo anfitrión, o reconocer la ya guardada. No se trasladan automáticamente usuarios, volúmenes o partidas.
 - **Se perdió la contraseña TLS:** conservar respaldos privados; no se puede leer el PKCS12 sin ella. Preparar certificados nuevos sin borrar bases de datos.

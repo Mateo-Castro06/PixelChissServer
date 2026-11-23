@@ -6,6 +6,7 @@ services:
       LAN_TLS_PASSWORD: ${LAN_TLS_PASSWORD:?Generate the LAN certificates first}
     volumes:
       - ${LAN_TLS_DIRECTORY:-./lan-secrets}/server.p12:/app/tls/server.p12:ro
+      - ${LAN_TLS_DIRECTORY:-./lan-secrets}/ca.crt:/app/tls/ca.crt:ro
     ports: !override
       - "127.0.0.1:${GATEWAY_PORT:-8080}:8082"
       - "${LAN_BIND_ADDRESS:?Set the private host address}:${LAN_HTTPS_PORT:-8443}:8080"
