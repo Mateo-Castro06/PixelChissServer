@@ -13,10 +13,10 @@ import static org.junit.jupiter.api.Assertions.*;
 class FinalLaneContractTest extends EngineFixture {
     static Stream<Arguments> colors() {
         return Stream.of("classic","science").flatMap(map->Stream.of(
-                Arguments.of(map,0,5,List.of(2,3,4,5,68,69,70),75),
-                Arguments.of(map,1,22,List.of(19,20,21,22,76,77,78),83),
-                Arguments.of(map,2,39,List.of(36,37,38,39,84,85,86),91),
-                Arguments.of(map,3,56,List.of(53,54,55,56,92,93,94),99)));
+                Arguments.of(map,0,5,List.of(65,66,67,0,68,69,70),75),
+                Arguments.of(map,1,22,List.of(14,15,16,17,76,77,78),83),
+                Arguments.of(map,2,39,List.of(31,32,33,34,84,85,86),91),
+                Arguments.of(map,3,56,List.of(48,49,50,51,92,93,94),99)));
     }
     void start(String map,int seat,int progress,int die) {
         engine=new RuleEngine(board,m->1,clock,30_000);
@@ -30,11 +30,11 @@ class FinalLaneContractTest extends EngineFixture {
     void oneToFourStepsEnterOwnLaneAndSerializeTheAuthoritativeDestination(String map,int seat,int exit,List<Integer> path,int crown) {
         var json=tools.jackson.databind.json.JsonMapper.builder().build();
         for(int distance=1;distance<=4;distance++) for(int extra=0;extra<=2;extra++) {
-            int progress=69-distance,die=distance+extra;
+            int progress=64-distance,die=distance+extra;
             start(map,seat,progress,die);String piece="seat-"+seat+"-piece-0";
             var route=board.route(seat,0);
-            assertEquals(exit,route.get(0));assertEquals(exit,route.get(68));
-            assertEquals(path,route.subList(65,72));assertEquals(crown,route.get(76));
+            assertEquals(exit,route.get(0));assertEquals(seat*17,route.get(63));
+            assertEquals(path,route.subList(60,67));assertEquals(crown,route.get(71));
             var expected=path.subList(5-distance,5+extra);
             assertEquals(die,expected.size());
             assertEquals(expected,route.subList(progress+1,progress+die+1));
@@ -45,17 +45,32 @@ class FinalLaneContractTest extends EngineFixture {
                     .filter(p->piece.equals(p.path("id").asString())).findFirst().orElseThrow();
             assertEquals(path.get(4-distance),wire.path("events").get(0).path("data").path("from").asInt());
             assertEquals(expected.getLast().intValue(),wire.path("events").get(0).path("data").path("to").asInt());
-            assertEquals(69+extra,serializedPiece.path("progress").asInt());
+            assertEquals(64+extra,serializedPiece.path("progress").asInt());
             assertEquals(expected.getLast().intValue(),serializedPiece.path("position").asInt());
         }
     }
     @ParameterizedTest @MethodSource("colors")
     void exactCrownAndOvershootAreEnforcedForEveryColor(String map,int seat,int exit,List<Integer> path,int crown) {
         String piece="seat-"+seat+"-piece-0";
-        start(map,seat,75,3);
+        start(map,seat,70,3);
         assertEquals("OVERSHOOT",assertThrows(GameException.class,()->engine.calculate(game,"a",piece,0)).code());
-        start(map,seat,73,3);var move=engine.calculate(game,"a",piece,0);
-        assertEquals(crown,move.to());assertTrue(move.crown());move(move);
-        assertEquals("CROWNED",game.piece(piece).status);assertEquals(76,game.piece(piece).progress);
+        for(int die=1;die<=3;die++) {
+            start(map,seat,71-die,die);var move=engine.calculate(game,"a",piece,0);
+            assertEquals(crown,move.to());assertTrue(move.crown());move(move);
+            assertEquals("CROWNED",game.piece(piece).status);assertEquals(71,game.piece(piece).progress);
+        }
+    }
+    @ParameterizedTest @MethodSource("colors")
+    void threeStepsCrossEntryAndTwoDiceCanBeUsedSequentially(String map,int seat,int exit,List<Integer> path,int crown) {
+        String piece="seat-"+seat+"-piece-0";
+        start(map,seat,62,3);var crossing=engine.calculate(game,"a",piece,0);
+        assertEquals(path.get(2),crossing.from());assertEquals(path.get(5),crossing.to());
+        move(crossing);assertEquals(65,game.piece(piece).progress);
+        start(map,seat,62,1);game.turn.dice=new int[]{1,2};game.turn.consumed=new boolean[2];
+        move(engine.calculate(game,"a",piece,0));
+        assertEquals(63,game.piece(piece).progress);assertEquals(seat*17,game.piece(piece).position);
+        assertArrayEquals(new boolean[]{true,false},game.turn.consumed);
+        move(engine.calculate(game,"a",piece,1));
+        assertEquals(65,game.piece(piece).progress);assertEquals(path.get(5),game.piece(piece).position);
     }
 }

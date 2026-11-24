@@ -17,13 +17,13 @@ class CardsTriviaTest extends EngineFixture {
     void grant(String id){cards.grant(game,catalog.card(id),"a",new ArrayList<>());}
     GameAction target(CardChoice choice){return new GameAction("CARD_TARGET","g","target",game.version,choice.pieceId(),null,null,null,choice.targetPosition(),null,game.card.id,null,choice.targetPieceId(),choice.targetPlayerId());}
     @Test void captureCardOnlyAcceptsNearestReachableUnprotectedOpponent() {
-        placeAt("seat-0-piece-0",2);placeAt("seat-1-piece-0",4); // physical 4 nearest
-        placeAt("seat-1-piece-1",6); // physical 6 farther
+        placeAt("seat-0-piece-0",13);placeAt("seat-1-piece-0",15); // physical 15 nearest
+        placeAt("seat-1-piece-1",16); // physical 16 farther
         grant("capture-next");assertEquals(1,game.card.choices.size());
         var valid=game.card.choices.getFirst();assertEquals("seat-1-piece-0",valid.targetPieceId());
-        assertThrows(GameException.class,()->cards.act(game,"a",target(new CardChoice(valid.pieceId(),"seat-1-piece-1",null,6))));
+        assertThrows(GameException.class,()->cards.act(game,"a",target(new CardChoice(valid.pieceId(),"seat-1-piece-1",null,16))));
         var request=target(valid);cards.act(game,"a",request);assertEquals("HOME",game.piece(valid.targetPieceId()).status);
-        assertEquals(2,game.piece(valid.pieceId()).position);assertNull(game.card);
+        assertEquals(13,game.piece(valid.pieceId()).position);assertNull(game.card);
         assertThrows(GameException.class,()->cards.act(game,"a",request));
     }
     @Test void moveSafeFindsFirstAvailableSafeAndRejectsArbitraryPosition() {

@@ -79,7 +79,7 @@ class CaptureRollPersistenceTest extends ServiceFixture {
         ((tools.jackson.databind.node.ObjectNode)tree.path("turn")).remove("captureLockedPieceIds");
         repo.states.put("g",tree.toString());restart();
         assertTrue(service.load("g").turn.captureLockedPieceIds.isEmpty());
-        assertEquals("v4-100",service.load("g").boardLayout);
+        assertEquals("v5-100",service.load("g").boardLayout);
         send("MOVE_REQUEST","seat-0-piece-0",0,4,6,10,null);
         assertEquals(Set.of("seat-0-piece-0"),service.load("g").turn.captureLockedPieceIds);
     }

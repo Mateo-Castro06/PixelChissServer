@@ -1,3 +1,6 @@
+> Evidencia histórica de geometrías anteriores. El contrato vigente es **v5-100**,
+> con entrada 63→64 y corona 71. Consultar [la validación v5](../game-service/docs/BOARD100_VALIDACION.md). Las tablas y mediciones siguientes conservan su contexto original.
+
 ## Validación de la revisión v4-100
 
 Las tablas y evidencias v3 que siguen son históricas. El contrato vigente **v4-100**

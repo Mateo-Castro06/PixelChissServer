@@ -7,9 +7,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-/** Layout v4: 68 common cells, return to the start safe, then eight private cells. HOME is a state. */
+/** Layout v5: leave the common track five cells before the start, then eight private cells. HOME is a state. */
 public class Board {
-    public static final String LAYOUT = "v4-100";
+    public static final String LAYOUT = "v5-100";
     public static final int CELL_COUNT = 100;
     public static final int SEAT_COUNT = 4;
     public static final int PIECES_PER_PLAYER = 4;
@@ -17,8 +17,9 @@ public class Board {
     public static final int SECTOR_CELL_COUNT = TRACK_CELL_COUNT / SEAT_COUNT;
     public static final int FINISH_CELLS_PER_PLAYER = 8;
     public static final int FINISH_START = TRACK_CELL_COUNT;
-    // Returning to the physical start completes the lap; it is not an extra cell.
-    public static final int LAST_COMMON_PROGRESS = TRACK_CELL_COUNT;
+    public static final int START_OFFSET = 5;
+    // The entry safe is at seat * 17; do not traverse the five cells back to the start.
+    public static final int LAST_COMMON_PROGRESS = TRACK_CELL_COUNT - START_OFFSET;
     public static final int FIRST_FINISH_PROGRESS = LAST_COMMON_PROGRESS + 1;
     public static final int FINISH = FIRST_FINISH_PROGRESS + FINISH_CELLS_PER_PLAYER - 1;
     public static final Set<Integer> SAFE = Set.of(0, 5, 12, 17, 22, 29, 34, 39, 46, 51, 56, 63);
@@ -32,7 +33,7 @@ public class Board {
             throw new IllegalArgumentException("Invalid route coordinate");
         }
         if (progress <= LAST_COMMON_PROGRESS) {
-            return (seat * SECTOR_CELL_COUNT + 5 + progress) % TRACK_CELL_COUNT;
+            return (seat * SECTOR_CELL_COUNT + START_OFFSET + progress) % TRACK_CELL_COUNT;
         }
         return FINISH_START + seat * FINISH_CELLS_PER_PLAYER + progress - FIRST_FINISH_PROGRESS;
     }

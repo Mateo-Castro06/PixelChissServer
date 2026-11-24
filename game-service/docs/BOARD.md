@@ -1,52 +1,93 @@
-# Tablero v4-100
+# Tablero v5-100
 
-Hay 100 casillas físicas: comunes 0–67 y finales 68–99. HOME no es casilla. Se conservan sectores de 17, doce seguros y trivia en 8/25/42/59, para classic y science.
+El tablero conserva 100 posiciones físicas: 68 comunes (IDs 0–67) y 32 finales
+(68–99), cuatro corredores privados de ocho posiciones incluida la corona. HOME
+es un estado, no una casilla. `classic` y `science` usan la misma geometría.
 
-| Asiento/color | Sector | Salida | Corredor propio | Corona |
-|---|---|---|---|---|
-| 0 rojo | 0–16 | 5 | 68–75 | 75 |
-| 1 azul | 17–33 | 22 | 76–83 | 83 |
-| 2 verde | 34–50 | 39 | 84–91 | 91 |
-| 3 amarillo | 51–67 | 56 | 92–99 | 99 |
+| Asiento/color | Salida, p=0 | Seguro de entrada, p=63 | Corredor, p=64–71 | Corona, p=71 |
+| --- | ---: | ---: | --- | ---: |
+| 0 rojo | 5 | 0 | 68–75 | 75 |
+| 1 azul | 22 | 17 | 76–83 | 83 |
+| 2 verde | 39 | 34 | 84–91 | 91 |
+| 3 amarillo | 56 | 51 | 92–99 | 99 |
 
-Para asiento `s` y progreso `p`, el recorrido común es `(17*s+5+p)%68` para `p=0..68`. La salida es `p=0`; al completar la vuelta se vuelve a esa misma salida en `p=68`. La primera final es `p=69`, con posición `68+8*s+p-69`. La corona es `p=76`, posición `75+8*s`. No se puede entrar en otro corredor ni exceder 76. El sector comienza en `17*s`, que es distinto de la salida.
+## Posición física y progreso lógico
 
-Cada ruta tiene 77 visitas y 76 posiciones distintas, porque repite el seguro de salida al regresar. La unión de las rutas contiene exactamente las 100 posiciones. Godot debe consumir `GET /api/game/board`, cuyas rutas están indexadas por progreso; no debe deducir progreso a partir de posición, pues 0 y 68 de una ruta coinciden físicamente.
+Para asiento `s` y progreso `p`:
 
-### Entrada al corredor: contrato vigente
+- Comunes, `0 <= p <= 63`: `(17*s + 5 + p) % 68`.
+- Finales, `64 <= p <= 71`: `68 + 8*s + (p - 64)`.
+- HOME: `status="HOME"`, `position=null`, `progress=-1`.
+- Corona: `status="CROWNED"`, `progress=71`, posición `75 + 8*s`.
 
-| Color/asiento | Salida p=0 y regreso p=68 | Predecesora p=67 | Primera final p=69 | Corona p=76 |
-| --- | ---: | ---: | ---: | ---: |
-| Rojo/0 | 5 | 4 | 68 | 75 |
-| Azul/1 | 22 | 21 | 76 | 83 |
-| Verde/2 | 39 | 38 | 84 | 91 |
-| Amarillo/3 | 56 | 55 | 92 | 99 |
+La ficha abandona la pista en el seguro situado cinco casillas antes de su salida.
+No vuelve a recorrer esas cinco casillas. Cada ruta contiene **72 IDs distintos**,
+indexados de 0 a 71: 64 visitas a comunes y ocho finales. Eso no reduce el tablero:
+`cells` sigue conteniendo los 100 IDs y 68 casillas TRACK; la unión de las rutas
+abarca las 100 posiciones. Las cuatro fichas de un mismo asiento comparten ruta.
 
-Una ficha que vuelve a 5/22/39/56 en progreso 68 entra en su corredor con el siguiente
-paso. Una recién liberada en esa misma posición tiene progreso 0 y sigue la pista común.
-Las antiguas tablas v3 con salida 0/17/34/51 no describen v4: esos IDs siguen siendo
-comienzos de sector, no salidas. No añadir ni restar un offset al destino de `PIECE_MOVED`.
-Las posiciones intermedias de animación se obtienen recorriendo los índices de `routes`
-desde el progreso anterior hasta el nuevo, no incrementando el ID físico ni buscando
-la primera aparición de `position` en la ruta.
+| Color | Final de pista y entrada, progresos 61 → 62 → 63 → 64 → 65 |
+| --- | --- |
+| Rojo | 66 → 67 → 0 → 68 → 69 |
+| Azul | 15 → 16 → 17 → 76 → 77 |
+| Verde | 32 → 33 → 34 → 84 → 85 |
+| Amarillo | 49 → 50 → 51 → 92 → 93 |
 
-La [auditoría reproducible](TURN_RESOLUTION_VALIDATION.md) incluye trayectorias de uno
-a cuatro pasos y evidencia por Gateway WebSocket para ambos mapas. No cambia la geometría.
+Ejemplo rojo: desde `progress=62, position=67`, un dado 3 pasa por 0, 68 y 69;
+termina en `progress=65, position=69`. Desde progreso 63 un dado 1 entra directamente
+al corredor. No pasa por 1, 2, 3, 4 ni 5 antes de entrar.
 
-El retorno al mismo seguro conserva la topología del motor anterior, trasladando todo el recorrido cinco posiciones. Esta decisión no demuestra correspondencia con el plano visual de Godot: el repositorio no contiene su geometría ejecutable y la validación visual sigue pendiente.
+## Llegada y reglas conservadas
 
-Seguros normales: 0/12/17/29/34/46/51/63, máximo dos fichas en total. Salidas especiales: 5/22/39/56, máximo cuatro en total. Ambas protegen de captura ordinaria, incluso con colores mezclados. Liberar HOME en la salida propia devuelve todos los rivales presentes antes de colocar las fichas propias; aterrizar allí ordinariamente no captura.
+La llegada exige cantidad exacta: 70+1, 69+2 y 68+3 coronan en progreso 71;
+70+3 devuelve `OVERSHOOT`, sin rebote ni consumo del dado. Una ficha coronada no
+puede moverse. El premio por tercer par usa la elección vigente y coloca la ficha
+elegida en la misma corona, sin requerir un desplazamiento por dado.
 
-Normales y trivia permiten las cuatro fichas propias. Aterrizar exactamente captura todas las rivales; atravesar no captura. Los corredores conservan capacidad uno por posición intermedia y cuatro en la corona; son privados y protegidos. No hay barreras intermedias: se valida el destino.
+Los seguros siguen siendo 0/5/12/17/22/29/34/39/46/51/56/63. Seguros normales,
+incluidos los de entrada: capacidad dos; salidas 5/22/39/56: cuatro. Se conservan
+protección, capturas ordinarias, SOPLAR y bloqueo de la capturadora. Cada posición
+intermedia del corredor conserva capacidad uno; cada corona admite las cuatro
+fichas propias. Se valida el destino: cruzar una casilla intermedia llena no crea
+una barrera nueva. Trivia continúa en 8/25/42/59.
 
-HOME siempre se representa así, incluso tras cartas, captura y SOPLAR:
+La liberación automática desde HOME conserva sus límites por par y la captura
+especial en la salida. Una liberación única consume el dado 0 y reserva el otro
+para fichas activas anteriores; la recién liberada no puede usarlo. Liberaciones
+múltiples consumen ambos dados. Los pares, el tercer par, los temporizadores,
+cartas y bots mantienen sus reglas. Las cartas que avanzan por la pista común
+usan el nuevo límite 63 y no continúan por el tramo omitido ni salen del corredor.
 
-```json
-{"id":"seat-0-piece-0","ownerId":"a","number":0,"status":"HOME","position":null,"progress":-1}
-```
+## Godot y contrato
 
-La liberación por pares es automática y atómica en la tirada: (1,1) libera hasta cuatro, (6,6) hasta tres, otros pares hasta dos, limitada por HOME y cupo propio de la salida después de retirar rivales. Las coronadas no se liberan. `PIECE_RELEASED.from=null`; no se envía MOVE_REQUEST para liberar HOME. La liberación consume ambos dados completamente e impide movimiento de avance con esa tirada. Esta política y el retorno a la salida se documentan explícitamente para revisión funcional.
+`GET /api/game/board` conserva sus campos `layout`, `cellCount`, `safe`, `trivia`,
+`cells` y `routes`, con `layout="v5-100"`. Godot debe invalidar la caché de rutas
+anteriores y usar la del asiento correspondiente. Para animar un movimiento ordinario,
+recorrer `routes[seat][piece][oldProgress+1 .. newProgress]`, incluyendo el extremo
+final. No incrementar IDs físicos como si fueran progreso.
 
-El layout v4-100 es incompatible con v3-100 y anteriores. No se transforman ni eliminan partidas antiguas: se devuelve `UNSUPPORTED_BOARD_LAYOUT`. Debe iniciarse otra partida con ID nuevo.
+`PIECE_MOVED` mantiene `from` y `to`; el snapshot contiene el nuevo `progress` y
+`position`. No se añade un campo de ruta ni eventos: el tablero y los snapshots ya
+permiten reconstruir los pasos. HOME usa su evento de liberación, sin caminar desde
+una posición nula. Ejemplos y reconexión en [WEBSOCKET.md](WEBSOCKET.md).
 
-Los pares con HOME se dedican íntegramente a la liberación: (1,1) hasta cuatro, (6,6) hasta tres y los demás hasta dos. Ambos dados quedan consumidos; no permiten movimientos ordinarios ni obligación ficticia de captura. La salida propia captura rivales al liberar. La geometría y capacidades no cambian.
+## Versiones y partidas guardadas
+
+`v4-100` exigía regreso a la salida en progreso 68, primera final 69 y corona 76.
+`v5-100` cambia esa semántica: no se reutiliza el identificador anterior.
+Redis persiste `boardLayout`, progreso, posición, versión y recibos. MongoDB contiene
+catálogos; no mantiene una segunda copia de las partidas.
+
+No hay migración automática ni soporte simultáneo de ambos recorridos. Los estados
+v4 y anteriores, incluidos los que no tienen marcador, se preservan y se rechazan
+con `UNSUPPORTED_BOARD_LAYOUT` (REST 409 o ERROR WebSocket), antes de leer recibos,
+reconectar o mutar. No cambiar a mano `boardLayout` ni restar cinco a todos los progresos:
+las fichas v4 en 64–68 no tienen una correspondencia segura con el recorrido nuevo.
+
+Una partida antigua requiere conservar su motor compatible o resolver explícitamente
+su migración antes de reanudarla; una nueva partida usa otro ID y v5. No se borra ni
+reinicializa nada. Un despliegue debe revisar índices y estados persistidos, coordinar
+la actualización del cliente y obtener autorización antes de interrumpir partidas o
+sustituir Game sobre estados incompatibles.
+
+Pruebas, inventario y evidencia de integración en [BOARD100_VALIDACION.md](BOARD100_VALIDACION.md).

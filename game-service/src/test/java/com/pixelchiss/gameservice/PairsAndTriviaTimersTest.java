@@ -30,7 +30,7 @@ class PairsAndTriviaTimersTest extends EngineFixture {
         for(int value=1;value<=6;value++) for(int home=1;home<=4;home++) {
             source(value,value);
             for(int n=home;n<4;n++) place(own(n),10+n);
-            placeAt("seat-1-piece-0",15+value);
+            placeAt("seat-2-piece-0",15+value); // These physical cells are on green's route, including 18–21.
             var events=rawRoll();
             int expected=Math.min(home,value==1?4:value==6?3:2);
             assertEquals(expected,events.stream().filter(e->e.type().equals("PIECE_RELEASED")).count());
@@ -81,7 +81,7 @@ class PairsAndTriviaTimersTest extends EngineFixture {
         source(2,2);rawRoll();confirm();assertEquals(1,game.turn.consecutiveDoubles);
         rawRoll();confirm();assertEquals(2,game.turn.consecutiveDoubles);
         // Home created between rolls still has mandatory release priority on the third pair.
-        game.piece(own(3)).home();place(own(0),69);place(own(2),Board.FINISH);
+        game.piece(own(3)).home();place(own(0),Board.FIRST_FINISH_PROGRESS);place(own(2),Board.FINISH);
         rawRoll();confirm();assertTrue(game.turn.homeRelease);assertTrue(game.turn.crownChoiceRequired);
         assertEquals(3,game.turn.consecutiveDoubles);
         assertFalse(game.turn.crownEligible.contains(own(3)));

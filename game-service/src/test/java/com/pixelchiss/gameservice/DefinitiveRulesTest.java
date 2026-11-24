@@ -104,12 +104,12 @@ class DefinitiveRulesTest extends EngineFixture {
         assertEquals(4,game.occupants(8,null).size());
         source(2,3);placeAt(own(0),10);placeAt(rival(0),12);placeAt(rival(1),12);rawRoll();confirm();
         assertEquals("CELL_FULL",assertThrows(GameException.class,()->engine.calculate(game,"a",own(0),0)).code());
-        source(2,3);placeAt(own(0),3);for(int i=0;i<4;i++)placeAt(rival(i),5);rawRoll();confirm();
+        source(2,3);placeAt(own(0),20);for(int i=0;i<4;i++)placeAt(rival(i),22);rawRoll();confirm();
         assertEquals("CELL_FULL",assertThrows(GameException.class,()->engine.calculate(game,"a",own(0),0)).code());
         game.piece(rival(3)).home();assertFalse(engine.calculate(game,"a",own(0),0).capture());
     }
     @Test void thirdDoubleSelectsOwnPreviouslyActivePieceOnly() {
-        source(2,2);place(own(0),69);game.turn.consecutiveDoubles=2;rawRoll();confirm();
+        source(2,2);place(own(0),Board.FIRST_FINISH_PROGRESS);game.turn.consecutiveDoubles=2;rawRoll();confirm();
         assertTrue(game.turn.crownChoiceRequired);
         assertThrows(GameException.class,()->engine.act(game,"a",action("CROWN_REQUEST",own(1),null,null,null,null,null)));
         assertThrows(GameException.class,()->engine.act(game,"a",action("CROWN_REQUEST",rival(0),null,null,null,null,null)));

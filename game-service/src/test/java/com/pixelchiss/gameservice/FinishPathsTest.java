@@ -32,15 +32,15 @@ class FinishPathsTest extends EngineFixture {
         String rival = "seat-" + opponent + "-piece-0";
         int firstFinal = 68 + seat * 8;
         start(map,seat,opponent);
-        assertEquals(seat * 17 + 5,board.position(seat,0,68));
+        assertEquals(seat * 17,board.position(seat,0,63));
         assertEquals(IntStream.range(firstFinal,firstFinal+8).boxed().toList(),
-                board.route(seat,0).subList(69,77));
+                board.route(seat,0).subList(64,72));
         for (int remaining=1; remaining<=8; remaining++) {
             for (int die=1;die<=6;die++) {
                 start(map,seat,opponent);
                 int progress=Board.FINISH-remaining;
                 place(piece,progress);
-                place(rival,69); // occupying another private lane cannot affect this lane
+                place(rival,64); // occupying another private lane cannot affect this lane
                 game.turn.rolled=true;
                 game.turn.dice=new int[]{die,1};
                 if (die>remaining) {
@@ -50,24 +50,24 @@ class FinishPathsTest extends EngineFixture {
                 } else {
                     var move=engine.calculate(game,"a",piece,0);
                     assertEquals(progress+die,move.progress());
-                    assertEquals(firstFinal+progress+die-69,move.to());
+                    assertEquals(firstFinal+progress+die-64,move.to());
                     assertFalse(move.capture());
                     assertEquals(remaining==die,move.crown());
                     move(move);
                     assertEquals(remaining==die ? "CROWNED" : "BOARD",game.piece(piece).status);
-                    assertEquals(69,game.piece(rival).progress);
+                    assertEquals(64,game.piece(rival).progress);
                 }
             }
         }
         start(map,seat,opponent);
-        place(piece,68);
-        place("seat-"+seat+"-piece-1",69);
+        place(piece,63);
+        place("seat-"+seat+"-piece-1",64);
         game.turn.rolled=true;
         game.turn.dice=new int[]{1,2};
         assertEquals("CELL_FULL",assertThrows(GameException.class,() -> engine.calculate(game,"a",piece,0)).code());
         var valid = engine.calculate(game,"a",piece,1);
         assertEquals("INVALID_DESTINATION",assertThrows(GameException.class,() -> engine.act(game,"a",
-                action("MOVE_REQUEST",piece,1,2,valid.from(),board.position(opponent,0,70),null))).code());
+                action("MOVE_REQUEST",piece,1,2,valid.from(),board.position(opponent,0,65),null))).code());
     }
 
     @ParameterizedTest @MethodSource("boards")
@@ -75,13 +75,13 @@ class FinishPathsTest extends EngineFixture {
         start(map,seat,(seat+2)%4);
         String prefix="seat-"+seat+"-piece-";
         for (int n=1;n<4;n++) place(prefix+n,Board.FINISH);
-        place(prefix+0,68);
+        place(prefix+0,63);
         for (int i=0;i<8;i++) {
             if (i%2==0) {game.turn.rolled=true;game.turn.dice=new int[]{1,1};game.turn.doubles=true;game.turn.consumed=new boolean[2];} // 1,1; automatic extra turn after the first two moves
             if (i==0) assertEquals("CROWNED_PIECE",assertThrows(GameException.class,
                     () -> engine.calculate(game,"a",prefix+1,0)).code());
             move(engine.calculate(game,"a",prefix+0,i%2));
-            assertEquals(69+i,game.piece(prefix+0).progress);
+            assertEquals(64+i,game.piece(prefix+0).progress);
         }
         assertEquals("FINISHED",game.status);
         assertEquals("a",game.winnerId);

@@ -45,7 +45,7 @@ public class GameController {
     }
 
     @GetMapping("/board")
-    @Operation(summary = "Get layout v4-100: all 100 cells, safe cells and piece routes",
+    @Operation(summary = "Get layout v5-100: all 100 cells, safe cells and piece routes",
             description = "Public Gateway path equals service path. Returns the existing map-shaped board definition.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Board layout and routes", content = @Content(schema = @Schema(implementation = BoardLayout.class))),

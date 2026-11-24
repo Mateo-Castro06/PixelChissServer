@@ -41,6 +41,8 @@ abstract class EngineFixture {
     protected void placeAt(String piece, int position) {
         int seat = game.player(game.piece(piece).ownerId).seat;
         place(piece, Math.floorMod(position - seat * Board.SECTOR_CELL_COUNT - 5, Board.TRACK_CELL_COUNT));
+        org.junit.jupiter.api.Assertions.assertEquals(Math.floorMod(position,Board.TRACK_CELL_COUNT),game.piece(piece).position,
+                "Fixture must use a common cell reachable by this color before its entry safe");
     }
     protected void move(RuleEngine.Move m) {
         engine.act(game,game.turn.playerId,action("MOVE_REQUEST",m.pieceId(),m.dieIndex(),m.dieValue(),m.from(),m.to(),null));

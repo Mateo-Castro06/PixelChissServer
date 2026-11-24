@@ -13,7 +13,7 @@ class GameStateSerializationTest {
         game.boardLayout = com.pixelchiss.gameservice.domain.Board.LAYOUT;
         game.pieces.add(new GameState.Piece("piece","owner",0));
         var restored = json.readValue(json.writeValueAsString(game), GameState.class);
-        assertEquals("v4-100",restored.boardLayout);
+        assertEquals("v5-100",restored.boardLayout);
         var piece = restored.pieces.getFirst();
         assertEquals("HOME",piece.status);assertNull(piece.position);assertEquals(-1,piece.progress);
         assertNull(json.readValue("{\"id\":\"old\"}", GameState.class).boardLayout);

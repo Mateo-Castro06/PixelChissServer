@@ -145,7 +145,7 @@ class PartialHomeReleaseTest extends EngineFixture {
         assertNull(bot.next(game)); assertEquals(0,game.turn.consecutiveDoubles);
     }
     @Test void thirdPairReleaseGoesDirectlyToChosenCrownAndNeverToRemainingMovement() {
-        setup("classic",5,1); game.turn.consecutiveDoubles=2; place(own(1),69);
+        setup("classic",5,1); game.turn.consecutiveDoubles=2; place(own(1),Board.FIRST_FINISH_PROGRESS);
         place(own(2),Board.FINISH);
         var rolled=launch(); assertArrayEquals(new boolean[]{true,true},game.turn.consumed);
         var confirmed=confirm();
@@ -192,7 +192,7 @@ class PartialHomeReleaseTest extends EngineFixture {
     }
     @Test void activePiecesWithOnlyOvershootsDoNotCreateAnUnplayableMovementWindow() {
         setup("science",5,1);
-        for(int n=1;n<4;n++) place(own(n),72+n);
+        for(int n=1;n<4;n++) place(own(n),Board.FINISH-4+n);
         launch();assertEquals(3,game.turn.crownEligible.size());var events=confirm();
         assertTrue(engine.legalMoves(game,"a").isEmpty());assertTrue(game.turn.extraRollAvailable);
         assertNull(game.turn.movementStartedAt);assertArrayEquals(new boolean[]{true,true},game.turn.consumed);

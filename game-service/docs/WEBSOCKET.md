@@ -134,7 +134,106 @@ Cada mensaje es un frame JSON separado, enviando el último solo si ese jugador 
 
 No existe petición pública para disparar bots: el servidor los ejecuta y publica sus movimientos automáticamente. La validación operativa observó estos eventos por Gateway con un cliente que solo envió AUTH/JOIN_GAME. El recorrido de inicio desde Lobby se prueba en el segundo corte. La ejecución del cliente Godot sigue pendiente.
 
-## Confirmación de animación y relojes (v4-100)
+## Geometría v5-100: entrada desde el seguro anterior a la salida
+
+Este contrato sustituye las rutas v4, sin cambiar los tipos de mensajes ni el formato
+de `GAME_STATE`, `ACTION_ACK`, `GAME_UPDATED` o los identificadores de acciones.
+El tablero sigue teniendo **68 comunes, IDs 0–67, y 32 finales, IDs 68–99**.
+Los dos mapas usan las mismas posiciones físicas.
+
+| Color/asiento | Salida p=0 | Última común p=63 | Primera final p=64 | Corona p=71 |
+| --- | ---: | ---: | ---: | ---: |
+| Rojo/0 | 5 | 0 | 68 | 75 |
+| Azul/1 | 22 | 17 | 76 | 83 |
+| Verde/2 | 39 | 34 | 84 | 91 |
+| Amarillo/3 | 56 | 51 | 92 | 99 |
+
+`progress` es el índice de la ruta de esa ficha, no su ID físico. La salida es 0;
+1–62 avanza por la pista, 63 es el seguro de entrada y **63→64 entra al corredor**.
+64–70 son sus siete casillas previas a la corona; 71 corona exactamente.
+HOME conserva `status="HOME", progress=-1, position=null`; una coronada conserva
+`status="CROWNED"`, ahora con progreso 71 y el mismo ID de corona física.
+
+Para asiento `s`: posición común `(17*s+5+p)%68` hasta p=63; final
+`68+8*s+(p-64)` desde p=64 hasta p=71. Se omiten los cinco pasos de regreso a la
+salida: rojo ya no visita 1/2/3/4/5 después de llegar a 0.
+
+### Movimientos de varios pasos
+
+Desde progreso 62, un dado 3 debe producir estas secuencias en ambos mapas:
+
+| Color | Antes: progreso/posición | Pasos físicos | Después: progreso/posición |
+| --- | --- | --- | --- |
+| Rojo | 62/67 | 0 → 68 → 69 | 65/69 |
+| Azul | 62/16 | 17 → 76 → 77 | 65/77 |
+| Verde | 62/33 | 34 → 84 → 85 | 65/85 |
+| Amarillo | 62/50 | 51 → 92 → 93 | 65/93 |
+
+Ejemplo de petición roja, usando la versión autoritativa obtenida por el cliente:
+
+```json
+{"type":"MOVE_REQUEST","gameId":"g","requestId":"entry-move","expectedVersion":7,"pieceId":"seat-0-piece-0","dieIndex":0,"dieValue":3,"fromPosition":67,"targetPosition":69}
+```
+
+El resultado incluye el evento existente y la ficha actualizada en su snapshot:
+
+```json
+{"type":"PIECE_MOVED","data":{"pieceId":"seat-0-piece-0","from":67,"to":69,"dieIndex":0,"status":"BOARD"}}
+```
+
+```json
+{"id":"seat-0-piece-0","ownerId":"a","number":0,"status":"BOARD","progress":65,"position":69}
+```
+
+Son extractos del contrato, no mensajes envolventes completos. Si se agotan las
+opciones, el mismo resultado puede incluir `TURN_CHANGED` o `ROLL_AVAILABLE`.
+La transición de turno no elimina la nueva posición de la ficha en `state.pieces`.
+
+Para coronar: 70+1, 69+2 y 68+3 alcanzan progreso 71. 70+3 se rechaza con
+`OVERSHOOT`, sin rebote ni consumo del dado. La llegada natural se informa mediante
+`PIECE_MOVED` con `status="CROWNED"`. El premio de tres pares conserva `CROWN_REQUEST`
+y `PIECE_CROWNED`, con destino en esa misma corona y cierre obligatorio posterior.
+
+### Cambios concretos para Godot
+
+1. Consultar `GET /api/game/board` y comprobar `layout="v5-100"`. Renovar la caché v4;
+   cada `routes[seat][piece]` ahora contiene 72 IDs distintos, índices 0–71.
+2. Mantener los IDs y coordenadas físicas de las 100 casillas. Cambiar los enlaces
+   de entrada a 0→68, 17→76, 34→84 y 51→92; entrada lógica 64 y corona lógica 71.
+3. Para animar un movimiento ordinario, conservar el progreso anterior y recorrer
+   los índices `oldProgress+1` hasta `newProgress`, ambos pertenecientes a la ruta
+   autorizada por el servidor. No interpolar sumando IDs absolutos.
+4. `PIECE_MOVED` sigue transmitiendo origen/destino. El snapshot aporta el nuevo
+   progreso; la definición del tablero aporta los pasos intermedios. No hace falta
+   un campo de ruta ni otro evento. HOME se representa con su liberación existente.
+5. Tras reconectar, usar las fichas y `legalMoves` de `GAME_STATE`; no conservar un
+   progreso calculado con v4. `ACTION_ACK/GAME_UPDATED` conservan su formato y el
+   estado nuevo; `legalMoves` sigue obteniéndose mediante JOIN/SYNC.
+
+No se modificó el cliente Godot. La entrada no añade pausas ni cambios de ACK,
+temporizadores o BotPacing. Las animaciones deben respetar los estados del servidor.
+
+### Partidas anteriores y despliegue
+
+v4 usaba última común 68, primera final 69 y corona 76; v5 usa 63/64/71.
+El agregado Redis se identifica con `boardLayout="v5-100"`. El contrato público
+de tablero anuncia la versión con `GET /api/game/board.layout`; no se añade un
+campo nuevo al snapshot de partida. MongoDB conserva los catálogos.
+
+Una partida con marcador v4, anterior o ausente recibe `UNSUPPORTED_BOARD_LAYOUT`
+(REST 409 o ERROR WebSocket) antes de reconectar, recuperar recibos o mutar. Los datos
+permanecen intactos. No renombrar el marcador ni restar cinco globalmente: v4 puede
+tener fichas en los progresos 64–68 sobre comunes que ya no pertenecen a su ruta.
+
+No se ofrecen las dos geometrías simultáneamente ni una migración automática. Una
+partida antigua requiere su motor compatible o una decisión de migración antes de
+reanudar; las nuevas usan v5 con ID nuevo. El despliegue debe coordinarse con Godot
+y revisar partidas guardadas, aunque el índice principal de activas esté vacío.
+No sustituir automáticamente Game sobre estados incompatibles.
+
+Véanse [BOARD.md](BOARD.md) y [evidencia de pruebas v5](BOARD100_VALIDACION.md).
+
+## Confirmación de animación y relojes (v5-100)
 
 Godot debe actualizar sus rutas a [BOARD.md](BOARD.md). Los sectores siguen empezando en 0/17/34/51; las salidas son 5/22/39/56. Seguros normales: capacidad dos; salidas: cuatro. HOME lleva position=null y progress=-1. PIECE_RELEASED es automático al obtener un par y tiene from=null. No enviar el antiguo MOVE_REQUEST para salir de HOME.
 
@@ -226,7 +325,7 @@ El servidor publica:
 
 No se acepta HOME, CROWNED, rival ni una ficha recién liberada en esa tercera tirada. Tras elegir se reevalúa victoria y se cierra el turno; no hay movimientos con ese tercer par ni cuarta tirada. Si no existe ficha elegible, el turno se cierra al confirmar la animación. No hay penalización por tres pares. Bots confirman internamente sin depender de Godot. La trivia del bot usa p nueva por pregunta y responde por TRIVIA_ANSWER normal; no existe un mensaje de respuesta automáticamente correcta.
 
-Errores nuevos: ANIMATION_PENDING, STALE_ROLL, CROWN_CHOICE_REQUIRED, NO_CROWN_CHOICE, INVALID_CROWN_PIECE y HOME_RELEASE_AUTOMATIC. El layout v4-100 rechaza estados antiguos con UNSUPPORTED_BOARD_LAYOUT; no borra ni migra partidas.
+Errores nuevos: ANIMATION_PENDING, STALE_ROLL, CROWN_CHOICE_REQUIRED, NO_CROWN_CHOICE, INVALID_CROWN_PIECE y HOME_RELEASE_AUTOMATIC. El layout v5-100 rechaza estados v4 y anteriores con UNSUPPORTED_BOARD_LAYOUT; no borra ni migra partidas.
 
 El [ejemplo completo de GAME_UPDATED con todos los campos del snapshot](WS_DICE_EXAMPLE.json) muestra dos jugadores, sus ocho fichas y una tirada pendiente de animación. Los valores son ilustrativos, no credenciales ni evidencia de una sesión real. Se puede usar como fixture de deserialización de Godot.
 
@@ -488,7 +587,7 @@ SOPLAR conserva su semántica vigente: una captura satisface la obligación del 
 
 ### Persistencia y reproducción
 
-El campo nuevo usa [] al leer un agregado previo que no lo incluya. No se adivina qué ficha capturó antes del despliegue; las nuevas capturas quedan marcadas con esta versión. No cambia boardLayout v4-100 ni el esquema de Streams.
+El campo nuevo usa [] al leer un agregado previo que no lo incluya. No se adivina qué ficha capturó antes del despliegue; las nuevas capturas quedan marcadas con esta versión. El bloqueo no altera el esquema de Streams; la geometría vigente es v5-100, documentada arriba.
 
 Las pruebas unitarias son CaptureRollLockTest y CaptureRollPersistenceTest. Las integraciones generan target/capture-wire-game-{map}.json y target/capture-wire-gateway-{map}.json; CaptureRollPersistenceTest genera target/capture-no-moves.json. Para comprobar el puente real, construir primero Gateway y establecer GAME_TEST_GATEWAY_JAR a su JAR; ejecutar Game con game.integration=true y GAME_TEST_REDIS_URL/GAME_TEST_MONGO_URI de bases aisladas. Sin GAME_TEST_GATEWAY_JAR, los casos del puente se omiten explícitamente.
 
@@ -502,11 +601,11 @@ o los intentos HOME vigentes. El tercer par conserva primero su elección de cor
 nunca habilita una cuarta tirada. No enviar un movimiento inválido ni `END_TURN` para
 provocar ese descarte.
 
-Ejemplo `(4,3)`: la capturadora pasa de 6 a 10 con el 4; otra ficha está en progreso 75,
+Ejemplo `(4,3)`: la capturadora pasa de 6 a 10 con el 4; otra ficha está en progreso 70,
 a un paso de la corona. El 3 no sirve a ninguna: el mismo `GAME_UPDATED` contiene
 `PIECE_CAPTURED`, `PIECE_MOVED`, `TURN_CHANGED`. Su snapshot ya contiene el turno nuevo
 (`dice=[]`, `movementStartedAt=null`), no los dados pendientes del anterior. Una ficha en
-progreso 73 sí puede coronar con ese 3: en ese caso se mantiene el turno y el deadline.
+progreso 68 sí puede coronar con ese 3: en ese caso se mantiene el turno y el deadline.
 
 La confirmación de dados sin opciones no emite `MOVEMENT_TIMER_STARTED`. No se acortan
 los 30 segundos cuando existe un movimiento; se conservan el ACK máximo de 10 segundos,

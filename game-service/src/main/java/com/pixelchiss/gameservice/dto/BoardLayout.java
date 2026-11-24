@@ -11,5 +11,5 @@ public record BoardLayout(String layout,
                           @Schema(example = "100") int cellCount,
                           Set<Integer> safe, Set<Integer> trivia,
                           List<Board.Cell> cells,
-                          @Schema(description = "Seat 0–3 to four routes indexed by progress: 77 visits, 76 distinct physical IDs; start safe repeats at progress 68, private lane 69–76")
+                          @Schema(description = "Seat 0–3 to four routes indexed by progress: 72 distinct physical IDs; entry safe at progress 63, private lane 64–71, no return to start")
                           Map<String, List<List<Integer>>> routes) {}

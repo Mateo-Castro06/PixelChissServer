@@ -165,7 +165,7 @@ class InfrastructureIntegrationTest {
     @Test void realRedisLegacyLayoutIsRejectedBeforeReceiptsAndWithoutWrites() {
         String id=create();
         String key=PREFIX+":state:"+id;
-        for(String layout:Arrays.asList(null,"v1","v2-100","v3-100","unknown")) {
+        for(String layout:Arrays.asList(null,"v1","v2-100","v3-100","v4-100","unknown")) {
             var old=repository.find(id);
             old.boardLayout=layout;
             old.receipts.put("test-a:old",new GameState.Receipt("legacy",7));
@@ -222,9 +222,9 @@ class InfrastructureIntegrationTest {
             String id=create();
             assertTrue(games.system(id, state -> {
                 var own = state.piece("seat-0-piece-0");
-                own.progress=67;own.position=4;own.status="BOARD";
+                own.progress=62;own.position=67;own.status="BOARD";
                 var rival = state.piece("seat-1-piece-0");
-                rival.progress=51;rival.position=5;rival.status="BOARD";
+                rival.progress=46;rival.position=0;rival.status="BOARD";
                 var events = new ArrayList<RuleEngine.Event>();
                 ((TriviaRules) rules).grant(state,catalog.card(cardId),"test-a",events);
                 return events;
@@ -242,7 +242,7 @@ class InfrastructureIntegrationTest {
                     var result=repository.find(id);
                     assertNull(result.card);
                     if (cardId.equals("kill-chosen")) assertEquals("HOME",result.piece("seat-1-piece-0").status);
-                    else assertEquals(5,result.piece("seat-0-piece-0").position);
+                    else assertEquals(0,result.piece("seat-0-piece-0").position);
                     assertTrue(games.action("test-a",request.command()).duplicate());
                 }
                 case "skip-turn" -> {
@@ -710,13 +710,14 @@ class InfrastructureIntegrationTest {
             captureOverWebSocket(captureGame(map),URI.create("ws://127.0.0.1:"+gatewayPort+"/api/game/ws"),"gateway-"+map);
             noMovesOverWebSocket(map,URI.create("ws://127.0.0.1:"+gatewayPort+"/api/game/ws"));
             finalLaneOverWebSocket(map,URI.create("ws://127.0.0.1:"+gatewayPort+"/api/game/ws"));
+            legacyV4OverWebSocket(map,URI.create("ws://127.0.0.1:"+gatewayPort+"/api/game/ws"));
         } finally {stopRecoveryProcess(child);}
     }
 
     private void noMovesOverWebSocket(String map,URI uri) throws Exception {
         String id=captureGame(map);
         games.system(id,state->{
-            var piece=state.piece("seat-0-piece-1");piece.progress=75;piece.position=74;
+            var piece=state.piece("seat-0-piece-1");piece.progress=Board.FINISH-1;piece.position=74;
             return List.of(RuleEngine.Event.of("TEST_FIXTURE"));
         });
         try(var client=HttpClient.newHttpClient()) {
@@ -748,7 +749,7 @@ class InfrastructureIntegrationTest {
                 assertTrue(update.path("state").path("turn").path("movementStartedAt").isNull());
                 assertEquals(request.expectedVersion()+1,update.path("version").asLong());
                 var recovered=new RedisGameRepository(redis,json,PREFIX).find(id);
-                assertEquals("test-b",recovered.turn.playerId);assertEquals(75,recovered.piece("seat-0-piece-1").progress);
+                assertEquals("test-b",recovered.turn.playerId);assertEquals(Board.FINISH-1,recovered.piece("seat-0-piece-1").progress);
                 send(wsA,request);assertTrue(json.readTree(a.await("ACTION_ACK")).path("duplicate").asBoolean());
                 send(wsA,Map.of("type","SYNC_REQUEST","gameId",id));
                 var sync=json.readTree(a.await("GAME_STATE"));assertTrue(sync.path("legalMoves").isEmpty());
@@ -760,25 +761,26 @@ class InfrastructureIntegrationTest {
     }
 
     private void finalLaneOverWebSocket(String map,URI uri) throws Exception {
-        int[][] approaches={{2,3,4,5,68},{19,20,21,22,76},{36,37,38,39,84},{53,54,55,56,92}};
+        int[][] approaches={{65,66,67,0,68,69},{14,15,16,17,76,77},{31,32,33,34,84,85},{48,49,50,51,92,93}};
         var evidence=new ArrayList<Object>();
         try(var client=HttpClient.newHttpClient()) {
-            for(int seat=0;seat<4;seat++) for(int distance=1;distance<=4;distance++) {
+            for(int seat=0;seat<4;seat++) for(int distance=1;distance<=4;distance++)
+                for(int extra=0;extra<=(distance==2?1:0);extra++) {
                 var a=new Inbox();var b=new Inbox();
                 var wsA=client.newWebSocketBuilder().buildAsync(uri,a).join();
                 var wsB=client.newWebSocketBuilder().buildAsync(uri,b).join();
                 try {
                     send(wsA,Map.of("type","AUTH","token",token("test-a")));a.await("AUTHENTICATED");
                     send(wsB,Map.of("type","AUTH","token",token("test-b")));b.await("AUTHENTICATED");
-                    String id="it-"+UUID.randomUUID();ids.add(id);int currentSeat=seat,currentDistance=distance;
+                    String id="it-"+UUID.randomUUID();ids.add(id);int currentSeat=seat,currentDistance=distance,currentExtra=extra;
                     games.create(new GameSetup(id,"lane-fixture",map,List.of(
                             new GameSetup.Participant("test-a",false,seat),
                             new GameSetup.Participant("test-b",false,(seat+1)%4)),"test-a"));
                     String pieceId="seat-"+seat+"-piece-0";
                     games.system(id,state->{
-                        var piece=state.piece(pieceId);piece.status="BOARD";piece.progress=69-currentDistance;
+                        var piece=state.piece(pieceId);piece.status="BOARD";piece.progress=64-currentDistance;
                         piece.position=approaches[currentSeat][4-currentDistance];
-                        state.turn.rolled=true;state.turn.dice=new int[]{currentDistance,1};
+                        state.turn.rolled=true;state.turn.dice=new int[]{currentDistance+currentExtra,1};
                         state.turn.consumed=new boolean[]{false,true};state.turn.animationStatus="COMPLETED";
                         state.turn.rollId=UUID.randomUUID().toString();state.turn.movementStartedAt=System.currentTimeMillis();
                         state.turn.deadline=state.turn.movementStartedAt+30_000;
@@ -787,25 +789,46 @@ class InfrastructureIntegrationTest {
                     send(wsA,Map.of("type","JOIN_GAME","gameId",id));a.await("GAME_STATE");
                     send(wsB,Map.of("type","JOIN_GAME","gameId",id));b.await("GAME_STATE");
                     var request=new Action("MOVE_REQUEST",id,"lane-move",games.load(id).version,pieceId,
-                            0,distance,approaches[seat][4-distance],approaches[seat][4],null,null,null,null,null);
+                            0,distance+extra,approaches[seat][4-distance],approaches[seat][4+extra],null,null,null,null,null);
                     send(wsA,request);a.await("ACTION_ACK");var publication=json.readTree(b.await("GAME_UPDATED"));
                     var moved=publication.path("events").get(0);assertEquals("PIECE_MOVED",moved.path("type").asString());
                     assertEquals(approaches[seat][4-distance],moved.path("data").path("from").asInt());
-                    assertEquals(approaches[seat][4],moved.path("data").path("to").asInt());
-                    assertEquals(69,repository.find(id).piece(pieceId).progress);
-                    evidence.add(Map.of("seat",seat,"fromProgress",69-distance,"die",distance,
-                            "expectedSteps",Arrays.stream(approaches[seat],5-distance,5).boxed().toList(),"publication",publication));
+                    assertEquals(approaches[seat][4+extra],moved.path("data").path("to").asInt());
+                    assertEquals(64+extra,repository.find(id).piece(pieceId).progress);
+                    evidence.add(Map.of("seat",seat,"fromProgress",64-distance,"die",distance+extra,
+                            "expectedSteps",Arrays.stream(approaches[seat],5-distance,5+extra).boxed().toList(),"publication",publication));
                 } finally {wsA.sendClose(1000,"done").join();wsB.sendClose(1000,"done").join();}
             }
         }
         Files.writeString(Path.of("target/final-lane-gateway-"+map+".json"),json.writerWithDefaultPrettyPrinter().writeValueAsString(evidence));
     }
 
+    private void legacyV4OverWebSocket(String map,URI uri) throws Exception {
+        String id=captureGame(map),key=PREFIX+":state:"+id;
+        var legacy=repository.find(id);legacy.boardLayout="v4-100";
+        var piece=legacy.piece("seat-0-piece-0");piece.progress=64;piece.position=1;
+        String before=json.writeValueAsString(legacy);redis.opsForHash().put(key,"state",before);
+        try(var client=HttpClient.newHttpClient()) {
+            var inbox=new Inbox();var socket=client.newWebSocketBuilder().buildAsync(uri,inbox).join();
+            try {
+                send(socket,Map.of("type","AUTH","token",token("test-a")));inbox.await("AUTHENTICATED");
+                send(socket,Map.of("type","JOIN_GAME","gameId",id));
+                assertEquals("UNSUPPORTED_BOARD_LAYOUT",json.readTree(inbox.await("ERROR")).path("code").asString());
+                var response=client.send(HttpRequest.newBuilder(URI.create("http://"+uri.getAuthority()+"/api/game/games/"+id))
+                        .header("Authorization","Bearer "+token("test-a")).GET().build(),HttpResponse.BodyHandlers.ofString());
+                assertEquals(409,response.statusCode());assertTrue(response.body().contains("UNSUPPORTED_BOARD_LAYOUT"));
+                assertEquals(before,redis.opsForHash().get(key,"state"));
+                assertEquals(64,repository.find(id).piece(piece.id).progress);
+                assertEquals(1,repository.find(id).piece(piece.id).position);
+            } finally {socket.sendClose(1000,"done").join();}
+        }
+    }
+
     @ParameterizedTest @CsvSource({"classic","science"})
     void realRedisRecoveryClosesImpossibleRemainderWithoutTimeout(String map) {
         String id=captureGame(map);
         games.system(id,state->{
-            var nearCrown=state.piece("seat-0-piece-1");nearCrown.progress=75;nearCrown.position=74;
+            var nearCrown=state.piece("seat-0-piece-1");nearCrown.progress=Board.FINISH-1;nearCrown.position=74;
             state.turn.rolled=true;state.turn.dice=new int[]{4,3};state.turn.consumed=new boolean[]{true,false};
             state.turn.animationStatus="COMPLETED";state.turn.captureSatisfied=true;
             state.turn.captureLockedPieceIds.add("seat-0-piece-0");state.turn.movementStartedAt=System.currentTimeMillis();

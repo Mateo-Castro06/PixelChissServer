@@ -1,6 +1,7 @@
 package com.pixelchiss.gameservice;
 
 import com.pixelchiss.gameservice.domain.GameAction;
+import com.pixelchiss.gameservice.domain.Board;
 import com.pixelchiss.gameservice.domain.GameState.CardChoice;
 import com.pixelchiss.gameservice.engine.GameException;
 import com.pixelchiss.gameservice.engine.RuleEngine.Event;
@@ -48,26 +49,26 @@ class ReleaseCardsTest extends EngineFixture {
     }
 
     @Test void closestCaptureTakesAllRivalsOnSafeCellAndBreaksTieByOwnPieceNumber() {
-        placeAt("seat-0-piece-0",4);
-        placeAt("seat-0-piece-1",11);
-        placeAt("seat-1-piece-0",5); // physical 5
-        placeAt("seat-2-piece-0",5); // physical 5
-        placeAt("seat-1-piece-1",12); // physical 12, equally near the other origin
-        place("seat-1-piece-2",69); // private lane
+        placeAt("seat-0-piece-0",11);
+        placeAt("seat-0-piece-1",16);
+        placeAt("seat-1-piece-0",12); // physical 12
+        placeAt("seat-2-piece-0",12); // physical 12
+        placeAt("seat-1-piece-1",17); // physical 17, equally near the other origin
+        place("seat-1-piece-2",Board.FIRST_FINISH_PROGRESS); // private lane
         var events = grant("kill-next");
         assertEquals(2, events.stream().filter(e -> e.type().equals("PIECE_CAPTURED")).count());
         assertEquals("HOME",game.piece("seat-1-piece-0").status);
         assertEquals("HOME",game.piece("seat-2-piece-0").status);
         assertEquals("BOARD",game.piece("seat-1-piece-1").status);
         assertEquals("BOARD",game.piece("seat-1-piece-2").status);
-        assertEquals(4,game.piece("seat-0-piece-0").position);
+        assertEquals(11,game.piece("seat-0-piece-0").position);
     }
 
     @Test void chosenCaptureUsesExistingTargetPositionAndCannotTargetOwnOrPrivateCells() {
         placeAt("seat-0-piece-0",5);
         placeAt("seat-1-piece-0",5); // shares safe 5 with own piece
         placeAt("seat-2-piece-0",6);
-        place("seat-1-piece-1",69);
+        place("seat-1-piece-1",Board.FIRST_FINISH_PROGRESS);
         grant("kill-chosen");
         assertEquals(List.of(new CardChoice(null,null,null,5),new CardChoice(null,null,null,6)), game.card.choices);
         assertEquals("INVALID_CARD_TARGET", assertThrows(GameException.class, () -> rules.act(game,"a",
@@ -83,7 +84,7 @@ class ReleaseCardsTest extends EngineFixture {
 
     @Test void advanceUsesNextSafeWithCapacityAndCannotLeavePrivateLane() {
         placeAt("seat-0-piece-0",6);
-        place("seat-0-piece-1",69);
+        place("seat-0-piece-1",Board.FIRST_FINISH_PROGRESS);
         placeAt("seat-1-piece-0",12);
         placeAt("seat-2-piece-0",12); // normal safe capacity two
         grant("advance-safe");
@@ -103,8 +104,8 @@ class ReleaseCardsTest extends EngineFixture {
     }
 
     @Test void instantDeathReturnsLeadingUncrownedPieceAndBreaksTieByNumber() {
-        place("seat-0-piece-0",69);
-        place("seat-0-piece-1",69);
+        place("seat-0-piece-0",Board.FIRST_FINISH_PROGRESS);
+        place("seat-0-piece-1",Board.FIRST_FINISH_PROGRESS);
         place("seat-0-piece-2",com.pixelchiss.gameservice.domain.Board.FINISH);
         grant("instant-death");
         assertEquals("HOME",game.piece("seat-0-piece-0").status);

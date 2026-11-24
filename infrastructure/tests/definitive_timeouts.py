@@ -182,7 +182,7 @@ def main():
     for _ in range(40):
         try:
             request(GAME, "/actuator/health")
-            assert request(GATEWAY, "/api/game/board", token=tokens[0])["layout"] == "v4-100"
+            assert request(GATEWAY, "/api/game/board", token=tokens[0])["layout"] == "v5-100"
             break
         except Exception:
             time.sleep(1)

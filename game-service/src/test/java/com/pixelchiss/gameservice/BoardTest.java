@@ -13,22 +13,25 @@ class BoardTest {
         for (int seat=0; seat<4; seat++) {
             for (int piece=0; piece<4; piece++) {
                 var route = b.route(seat,piece);
-                assertEquals(77,route.size());
-                assertEquals(76,new HashSet<>(route).size());
-                assertEquals(route.get(0),route.get(68));
-                assertEquals(2,Collections.frequency(route,(seat*17+5)));
-                assertEquals(68,new HashSet<>(route.subList(0,69)).size());
+                assertEquals(72,route.size());
+                assertEquals(72,new HashSet<>(route).size());
+                assertEquals(seat*17,route.get(63));
+                assertEquals(1,Collections.frequency(route,(seat*17+5)));
+                assertEquals(64,new HashSet<>(route.subList(0,64)).size());
+                for(int skipped=1;skipped<5;skipped++)
+                    assertFalse(route.contains((seat*17+skipped)%68),"Own final five-cell stretch must not be revisited");
                 cells.addAll(route);
                 assertEquals((seat*17+5),route.getFirst());
                 assertEquals(75+seat*8,route.getLast());
                 assertEquals(b.route(seat,0),route);
             }
-            var lane = b.route(seat,0).subList(69,77);
+            var lane = b.route(seat,0).subList(64,72);
             assertEquals(IntStream.range(68+seat*8,76+seat*8).boxed().toList(),lane);
             assertTrue(Collections.disjoint(lanes,lane));
             lanes.addAll(lane);
             assertEquals(4,b.capacity(75+seat*8));
             assertEquals(4,b.capacity((seat*17+5)));
+            assertEquals(2,b.capacity(seat*17));
         }
         assertEquals(IntStream.range(0,100).boxed().collect(java.util.stream.Collectors.toSet()),cells);
         assertEquals(32,lanes.size());
@@ -36,7 +39,9 @@ class BoardTest {
         assertEquals(68,definitions.stream().filter(c -> c.kind().equals("TRACK")).count());
         assertEquals(28,definitions.stream().filter(c -> c.kind().equals("FINISH_LANE")).count());
         assertEquals(4,definitions.stream().filter(c -> c.kind().equals("CROWN")).count());
-        assertEquals("v4-100",b.definition().get("layout"));
+        assertEquals("v5-100",b.definition().get("layout"));
+        assertEquals(63,Board.LAST_COMMON_PROGRESS);assertEquals(64,Board.FIRST_FINISH_PROGRESS);
+        assertEquals(71,Board.FINISH);assertEquals(68,Board.TRACK_CELL_COUNT);
         assertEquals(100,b.definition().get("cellCount"));
     }
     @Test void confirmedSafeCellsAndSectorRelativeTrivia() {
@@ -53,15 +58,15 @@ class BoardTest {
     @Test void everySectorBoundaryWrapAndPrivateEntryFollowClockwiseRoute() {
         Board b = new Board();
         for (int seat=0;seat<4;seat++) {
-            for (int p=0;p<68;p++) assertEquals((b.position(seat,0,p)+1)%68,b.position(seat,0,p+1));
-            assertEquals(((seat*17+5)+67)%68,b.position(seat,0,67));
-            assertEquals((seat*17+5),b.position(seat,0,68));
-            assertTrue(Board.SAFE.contains(b.position(seat,0,68)));
-            assertEquals(68+seat*8,b.position(seat,0,69));
-            assertEquals(75+seat*8,b.position(seat,0,76));
+            for (int p=0;p<63;p++) assertEquals((b.position(seat,0,p)+1)%68,b.position(seat,0,p+1));
+            assertEquals(Math.floorMod(seat*17-1,68),b.position(seat,0,62));
+            assertEquals(seat*17,b.position(seat,0,63));
+            assertTrue(Board.SAFE.contains(b.position(seat,0,63)));
+            assertEquals(68+seat*8,b.position(seat,0,64));
+            assertEquals(75+seat*8,b.position(seat,0,71));
         }
         assertEquals(b.position(0,0,17),b.position(1,0,0));
-        assertThrows(IllegalArgumentException.class,()->b.position(0,0,77));
+        assertThrows(IllegalArgumentException.class,()->b.position(0,0,72));
         assertThrows(IllegalArgumentException.class,()->b.position(0,0,-1));
         assertThrows(IllegalArgumentException.class,()->b.position(4,0,0));
         assertThrows(IllegalArgumentException.class,()->b.position(0,4,0));

@@ -105,7 +105,7 @@ class CaptureRollLockTest extends EngineFixture {
         assertFalse(engine.calculate(game,"a",own(0),0).capture());accept(own(0),0);
         assertTrue(game.turn.captureLockedPieceIds.isEmpty());
         assertNotNull(engine.calculate(game,"a",own(0),1));
-        setup("classic",4,3,true);placeAt(own(0),4);placeAt(rival(0),5);roll();
+        setup("classic",4,3,true);placeAt(own(0),11);placeAt(rival(0),12);roll();
         var rules=new TriviaRules(board,m->1,clock,30_000,new SeedCatalog(),15_000,15_000);
         var events=new ArrayList<RuleEngine.Event>();rules.grant(game,new SeedCatalog().card("kill-next"),"a",events);
         assertEquals("HOME",game.piece(rival(0)).status);assertTrue(game.turn.captureLockedPieceIds.isEmpty());

@@ -53,8 +53,8 @@ def choose(state):
 def place(state, piece_id, progress):
     piece = next(p for p in state["pieces"] if p["id"] == piece_id)
     seat = next(p["seat"] for p in state["players"] if p["id"] == piece["ownerId"])
-    position = (seat * 17 + 5 + progress) % 68 if progress <= 68 else 68 + seat * 8 + progress - 69
-    piece.update(status="CROWNED" if progress == 76 else "BOARD", progress=progress, position=position)
+    position = (seat * 17 + 5 + progress) % 68 if progress <= 63 else 68 + seat * 8 + progress - 64
+    piece.update(status="CROWNED" if progress == 71 else "BOARD", progress=progress, position=position)
 
 
 def create(store, actors, map_id, mode):
@@ -66,7 +66,7 @@ def create(store, actors, map_id, mode):
     def prepare(state):
         if mode == "pairs":
             place(state, "seat-0-piece-0", 10)
-            place(state, "seat-0-piece-1", 69)
+            place(state, "seat-0-piece-1", 64)
             place(state, "seat-1-piece-0", 51)  # rival at red start, special release capture
         else:
             for number in range(4):

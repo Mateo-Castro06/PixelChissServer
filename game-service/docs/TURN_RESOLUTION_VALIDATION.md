@@ -1,3 +1,6 @@
+> Evidencia histórica de geometrías anteriores. El contrato vigente es **v5-100**,
+> con entrada 63→64 y corona 71. Consultar [la validación v5](BOARD100_VALIDACION.md). Las tablas y mediciones siguientes conservan su contexto original.
+
 # Auditoría de cierre automático y corredor final
 
 Validación del 23 de noviembre de 2026 sobre `main`, inicialmente

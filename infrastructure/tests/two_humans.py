@@ -124,7 +124,7 @@ def main():
     actors = [str(request(GATEWAY, "/api/auth/me", token=token)["id"]) for token in tokens]
     assert len(set(actors)) == 2
     board = request(GATEWAY, "/api/game/board", token=tokens[0])
-    assert board["layout"] == "v4-100" and board["cellCount"] == 100
+    assert board["layout"] == "v5-100" and board["cellCount"] == 100
     assert {cell["id"] for cell in board["cells"]} == set(range(100))
     assert set(board["safe"]) == {0,5,12,17,22,29,34,39,46,51,56,63}
     for map_id in ("classic", "science"):

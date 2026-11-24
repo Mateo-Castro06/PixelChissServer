@@ -23,10 +23,10 @@ class BotTest extends EngineFixture {
         assertEquals(second.targetPosition(),game.piece(second.pieceId()).position);
     }
     @Test void botPrefersCrownThenSafeAndCanReleaseDifferentPieces() {
-        place("seat-0-piece-0",Board.FINISH-4);placeAt("seat-0-piece-1",1);rollForMovement();
+        place("seat-0-piece-0",Board.FINISH-4);placeAt("seat-0-piece-1",8);rollForMovement();
         place("seat-0-piece-2",Board.FINISH);place("seat-0-piece-3",Board.FINISH);
         assertEquals("seat-0-piece-0",bot.next(game).pieceId());engine.act(game,"a",bot.next(game));
-        assertEquals(5,bot.next(game).targetPosition());
+        assertEquals(12,bot.next(game).targetPosition());
         create();game.player("a").bot=true;roll();
         assertEquals("ROLL_DICE",bot.next(game).type());
         assertArrayEquals(new boolean[]{true,true},game.turn.consumed);

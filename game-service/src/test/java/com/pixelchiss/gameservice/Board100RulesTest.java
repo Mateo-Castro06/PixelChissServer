@@ -37,13 +37,13 @@ class Board100RulesTest extends EngineFixture {
         assertHome(game.piece(id(seat,3)));
     }
     @ParameterizedTest @MethodSource("boards")
-    void fullCommonLapAndAllEightFinalCellsAreTraversedInOrder(String map,int seat) {
+    void commonTrackToEntryAndAllEightFinalCellsAreTraversedInOrder(String map,int seat) {
         start(map,seat,false);
         place(id(seat,0),0);
-        for(int progress=1;progress<=76;progress++) {
+        for(int progress=1;progress<=71;progress++) {
             dice(1,1,true);
             var m=engine.calculate(game,"a",id(seat,0),0);
-            int expected=progress<=68?(seat*17+5+progress)%68:68+seat*8+progress-69;
+            int expected=progress<=63?(seat*17+5+progress)%68:68+seat*8+progress-64;
             assertEquals(expected,m.to());
             move(m);
         }
@@ -62,7 +62,7 @@ class Board100RulesTest extends EngineFixture {
         move(movement);assertHome(game.piece(rival));
         assertEquals("b",game.turn.playerId); // Its only active piece captured; the remainder is now discarded.
         start(map,seat,false); // The independent protected-start scenario needs a fresh turn.
-        placeAt(own,start-1);placeAt(rival,start);dice(1,2,false);
+        int otherStart=(start+17)%68;placeAt(own,otherStart-1);placeAt(rival,otherStart);dice(1,2,false);
         movement=engine.calculate(game,"a",own,0);assertFalse(movement.capture());move(movement);
         assertEquals("BOARD",game.piece(rival).status);
     }
@@ -84,7 +84,7 @@ class Board100RulesTest extends EngineFixture {
             start(map,seat,true);
             String own=id(seat,0),rival=id((seat+1)%4,0),privatePiece=id((seat+1)%4,1);
             int target=(seat*17+17)%68;
-            placeAt(own,target-1);placeAt(rival,target);place(privatePiece,69);
+            placeAt(own,target-1);placeAt(rival,target);place(privatePiece,64);
             var events=new ArrayList<RuleEngine.Event>();
             var rules=(TriviaRules)engine;
             rules.grant(game,new SeedCatalog().card(card),"a",events);
@@ -101,7 +101,7 @@ class Board100RulesTest extends EngineFixture {
     @ParameterizedTest @MethodSource("boards")
     void advanceSafeSkipsFullSafeAndDoesNotMoveLanePiece(String map,int seat) {
         start(map,seat,true);
-        place(id(seat,0),4);place(id(seat,1),69);
+        place(id(seat,0),4);place(id(seat,1),64);
         int safe=seat*17+5;
         placeAt(id((seat+1)%4,0),safe);placeAt(id((seat+1)%4,1),safe);
         var rules=(TriviaRules)engine;
@@ -111,19 +111,19 @@ class Board100RulesTest extends EngineFixture {
         rules.act(game,"a",new GameAction("CARD_TARGET","g","safe",game.version,
                 choice.pieceId(),null,null,null,choice.targetPosition(),null,game.card.id,null,null,null));
         assertEquals(7,game.piece(id(seat,0)).progress);
-        assertEquals(69,game.piece(id(seat,1)).progress);
+        assertEquals(64,game.piece(id(seat,1)).progress);
     }
     @ParameterizedTest @MethodSource("boards")
     void deathPenaltiesAndRetirementAlwaysRestoreHomeAndSkipKeepsOrder(String map,int seat) {
         start(map,seat,true);
         var rules=(TriviaRules)engine;
         var catalog=new SeedCatalog();
-        place(id(seat,0),75);place(id(seat,1),76);
+        place(id(seat,0),70);place(id(seat,1),71);
         var events=new ArrayList<RuleEngine.Event>();
         rules.grant(game,catalog.card("instant-death"),"a",events);
         assertHome(game.piece(id(seat,0)));assertEquals("CROWNED",game.piece(id(seat,1)).status);
         assertTrue(events.stream().anyMatch(e->e.type().equals("CARD_PIECE_RETURNED")));
-        place(id(seat,0),69);
+        place(id(seat,0),64);
         rules.grant(game,catalog.card("doubles-death"),"a",new ArrayList<>());
         var rolled=rules.act(game,"a",action("ROLL_DICE",null,null,null,null,null,null));
         assertHome(game.piece(id(seat,0)));

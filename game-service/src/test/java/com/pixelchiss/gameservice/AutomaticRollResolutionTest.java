@@ -20,7 +20,7 @@ class AutomaticRollResolutionTest extends EngineFixture {
         engine=new RuleEngine(board,max->dice[index[0]++%2],clock,30_000);
         game=engine.create(new GameSetup("g","l",map,List.of(
                 new GameSetup.Participant("a",false,0),new GameSetup.Participant("b",false,1)),"a"));
-        placeAt(own(0),6);place(own(1),75);place(own(2),76);place(own(3),76);
+        placeAt(own(0),6);place(own(1),Board.FINISH-1);place(own(2),Board.FINISH);place(own(3),Board.FINISH);
         repository=new MemoryGames();persist();restart();
     }
     void persist() { repository.states.put("g",repository.json.writeValueAsString(game)); }
@@ -49,7 +49,7 @@ class AutomaticRollResolutionTest extends EngineFixture {
         service.action("a",request);
         var closed=service.load("g");assertEquals("b",closed.turn.playerId);
         assertEquals(now,clock.now);assertNull(closed.turn.movementStartedAt);assertNull(closed.turn.rollId);
-        assertEquals(0,closed.turn.dice.length);assertEquals(75,closed.piece(own(1)).progress);
+        assertEquals(0,closed.turn.dice.length);assertEquals(Board.FINISH-1,closed.piece(own(1)).progress);
         assertEquals(List.of("PIECE_CAPTURED","PIECE_MOVED","TURN_CHANGED"),lastEvents());
         long version=closed.version;int publications=repository.notifications.size();restart();
         assertTrue(service.action("a",request).duplicate());
@@ -63,7 +63,7 @@ class AutomaticRollResolutionTest extends EngineFixture {
     }
     @ParameterizedTest @CsvSource({"classic","science"})
     void anotherPieceWithExactThreeKeepsTheRollOpen(String map) {
-        prepare(map,4,3);place(own(1),73);placeAt("seat-1-piece-0",10);persist();rollAndConfirm();
+        prepare(map,4,3);place(own(1),Board.FINISH-3);placeAt("seat-1-piece-0",10);persist();rollAndConfirm();
         long deadline=service.load("g").turn.deadline;
         service.action("a",moveRequest(own(0),0));var state=service.load("g");
         assertEquals("a",state.turn.playerId);assertEquals(Set.of(own(0)),state.turn.captureLockedPieceIds);
@@ -75,7 +75,7 @@ class AutomaticRollResolutionTest extends EngineFixture {
     @ParameterizedTest @CsvSource({"classic,false","science,false","classic,true","science,true"})
     void impossibleDiceNeverPublishAMovementTimer(String map,boolean doubles) {
         prepare(map,3,doubles?3:4);
-        for(int n=0;n<4;n++) place(own(n),75);
+        for(int n=0;n<4;n++) place(own(n),Board.FINISH-1);
         persist();rollAndConfirm();
         assertFalse(lastEvents().contains("MOVEMENT_TIMER_STARTED"));
         assertNull(service.load("g").turn.movementStartedAt);
@@ -88,7 +88,7 @@ class AutomaticRollResolutionTest extends EngineFixture {
     }
     @ParameterizedTest @CsvSource({"classic","science"})
     void oneLegalDieMustBeUsedBeforeDiscardingTheOther(String map) {
-        prepare(map,3,4);place(own(0),73);game.piece(own(1)).home();persist();rollAndConfirm();
+        prepare(map,3,4);place(own(0),Board.FINISH-3);game.piece(own(1)).home();persist();rollAndConfirm();
         assertEquals(List.of("MOVEMENT_TIMER_STARTED"),lastEvents());
         assertTrue(service.moves("g","a").stream().allMatch(m->m.dieIndex()==0));
         service.action("a",moveRequest(own(0),0));
@@ -118,7 +118,7 @@ class AutomaticRollResolutionTest extends EngineFixture {
     void recoveryPreservesPendingObligations(String pending) {
         prepare("science",4,3);
         engine=new TriviaRules(board,m->1,clock,30_000,new SeedCatalog(),15_000,15_000);
-        for(int n=0;n<4;n++) place(own(n),75);
+        for(int n=0;n<4;n++) place(own(n),Board.FINISH-1);
         game.turn.rolled=true;game.turn.dice=new int[]{4,3};game.turn.consumed=new boolean[]{false,false};
         game.turn.animationStatus="COMPLETED";game.turn.deadline=clock.now+30_000;
         switch(pending) {
@@ -135,7 +135,7 @@ class AutomaticRollResolutionTest extends EngineFixture {
     }
     @ParameterizedTest @CsvSource({"classic","science"})
     void fullProtectedDestinationDiscardsRemainderAfterTheLegalDie(String map) {
-        prepare(map,3,6);placeAt(own(0),13);place(own(1),76);
+        prepare(map,3,6);placeAt(own(0),13);place(own(1),Board.FINISH);
         for(int n=0;n<4;n++) placeAt("seat-1-piece-"+n,22);
         persist();rollAndConfirm();assertFalse(service.moves("g","a").isEmpty());
         service.action("a",moveRequest(own(0),0));
@@ -145,7 +145,7 @@ class AutomaticRollResolutionTest extends EngineFixture {
     }
     @Test void botWithImpossibleDiceClosesThroughItsRollWithoutAnExtraActionOrPause() {
         prepare("classic",4,3);game.player("a").bot=true;
-        for(int n=0;n<4;n++) place(own(n),75);
+        for(int n=0;n<4;n++) place(own(n),Board.FINISH-1);
         persist();
         var runner=new BotRunner(repository,service,new BotPolicy(engine,new SeedCatalog(),()->0.0));
         runner.step();assertEquals("b",service.load("g").turn.playerId);

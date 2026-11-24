@@ -15,11 +15,28 @@ import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GameServiceTest extends ServiceFixture {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints={0,63,64,65,66,67,68,69,75,76})
+    void persistedV4CoordinatesArePreservedAndNeverReinterpreted(int progress) {
+        game.boardLayout="v4-100";
+        var piece=game.piece("seat-0-piece-0");piece.progress=progress;
+        piece.position=progress<=68?(5+progress)%68:68+progress-69;
+        piece.status=progress==76?"CROWNED":"BOARD";
+        repo.states.put("g",repo.json.writeValueAsString(game));
+        String before=repo.states.get("g");
+        assertEquals("UNSUPPORTED_BOARD_LAYOUT",assertThrows(GameException.class,
+                ()->service.synchronization("g","a")).code());
+        assertEquals("UNSUPPORTED_BOARD_LAYOUT",assertThrows(GameException.class,
+                ()->service.system("g",state->{fail("Legacy state must not reach the engine");return List.of();})).code());
+        assertEquals(before,repo.states.get("g"));
+        assertEquals(progress,repo.find("g").piece(piece.id).progress);
+        assertEquals("v4-100",repo.find("g").boardLayout);
+    }
     @Test void incompatibleGeometryRejectsReadsReconnectActionsAndInitializationWithoutMutation() {
         var setup = new com.pixelchiss.gameservice.domain.GameSetup("g", "l", "classic", List.of(
                 new com.pixelchiss.gameservice.domain.GameSetup.Participant("a", false, 0),
                 new com.pixelchiss.gameservice.domain.GameSetup.Participant("b", false, 1)), "a");
-        for (String layout : Arrays.asList(null, "v1", "v1-96", "v2-100", "unknown")) {
+        for (String layout : Arrays.asList(null, "v1", "v1-96", "v2-100", "v3-100", "v4-100", "unknown")) {
             game.boardLayout = layout;
             game.creationFingerprint = new JsonPayloadFingerprints(repo.json).fingerprint(setup);
             var legacyAction = action("ROLL_DICE",null,null,null,null,null,null);

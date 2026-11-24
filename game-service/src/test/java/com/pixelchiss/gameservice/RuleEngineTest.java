@@ -29,7 +29,7 @@ class RuleEngineTest extends EngineFixture {
         assertThrows(GameException.class,()->engine.act(game,"a",action("ROLL_DICE",null,null,null,null,null,List.of(6,6))));
     }
     @Test void captureUsesPhysicalCellAndSafeCellsProtect() {
-        placeAt("seat-0-piece-0",13);placeAt("seat-1-piece-0",21);rollForMovement();
+        placeAt("seat-0-piece-0",15);placeAt("seat-1-piece-0",23);rollForMovement();
         move(engine.calculate(game,"a","seat-0-piece-0",2));
         assertEquals("HOME",game.piece("seat-1-piece-0").status);
         placeAt("seat-0-piece-1",8);placeAt("seat-1-piece-1",12);
