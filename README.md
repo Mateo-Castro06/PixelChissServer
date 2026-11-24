@@ -1,100 +1,114 @@
-## Local y LAN con el mismo backend
-
-El modo local conserva `http://127.0.0.1:8080`. El override LAN agrega HTTPS/WSS en la IP privada del anfitrión y mantiene loopback para herramientas y bases. No cambia el motor. LAN requiere certificados por anfitrión, firewall acotado, Google OAuth Desktop y Godot actualizado para PKCE/canje sin tokens en URLs. El anfitrión Docker puede ser distinto del administrador de la sala.
-
-Para un anfitrión ya configurado, cada inicio detecta la red actual y prepara LAN con un comando:
-
-```sh
-# Linux
-python3 infrastructure/lan/lan.py start --auto
-```
-
-```powershell
-# Windows
-py -3 infrastructure/lan/lan.py start --auto
-```
-
-El asistente conserva la CA y los datos; pide autorización para firewall, redes no confirmadas e interrupciones de partidas. Una CA común puede requerir la firma de su administrador. No existe un modo de aprobación global que omita esos controles. Véase [inicio automático y cambios de Wi-Fi](docs/MANUAL_SERVIDOR_LAN.md#inicio-automático-y-cambios-de-wi-fi).
-
-- [Manual del anfitrión Linux/Windows](docs/MANUAL_SERVIDOR_LAN.md).
-- [Contrato y checklist para Godot](docs/GODOT_INTEGRACION_LAN.md).
-- [Actualización desde la versión anterior](docs/GUIA_ACTUALIZACION.md).
-- [Evidencia de validación LAN y limitaciones de las pruebas](docs/LAN_VALIDACION.md).
-- [Pruebas del inicio automático y límites Windows/Wi-Fi](docs/LAN_AUTO_VALIDACION.md).
-
-## Reglas definitivas v4-100
-
-Salidas 5/22/39/56, capacidades diferenciadas, captura múltiple/SOPLAR, tres intentos HOME, suma de dados y trivia probabilística. El cliente debe confirmar cada animación antes del plazo de movimiento de 30 segundos; la confirmación vence a los 10 segundos. Véanse [matriz y estado de validación](docs/AUDITORIA_REGLAS_DEFINITIVAS.md), [motor](game-service/docs/ENGINE.md) y [contrato Godot](game-service/docs/WEBSOCKET.md). Las evidencias anteriores corresponden a despliegues anteriores y no acreditan esta revisión.
-
 # PixelChiss Server
 
-Backend multijugador de Ingeniería de Software II. Godot utiliza la API HTTP y el WebSocket del Gateway. El cliente se desarrolla en otro repositorio.
+PixelChiss Server es el backend del videojuego multijugador PixelChiss. Permite autenticar jugadores, gestionar salas y ejecutar partidas; el cliente PixelChiss desarrollado en Godot se instala por separado.
 
-| Servicio | Responsabilidad | Tecnología y almacenamiento |
-|---|---|---|
-| API Gateway | Entrada HTTP y puente WebSocket; usa Eureka | Java, Spring Cloud Gateway WebMVC |
-| Eureka | Registro y descubrimiento | Java, Spring Cloud Netflix |
-| Auth | Identidad, OAuth con Google, JWT, refresh y perfil | Kotlin, Spring Security, Hibernate/JPA y PostgreSQL |
-| Lobby | Salas, miembros, bots, preparación, votación e inicio | Python, FastAPI y Redis DB 1 |
-| Game | Motor, tablero, turnos, cartas, trivia, bots y WebSocket | Java; estado en Redis DB 0 y catálogo en MongoDB |
-| Observabilidad | Scraping de métricas y dashboard | Prometheus y Grafana, perfil Compose `monitoring` |
+## Requisitos previos
 
-El núcleo de Game y las políticas de Lobby se prueban sin servidores. Los casos de uso consumen puertos implementados por adaptadores. DDD distingue los contextos Identity, Lobby y Game; una partida se confirma como un agregado, con versión y compare-and-set. La SAGA de inicio conserva el POST síncrono y registra un intento recuperable. Game produce `GameInitialized` en Redis Streams y Lobby puede confirmar la asociación aunque se pierda la respuesta HTTP. Redis Pub/Sub conserva la difusión en vivo hacia sockets. Game escribe el stream `pixelchiss:game:integration` en Redis DB 0 y Lobby lo consume desde esa base; sus salas y sus intentos viven en DB 1.
+**Obligatorios para el inicio LAN automatizado:**
 
-El catálogo trae **32 preguntas** (16 de cultura general en `classic` y 16 de ciencia en `science`) y **6 cartas**. Ambos mapas comparten tablero **v4-100: 100 casillas físicas, 68 comunes (cuatro sectores de 17) y 32 finales (cuatro corredores de ocho, incluida la corona)**. HOME es estado con `position:null` y `progress:-1`; salir exige dobles. Salidas especiales: 5/22/39/56, capacidad cuatro. Seguros normales: capacidad dos. Seguros: 0, 5, 12, 17, 22, 29, 34, 39, 46, 51, 56, 63. Corredores 68–75, 76–83, 84–91, 92–99; coronas 75/83/91/99, con dado exacto. Los estados Redis anteriores se conservan pero se rechazan explícitamente; no reutilizar sus IDs ni coordenadas. Cada ficha vuelve al seguro de salida propio tras una vuelta completa (`p=68`), entra al corredor en `p=69` y corona exactamente en `p=76`. Las suites completas y dos clientes automatizados por Gateway/WebSocket pasaron con infraestructura Docker aislada; Godot real sigue pendiente: véase [estado de la corrección](docs/BOARD100_VALIDACION.md). Consulta el [catálogo](docs/CATALOGO.md), [reglas](game-service/docs/BOARD.md) y [efectos](game-service/docs/ENGINE.md).
+- Git, Python **3.9 o posterior**, Docker Engine **28 o posterior** y Docker Compose **2.24.4 o posterior** (`docker compose`).
+- Linux con `ip` (iproute2), `sudo` y firewall Docker mediante iptables o nftables. En Windows: Docker Desktop con **contenedores Linux**, `py -3` y Windows PowerShell.
+- Acceso a Docker local sin rootless y permisos administrativos para autorizar el firewall.
+- Una interfaz física con IPv4 privada en la LAN de los jugadores e Internet para descargar dependencias y autenticar con Google.
+- Credenciales Google OAuth Web y Desktop, secretos de instalación y claves JWT preparados como se indica abajo.
+- Para preparar claves por primera vez: OpenSSL en Linux; **PowerShell 7.2 o posterior** en Windows para el procedimiento del manual.
 
-**Si ya tienes el repositorio y datos, sigue la [guía de actualización](docs/GUIA_ACTUALIZACION.md) antes de recrear Redis o iniciar Game.**
+**Opcionales:** curl y monitoreo Prometheus/Grafana. Java, Maven y las librerías de Lobby se instalan dentro de las imágenes.
+
+## Obtener el proyecto
+
+Desde el directorio donde guardarás el proyecto, en Bash o PowerShell:
+
+```sh
+git clone https://github.com/Mateo-Castro06/PixelChissServer.git
+cd PixelChissServer
+```
+
+Todos los comandos siguientes parten de la raíz `PixelChissServer/`.
+
+## Configuración inicial
+
+1. **Prepara `.env`.** Copia `infrastructure/docker/.env.example` a `infrastructure/docker/.env` solo si no existe. Sigue la [preparación Linux/Windows](docs/MANUAL_INSTALACION.md#4-preparación-de-archivos-de-configuración).
+2. **Configura secretos.** Reemplaza `POSTGRES_PASSWORD=change_me` y genera `GAME_LOBBY_TOKEN` aleatorio de al menos 32 caracteres. Conserva las conexiones internas Docker y las rutas JWT del ejemplo; el manual incluye generación segura de valores.
+3. **Configura Google OAuth.** Prepara consentimiento y usuarios de prueba. Necesitas un cliente **Web** (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) con callback predeterminado `http://localhost:8081/login/oauth2/code/google`, y otro **Desktop app** (`GOOGLE_DESKTOP_CLIENT_ID`, obligatorio para LAN; `GOOGLE_DESKTOP_CLIENT_SECRET` si Google lo requiere). Desktop usa el loopback del jugador; no cambies el callback Web por la IP LAN.
+4. **Prepara JWT** con el [procedimiento del manual](docs/MANUAL_INSTALACION.md#52-claves-jwt): privada y pública en `auth-service/keys/`, y copia de `public_key.pem` en `api-gateway/keys/`. Conserva las claves existentes.
+5. **Conecta una LAN autorizada.** El asistente detecta IP/subred y genera certificados y `infrastructure/docker/lan-secrets/lan.env`; solicita autorización para el firewall. No crea OAuth ni modifica `.env`. Mantén privados `.env`, claves y `lan-secrets/`.
 
 ## Instalación y ejecución
 
-Requisitos: Docker y Docker Compose v2, OpenSSL para claves de desarrollo y un cliente OAuth de Google para login real. Fuera de Docker: JDK 21 y Maven para Java/Kotlin; Python 3.12 para Lobby. Copia `infrastructure/docker/.env.example` a `infrastructure/docker/.env` solo en una instalación nueva. Configura PostgreSQL, Google, rutas a las claves PEM y un `GAME_LOBBY_TOKEN` aleatorio de al menos 32 caracteres. Configura la URI de callback en Google de acuerdo con el punto de entrada utilizado. La clave privada se monta únicamente en Auth; los verificadores reciben la pública. Consulta el [manual completo](docs/MANUAL_INSTALACION.md#56-despliegue-completo).
+Completa primero la configuración anterior y abre una terminal interactiva con Docker funcionando.
 
-Desde la raíz:
+Linux:
 
-```sh
-docker compose -f infrastructure/docker/docker-compose.yml config --quiet
-docker compose -f infrastructure/docker/docker-compose.yml up -d --build
-docker compose -f infrastructure/docker/docker-compose.yml ps
-curl -fsS http://localhost:8080/actuator/health
-curl -fsS http://localhost:8083/health/redis
+```bash
+python3 infrastructure/lan/lan.py start --auto --project docker
 ```
 
-En Windows, usa Docker Desktop con contenedores Linux. Git conserva los scripts
-`.sh` con finales de línea LF y el arranque de Redis también normaliza CRLF para
-admitir copias existentes. Si Redis fallaba con `set: Illegal option`, después de
-actualizar el repositorio recréalo conservando su volumen:
+Windows, PowerShell:
 
-```sh
-docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps --force-recreate redis
-docker compose -f infrastructure/docker/docker-compose.yml up -d
+```powershell
+py -3 infrastructure/lan/lan.py start --auto --project docker
 ```
 
-Para monitoreo, define en el mismo `.env` `PIXELCHISS_METRICS_KEY` (mínimo 32 caracteres) y `GRAFANA_ADMIN_PASSWORD` y ejecuta:
+En una instalación nueva, `--project docker` es opcional también en Windows: es el nombre predeterminado. Si la instalación existente usa otro proyecto, utiliza **ese mismo nombre** en todos los comandos; consulta `docker compose ls -a`.
 
-```sh
-docker compose -f infrastructure/docker/docker-compose.yml --profile monitoring up -d --build
+El asistente descarga herramientas, construye las imágenes necesarias y espera salud y registro de servicios. Solicita `CREAR CA` en la primera preparación y `AUTORIZO` para red, firewall o interrupciones cuando corresponda. Sudo/UAC se usa solo para firewall; se conservan CA, secretos y volúmenes.
+
+## Verificación
+
+Linux:
+
+```bash
+python3 infrastructure/lan/lan.py status --project docker
+python3 infrastructure/lan/lan.py url
+python3 infrastructure/lan/lan.py diagnose --project docker
 ```
 
-[Prometheus](http://localhost:9090/targets) y [Grafana](http://localhost:3000/d/pixelchiss-services) escuchan en loopback. Los endpoints de métricas requieren una clave independiente de JWT y de `GAME_LOBBY_TOKEN`.
+Windows, PowerShell:
 
-- [Auth Swagger](http://localhost:8081/swagger-ui/index.html) · [Lobby Swagger](http://localhost:8083/docs) · [Game Swagger por Gateway](http://localhost:8080/api/game/swagger-ui/index.html) · [Eureka](http://localhost:8761/).
-- [Arquitectura y DDD](docs/second-cut/architecture.md) · [SAGA y contratos de eventos](docs/second-cut/start-saga.md) · [Decisión del Event Bus](docs/decisions/ADR-002-streams-start-saga.md).
-- [Rutas y DTO](docs/MANUAL_INSTALACION.md#operaciones-rest) · [Protocolo WebSocket](game-service/docs/WEBSOCKET.md) · [Manual de usuario](docs/MANUAL_USUARIO.md) · [Instalación y configuración](docs/MANUAL_INSTALACION.md).
-- [Matriz inicial](docs/second-cut/baseline.md) · [Evidencia y ejecución de pruebas](docs/second-cut/evidence.md) · [Alcance de seguridad y MFA](docs/second-cut/security.md).
+```powershell
+py -3 infrastructure/lan/lan.py status --project docker
+py -3 infrastructure/lan/lan.py url
+py -3 infrastructure/lan/lan.py diagnose --project docker
+```
 
-OAuth con Google y JWT están implementados. El backend no exige ni verifica segundo factor. El flujo de login con una cuenta Google real y la aplicación Godot deben probarse aparte. Redis es una sola instancia en Compose; AOF cada segundo mejora la recuperación, pero puede perder escrituras recientes ante una caída abrupta.
+1. `status`: contenedores ejecutándose y `healthy` donde haya healthcheck. Eureka no tiene healthcheck. `diagnose` verifica publicaciones reales, salud, Eureka, certificado, firewall y HTTPS con la CA local. La lectura del firewall requiere privilegios en Linux.
+2. `url`: IP/puerto configurados, URLs y huella **SHA-256 DER de la CA**, de 64 caracteres; no comprueba disponibilidad. Comparte IP, puerto (8443 por defecto) y huella por un canal independiente y confiable.
+3. Godot debe descargar la CA en `/.well-known/pixelchiss/ca`, comparar la huella y verificar nuevas conexiones HTTPS/WSS. **HTTPS sin una CA confiable no acredita TLS verificado.** Usa `https://<IP_DEL_SERVIDOR>:<PUERTO>` y WSS en `/api/game/ws`, sustituyendo los marcadores.
+4. Desde otro dispositivo, comprueba login y WSS autenticado con el [procedimiento del manual](docs/MANUAL_INSTALACION.md#10-conexión-del-cliente-pixelchiss). La salud HTTPS no verifica WSS ni el acceso remoto.
 
-Las instalaciones nuevas siembran el catálogo final. En una base existente, el script de actualización hace copia y retira solo los IDs antiguos autorizados. Para administrar el catálogo sin repoblarlo al arrancar, usa `GAME_SEED_ENABLED=false`. Ver la [revisión SOLID y de MFA](docs/revision-solid-mfa.md).
+## Detener y reiniciar
 
-Pruebas: `mvn verify` por módulo Java/Kotlin, `python -m unittest discover -s tests -v` desde Lobby y [pruebas aisladas de integración](game-service/README.md#catálogo-y-pruebas).
+Avisa a los jugadores: detener interrumpe las conexiones. Desde la raíz:
 
-[Verificación de esta entrega y datos migrados](docs/EVIDENCIA_ENTREGA.md).
+Linux:
 
+```bash
+python3 infrastructure/lan/lan.py stop --project docker
+python3 infrastructure/lan/lan.py start --auto --project docker
+```
 
-### Actualización de pares y temporizadores
+Windows, PowerShell:
 
-Un par concede otra tirada una vez resuelto. Si quedan fichas HOME, libera obligatoriamente hasta 4 con (1,1), 3 con (6,6) o 2 con los demás pares; consume ambos dados incluso si libera menos. No se puede mover con esos dados. Sin HOME, admite suma o uso separado. Se conservan los tres intentos HOME y la captura especial de salida. Tres pares conceden coronación de una ficha propia activa previa (recorrido o corredor); el jugador conserva la selección CROWN_REQUEST y después termina el turno, sin cuarta tirada ni penalización por tres pares.
+```powershell
+py -3 infrastructure/lan/lan.py stop --project docker
+py -3 infrastructure/lan/lan.py start --auto --project docker
+```
 
-Movimiento: 30 segundos tras confirmar cada animación (máximo 10 segundos para confirmar). Las liberaciones no abren reloj de movimiento. Trivia: 15 segundos independientes; pausa el saldo de movimiento y lo reanuda sin reiniciarlo. Sin respuesta se resuelve como incorrecta; se rechazan respuestas tardías. Al vencer movimiento se conservan jugadas aceptadas, se descartan dados pendientes, se evalúa SOPLAR solo por oportunidades reales omitidas y pasa turno sin lanzamiento extra pendiente.
+Ejecuta la primera línea para detener y la segunda cuando quieras volver a iniciar. `stop` pide confirmación y conserva contenedores, volúmenes y datos. No uses `down -v` ni limpiezas de volúmenes para reiniciar.
 
-Godot debe reconocer HOME_RELEASE_RESOLVED, los dados consumidos y ROLL_AVAILABLE, además de MOVEMENT_TIMER_PAUSED/RESUMED y trivia.deadline. Reconectar mantiene contadores, saldo y plazos del servidor. Véase [contrato WebSocket](game-service/docs/WEBSOCKET.md). No cambia el tablero v4-100, el catálogo ni las acciones existentes. Los campos nuevos son aditivos; tiradas/trivias ya persistidas antes de actualizar conservan su estado, y las nuevas reglas se aplican desde la siguiente activación, sin borrar partidas o volúmenes.
+## Solución de problemas frecuentes
+
+| Problema | Acción |
+|---|---|
+| Docker no está iniciado | Inicia Docker Engine o Docker Desktop y comprueba `docker info`. |
+| Puerto ocupado | Revisa la publicación con `docker ps` y el puerto indicado en el error; consulta las variables de puertos del manual antes de cambiarlo. |
+| Firewall no verificado | Revisa `diagnose` y los permisos sudo/UAC. No desactives el firewall; UFW por sí solo no protege publicaciones Docker. |
+| Cambió la IP local | Repite `start --auto --project docker` con el intérprete de tu sistema y comunica la dirección nueva. La CA se conserva; una CA común puede requerir firma administrativa. |
+| Contenedores sin salud | Consulta `status`, espera el arranque y revisa los logs según el manual; no borres datos. |
+| Error OAuth | Comprueba tipo de cliente, credenciales, consentimiento, usuarios de prueba y callback Web exacto. LAN exige el cliente Desktop. |
+| Otro dispositivo no conecta | Confirma misma LAN/subred autorizada, IP/puerto, CA verificada y ausencia de aislamiento Wi-Fi/VLAN; prueba desde ese dispositivo. |
+
+## Manual completo
+
+Consulta el [manual de instalación y configuración](docs/MANUAL_INSTALACION.md) para preparar un equipo nuevo en Linux o Windows.
