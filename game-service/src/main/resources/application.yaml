@@ -26,6 +26,15 @@ eureka:
       defaultZone: ${EUREKA_URL}
 
 game:
+  # Polling cadence is independent of the per-game visual budget.
+  bot-step-millis: 500
+  bot-pacing:
+    roll-ms: 2100
+    move-ms: 1300
+    crown-ms: 1300
+    trivia-ms: 1500
+    end-turn-ms: 500
+    other-ms: 800
   turn-millis: ${GAME_TURN_MILLIS:30000}
   animation-wait-millis: ${GAME_ANIMATION_WAIT_MILLIS:10000}
   trivia-millis: ${GAME_TRIVIA_MILLIS:15000}

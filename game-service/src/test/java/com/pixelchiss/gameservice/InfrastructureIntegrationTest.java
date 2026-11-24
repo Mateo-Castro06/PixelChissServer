@@ -89,6 +89,71 @@ class InfrastructureIntegrationTest {
         assertNull(mongo.getCollection("game_cards").find(new org.bson.Document("_id","capture-next")).first());
         assertNull(mongo.getCollection("game_questions").find(new org.bson.Document("_id","classic-1")).first());
     }
+    // Simulate passage of visual time only in the isolated test namespace; no rule assertion is removed.
+    private void advanceBotPause(String id) {
+        assertNotNull(redis.opsForHash().get(PREFIX+":state:"+id,"botReadyAt"));
+        redis.opsForHash().put(PREFIX+":state:"+id,"botReadyAt","1");
+    }
+    @Test void realRedisSeparatesPublicationsByConfiguredInterval() throws Exception {
+        String id=create();GameState state=repository.find(id);state.version++;
+        assertTrue(repository.commitBot(state,0,null,80,0));
+        long firstReady=Long.parseLong(redis.opsForHash().get(PREFIX+":state:"+id,"botReadyAt").toString());
+        state.version++;
+        long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(3);
+        while(!repository.botReady(id,0)&&System.nanoTime()<until) Thread.sleep(5);
+        assertTrue(repository.commitBot(state,1,null,80,0));
+        long secondReady=Long.parseLong(redis.opsForHash().get(PREFIX+":state:"+id,"botReadyAt").toString());
+        assertTrue(secondReady-firstReady>=80,"Redis published too soon");
+        System.out.println("BOT_PACING_OBSERVED configured=80ms separation="+(secondReady-firstReady)+"ms");
+    }
+
+    @Test void botPauseAndReceiptSurviveRecoveryInAnotherGameProcess() throws Exception {
+        String id=create();
+        games.system(id,g->{g.player("test-a").bot=true;return List.of(RuleEngine.Event.of("TEST_FIXTURE"));});
+        var paced=new GameService(repository,rules,new JsonPayloadFingerprints(json),Clock.systemUTC(),
+                new com.pixelchiss.gameservice.bot.BotPacing(60000,1300,1300,1500,500,800));
+        var policy=new com.pixelchiss.gameservice.bot.BotPolicy(rules,catalog,()->0.0);
+        var roll=policy.next(paced.load(id));paced.botAction("test-a",roll);
+        Object ready=redis.opsForHash().get(PREFIX+":state:"+id,"botReadyAt");
+        long version=games.load(id).version;
+        int childPort;try(var socket=new ServerSocket(0)) { childPort=socket.getLocalPort(); }
+        Process child=null;
+        try(var client=HttpClient.newHttpClient()) {
+            child=startRecoveryProcess(childPort,client);
+            var response=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+childPort+"/api/game/games/"+id))
+                    .header("Authorization","Bearer "+token("test-b")).GET().build(),HttpResponse.BodyHandlers.ofString());
+            assertEquals(200,response.statusCode());assertEquals(version,json.readTree(response.body()).path("version").asLong());
+            assertFalse(response.body().contains("botReadyAt"));assertFalse(repository.botReady(id,0));
+            assertTrue(paced.botAction("test-a",roll).duplicate());
+            assertEquals(version,games.load(id).version);
+            assertEquals(ready,redis.opsForHash().get(PREFIX+":state:"+id,"botReadyAt"));
+        } finally { if(child!=null)stopRecoveryProcess(child); }
+    }
+
+    @Test void botPacingIsAtomicDurableAndOutsidePublicState() {
+        String id=create();
+        GameState first=repository.find(id), stale=repository.find(id);
+        first.version++;stale.version++;
+        assertTrue(repository.commitBot(first,0,null,60000,0));
+        assertFalse(repository.botReady(id,Long.MAX_VALUE)); // Redis owns the time, not the caller JVM
+        assertFalse(repository.commitBot(stale,0,null,60000,Long.MAX_VALUE));
+        var recovered=new RedisGameRepository(redis,json,PREFIX);
+        assertFalse(recovered.botReady(id,0));
+        GameState current=recovered.find(id);current.version++;
+        assertFalse(recovered.commitBot(current,1,null,60000,0)); // fresh CAS still cannot bypass pause
+        assertEquals(1,recovered.find(id).version);
+        assertFalse(json.writeValueAsString(games.synchronization(id,"test-a")).contains("botReadyAt"));
+        redis.opsForHash().put(PREFIX+":state:"+id,"botReadyAt","1");
+        assertTrue(recovered.commitBot(current,1,null,60000,0));
+        current=recovered.find(id);current.status="FINISHED";current.version++;
+        assertTrue(recovered.commit(current,2,null));
+        assertFalse(redis.opsForHash().hasKey(PREFIX+":state:"+id,"botReadyAt"));
+        redis.delete(PREFIX+":state:"+id);
+        current.version++;
+        assertFalse(recovered.commitBot(current,3,null,60000,0));
+        assertFalse(redis.hasKey(PREFIX+":state:"+id));
+    }
+
     @Test void realRedisRejectsStaleCasAndRecoversCompleteState() {
         String id=create();GameState first=repository.find(id),second=repository.find(id);
         first.version=1;second.version=1;
@@ -693,15 +758,20 @@ class InfrastructureIntegrationTest {
         var policy=new com.pixelchiss.gameservice.bot.BotPolicy(rules,catalog,()->0.0);
         var runner=new com.pixelchiss.gameservice.bot.BotRunner(
                 (com.pixelchiss.gameservice.application.ActiveGames)repository,games,policy);
-        runner.step();runner.step();var captured=repository.find(id);
+        runner.step();
+        long rolledVersion=repository.find(id).version;
+        runner.step();assertEquals(rolledVersion,repository.find(id).version);
+        advanceBotPause(id);runner.step();var captured=repository.find(id);
         assertEquals("HOME",captured.piece("seat-1-piece-0").status);
         assertEquals(Set.of("seat-0-piece-0"),captured.turn.captureLockedPieceIds);
         assertArrayEquals(new boolean[]{true,false},captured.turn.consumed);
         var next=policy.next(captured);assertEquals("seat-0-piece-1",next.pieceId());assertEquals(1,next.dieIndex());
-        runner.step();assertTrue(repository.find(id).turn.extraRollAvailable);
-        runner.step();assertEquals(2,repository.find(id).turn.consecutiveDoubles);
+        advanceBotPause(id);runner.step();assertTrue(repository.find(id).turn.extraRollAvailable);
+        advanceBotPause(id);runner.step();assertEquals(2,repository.find(id).turn.consecutiveDoubles);
         assertTrue(repository.find(id).turn.captureLockedPieceIds.isEmpty());
-        for(int step=0;step<8&&repository.find(id).turn.playerId.equals("test-a");step++)runner.step();
+        for(int step=0;step<8&&repository.find(id).turn.playerId.equals("test-a");step++) {
+            advanceBotPause(id);runner.step();
+        }
         var closed=repository.find(id);assertEquals("test-b",closed.turn.playerId);
         assertEquals(0,closed.turn.consecutiveDoubles);assertEquals(3,closed.pieces.stream()
                 .filter(p->p.ownerId.equals("test-a")&&p.status.equals("CROWNED")).count());

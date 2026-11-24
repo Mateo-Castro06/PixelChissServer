@@ -34,11 +34,31 @@ public class RedisGameRepository implements GameRepository, ActiveGames {
         """,Long.class);
     private static final DefaultRedisScript<Long> COMMIT=new DefaultRedisScript<>("""
         if redis.call('HGET',KEYS[1],'version')~=ARGV[1] then return 0 end
+        local time = redis.call('TIME')
+        local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+        if ARGV[8] ~= '' and tonumber(redis.call('HGET', KEYS[1], 'botReadyAt') or '0') > now then return 0 end
         redis.call('HSET',KEYS[1],'version',ARGV[2],'state',ARGV[3])
+        if ARGV[4] ~= 'ACTIVE' then
+          redis.call('HDEL', KEYS[1], 'botReadyAt')
+        elseif ARGV[8] ~= '' then
+          redis.call('HSET', KEYS[1], 'botReadyAt', now + tonumber(ARGV[8]))
+        end
         if ARGV[4]~='ACTIVE' then redis.call('SREM',KEYS[2],ARGV[5]) end
         redis.call('PUBLISH',ARGV[6],ARGV[7])
         return 1
         """,Long.class);
+    private static final DefaultRedisScript<Long> READY = new DefaultRedisScript<>("""
+        local time = redis.call('TIME')
+        local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+        if tonumber(redis.call('HGET', KEYS[1], 'botReadyAt') or '0') > now then return 0 end
+        return 1
+        """, Long.class);
+    @Override public boolean botReady(String id, long now) {
+        return Long.valueOf(1).equals(redis.execute(READY, List.of(key(id))));
+    }
+    @Override public boolean commitBot(GameState g, long expected, GameUpdate event, long delayMillis, long now) {
+        return commitWithDelay(g, expected, event, Long.toString(delayMillis));
+    }
     private record Initialized(String eventId, String eventType, int schemaVersion, String timestamp,
                                String producer, String correlationId, String gameId, Payload payload) {}
     private record Payload(String lobbyId, String mapId) {}
@@ -62,8 +82,11 @@ public class RedisGameRepository implements GameRepository, ActiveGames {
         return created;
     }
     @Override public boolean commit(GameState g,long expected,GameUpdate event) {
+        return commitWithDelay(g, expected, event, "");
+    }
+    private boolean commitWithDelay(GameState g, long expected, GameUpdate event, String delay) {
         return Long.valueOf(1).equals(redis.execute(COMMIT,List.of(key(g.id),index()),Long.toString(expected),Long.toString(g.version),
-                json.writeValueAsString(g),g.status,g.id,CHANNEL,json.writeValueAsString(event)));
+                json.writeValueAsString(g),g.status,g.id,CHANNEL,json.writeValueAsString(event),delay));
     }
     @Override public Set<String> activeIds() {return redis.opsForSet().members(index());}
 }

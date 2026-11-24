@@ -10,6 +10,8 @@ import com.pixelchiss.gameservice.domain.GameAction;
 import com.pixelchiss.gameservice.domain.GameSetup;
 import com.pixelchiss.gameservice.engine.RuleEngine;
 import com.pixelchiss.gameservice.application.GameRepository;
+import java.time.Clock;
+import com.pixelchiss.gameservice.bot.BotPacing;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
@@ -20,11 +22,20 @@ import static com.pixelchiss.gameservice.engine.GameException.require;
 public class GameService {
     private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z0-9_-]{1,80}");
     private static final int RECEIPT_LIMIT = 256;
+    private final Clock clock;
+    private final BotPacing pacing;
     private final GameRepository repository;
     private final RuleEngine rules;
     private final PayloadFingerprints fingerprints;
 
     public GameService(GameRepository repository, RuleEngine rules, PayloadFingerprints fingerprints) {
+        this(repository, rules, fingerprints, Clock.systemUTC(), BotPacing.defaults());
+    }
+
+    public GameService(GameRepository repository, RuleEngine rules, PayloadFingerprints fingerprints,
+                       Clock clock, BotPacing pacing) {
+        this.clock = clock;
+        this.pacing = pacing;
         this.repository = repository;
         this.rules = rules;
         this.fingerprints = fingerprints;
@@ -107,6 +118,8 @@ public class GameService {
         return apply(game, actor, action);
     }
 
+    public boolean botReady(String id) { return repository.botReady(id, clock.millis()); }
+
     public Result botAction(String actor, GameAction action) {
         GameState game = load(action.gameId());
         GameState.Player player = game.player(actor);
@@ -121,12 +134,19 @@ public class GameService {
         if (receipt != null) return duplicateResult(game, action, receipt, payloadFingerprint);
         require(game.version == action.expectedVersion(), "STALE_VERSION", "Resynchronize before acting");
 
+        boolean bot = game.player(actor).bot;
+        if (bot) require(botReady(game.id), "BOT_PACING", "Bot visual pause pending");
+
         // The repository returns an isolated aggregate. Mutations become visible only after CAS.
         List<RuleEngine.Event> events = rules.act(game, actor, action);
         long expectedVersion = game.version;
         game.version++;
         rememberReceipt(game, receiptKey, payloadFingerprint);
-        require(repository.commit(game, expectedVersion, notification(game, action.requestId(), events)),
+        GameUpdate update = notification(game, action.requestId(), events);
+        boolean committed = bot
+                ? repository.commitBot(game, expectedVersion, update, pacing.delay(action.type(), events), clock.millis())
+                : repository.commit(game, expectedVersion, update);
+        require(committed,
                 "CONCURRENT_UPDATE", "State changed; resynchronize");
         return new Result("ACTION_ACK", action.requestId(), game.version, false, GameSnapshot.of(game));
     }

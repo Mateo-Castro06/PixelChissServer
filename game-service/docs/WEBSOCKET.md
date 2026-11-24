@@ -491,3 +491,100 @@ SOPLAR conserva su semántica vigente: una captura satisface la obligación del 
 El campo nuevo usa [] al leer un agregado previo que no lo incluya. No se adivina qué ficha capturó antes del despliegue; las nuevas capturas quedan marcadas con esta versión. No cambia boardLayout v4-100 ni el esquema de Streams.
 
 Las pruebas unitarias son CaptureRollLockTest y CaptureRollPersistenceTest. Las integraciones generan target/capture-wire-game-{map}.json y target/capture-wire-gateway-{map}.json; CaptureRollPersistenceTest genera target/capture-no-moves.json. Para comprobar el puente real, construir primero Gateway y establecer GAME_TEST_GATEWAY_JAR a su JAR; ejecutar Game con game.integration=true y GAME_TEST_REDIS_URL/GAME_TEST_MONGO_URI de bases aisladas. Sin GAME_TEST_GATEWAY_JAR, los casos del puente se omiten explícitamente.
+
+## Ritmo visual de bots
+
+`game.bot-step-millis` conserva su función de comprobación periódica (500 ms por defecto).
+Cada partida tiene una pausa independiente, posterior a cada acción de bot confirmada.
+No cambia `BotPolicy`, el contrato `GAME_STATE`, las versiones, request IDs ni eventos.
+
+| Propiedad | Valor predeterminado |
+| --- | ---: |
+| `game.bot-pacing.roll-ms` | 2100 ms |
+| `game.bot-pacing.move-ms` | 1300 ms |
+| `game.bot-pacing.crown-ms` | 1300 ms |
+| `game.bot-pacing.trivia-ms` | 1500 ms |
+| `game.bot-pacing.end-turn-ms` | 500 ms |
+| `game.bot-pacing.other-ms` | 800 ms |
+
+Son propiedades Spring opcionales; no hay que modificar `.env` ni la automatización LAN.
+Todos los valores deben ser positivos. La siguiente acción ocurre en la primera comprobación
+posterior al presupuesto visual, por lo que normalmente hay hasta otros 500 ms de espera
+(más carga del servidor y coste de recorrer las partidas).
+
+El presupuesto también considera el resultado: cada `PIECE_MOVED`, `PIECE_RELEASED`,
+`PIECE_CAPTURED`, `PIECE_BLOWN` y `CARD_PIECE_RETURNED` reserva `move-ms`;
+`PIECE_CROWNED` reserva `crown-ms`. Se suman a los dados y a la resolución de trivia.
+En movimientos, coronaciones, cierre y otras acciones se usa el máximo entre su pausa base
+y la suma de esos efectos, evitando contar dos veces el propio movimiento.
+Así una tirada sin desplazamientos reserva 2100 ms, una liberación de dos fichas 4700 ms,
+una liberación de cuatro 7300 ms y una captura con movimiento 2600 ms.
+Es una estimación conservadora de efectos secuenciales; Godot puede reproducir algunos en paralelo.
+Una carta sin desplazamiento usa 800 ms; si desplaza o captura, se considera ese efecto.
+No se retrasa la publicación del resultado de una acción: la pausa impide la siguiente acción de bot.
+
+### Concurrencia, reinicio y cambio de jugador
+
+`botReadyAt` es metadato del hash Redis existente de la partida, fuera del agregado y de
+`GAME_STATE`. El script Lua comprueba versión y disponibilidad, guarda estado y pausa y
+publica el evento en una sola ejecución. Se usa `TIME` de Redis para que las instancias de
+Game compartan reloj. No hay mapa local, locks con caducidad ni un nuevo almacén.
+Una lectura desactualizada no puede saltarse CAS; tampoco una segunda instancia con una
+versión fresca puede adelantarse a la pausa. Los duplicados reconocidos por los recibos
+existentes devuelven el ACK original sin publicar ni prolongar el presupuesto.
+Los fallos anteriores al commit no reservan pausa; si se pierde su respuesta después del
+commit, el estado, recibo y pausa ya están guardados. Redis no disponible impide actuar.
+
+La pausa pertenece a la partida, por lo que se conserva entre dos o tres bots consecutivos.
+No bloquea otras partidas ni ocupa el hilo con `sleep`. Reiniciar Game conserva la pausa;
+una partida antigua sin metadato está disponible de inmediato. La recuperación depende de
+la persistencia Redis existente (no hay copia de partidas en Mongo: Mongo contiene catálogos).
+Al terminar/abandonar la partida, cualquier commit elimina el metadato; eliminar el hash de
+la partida elimina también la pausa. No quedan claves temporales separadas. El metadato
+vencido de una partida activa puede permanecer en ese hash y se sustituye al siguiente bot;
+no genera trabajo de limpieza ni una entrada de memoria por proceso.
+
+### Último bot → humano y recuperación de Godot
+
+El motor puede emitir `TURN_CHANGED` en el mismo resultado que el último `PIECE_MOVED`,
+`PIECE_CROWNED` o incluso `ROLL_DICE` sin movimientos. Eso se conserva. El humano puede
+lanzar inmediatamente: no se añade un error ni un ACK de espectadores. Antes de tirar,
+conserva el plazo vigente de preparación de 60 segundos. Tras tirar, el plazo máximo de
+`DICE_ANIMATION_COMPLETED` sigue siendo 10 segundos; los 30 segundos de movimiento
+empiezan al confirmar la animación de sus dados, no al cambiar de jugador. La trivia
+conserva sus 15 segundos y la pausa/reanudación del tiempo de movimiento.
+
+Godot debe enviar el ACK del jugador activo después de presentar los dados y los eventos
+anteriores de su cola; no debe enviarlo anticipadamente al recibir el estado. Esa condición
+ya es necesaria para que el ACK represente una animación completada. El backend no puede
+certificar la cola visual del cliente ni garantiza tiempo justo si este confirma anticipadamente.
+No se exige ACK de bots o espectadores. Tampoco se congelan los temporizadores reglamentarios
+de bots para compensar las pausas: configuraciones excesivas pueden provocar timeout de bot.
+
+No hace falta cambiar `presenter.gd` si respeta ese orden y admite los eventos existentes.
+Con dados de ~1.9 s y movimientos de ~1.1 s, los valores base dejan un margen de ~200 ms.
+No se ha modificado Godot. Revisar `LAG_BUDGET` o `MOVE_WAIT` es una recomendación para
+el equipo cliente tras medir; `LAG_BUDGET` sigue siendo recuperación, no el ritmo normal.
+Si hay atraso por red, renderizado o reconexión, sincronizar con `GAME_STATE` usando el
+protocolo actual. Una cola que exceda el plazo del ACK puede seguir causando timeout;
+no hay sincronización visual perfecta ni garantía para todos los espectadores.
+
+### Comprobación reproducible en Godot
+
+1. Usar una partida nueva con tres bots y un humano en cada mapa, conservando datos anteriores.
+2. Registrar hora monotónica de recepción, versión, tipo de acción/eventos, tamaño de cola,
+   comienzo/fin de dados y desplazamientos, `TURN_CHANGED`, ACK y `MOVEMENT_TIMER_STARTED`.
+3. Durante varias rondas, comprobar lanzamientos, liberaciones múltiples, movimientos, capturas,
+   tercer par/coronación, cartas, trivia, turno sin movimiento y victoria.
+4. Entre commits de bots de una misma partida verificar al menos el presupuesto anterior
+   (por ejemplo 2100 ms dados simples, 1300 ms movimiento simple, 4700 ms dados con dos
+   liberaciones). Observar que no hay cola creciente ni saltos normales por `LAG_BUDGET`.
+5. Comprobar que el turno humano se presenta tras los movimientos previos, el ACK se envía
+   tras los dados visibles y su deadline de movimiento es ACK + 30000 ms.
+6. Reiniciar únicamente un Game de pruebas durante una pausa, reconectar y comprobar que
+   no aparece una acción duplicada ni se elimina la pausa. Probar dos partidas simultáneas.
+7. Introducir latencia y reconectar: comprobar recuperación por estado autoritativo y distinguir
+   esa recuperación excepcional del flujo normal. No aumentar el plazo reglamentario del ACK.
+
+Las pruebas backend verifican presupuestos y separación de commits, CAS, deduplicación,
+recuperación y temporizadores. No demuestran por sí solas la reproducción visual de Godot.

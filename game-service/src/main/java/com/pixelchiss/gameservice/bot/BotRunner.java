@@ -19,6 +19,7 @@ public class BotRunner {
     @Scheduled(fixedDelayString="${game.bot-step-millis:500}") public void step() {
         try {
             for(String id:activeGames.activeIds())try {
+                if (!games.botReady(id)) continue;
                 var g=games.load(id);var action=policy.next(g);
                 if(action!=null)games.botAction(g.turn.playerId,action);
             } catch(GameException e) { /* Timer or another instance won CAS; evaluate fresh next tick. */ }
