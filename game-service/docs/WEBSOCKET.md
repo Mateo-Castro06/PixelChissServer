@@ -492,6 +492,44 @@ El campo nuevo usa [] al leer un agregado previo que no lo incluya. No se adivin
 
 Las pruebas unitarias son CaptureRollLockTest y CaptureRollPersistenceTest. Las integraciones generan target/capture-wire-game-{map}.json y target/capture-wire-gateway-{map}.json; CaptureRollPersistenceTest genera target/capture-no-moves.json. Para comprobar el puente real, construir primero Gateway y establecer GAME_TEST_GATEWAY_JAR a su JAR; ejecutar Game con game.integration=true y GAME_TEST_REDIS_URL/GAME_TEST_MONGO_URI de bases aisladas. Sin GAME_TEST_GATEWAY_JAR, los casos del puente se omiten explícitamente.
 
+## Resolución automática de lanzamientos sin movimientos
+
+Después de cada movimiento, confirmación de dados y resolución de trivia/carta, el motor
+recalcula las opciones con las mismas restricciones de captura, liberación, capacidad y
+llegada exacta. Si no hay ninguna, consume los dados restantes y resuelve el lanzamiento
+en el mismo commit: `TURN_CHANGED` sin derecho a repetir, o `ROLL_AVAILABLE` con pares
+o los intentos HOME vigentes. El tercer par conserva primero su elección de coronación;
+nunca habilita una cuarta tirada. No enviar un movimiento inválido ni `END_TURN` para
+provocar ese descarte.
+
+Ejemplo `(4,3)`: la capturadora pasa de 6 a 10 con el 4; otra ficha está en progreso 75,
+a un paso de la corona. El 3 no sirve a ninguna: el mismo `GAME_UPDATED` contiene
+`PIECE_CAPTURED`, `PIECE_MOVED`, `TURN_CHANGED`. Su snapshot ya contiene el turno nuevo
+(`dice=[]`, `movementStartedAt=null`), no los dados pendientes del anterior. Una ficha en
+progreso 73 sí puede coronar con ese 3: en ese caso se mantiene el turno y el deadline.
+
+La confirmación de dados sin opciones no emite `MOVEMENT_TIMER_STARTED`. No se acortan
+los 30 segundos cuando existe un movimiento; se conservan el ACK máximo de 10 segundos,
+la trivia de 15 y su pausa/reanudación. No se resuelve una obligación de animación,
+trivia, carta o coronación como si fuese un dado imposible.
+
+Como recuperación de estados ya persistidos sin opciones, el mantenimiento normal
+revalida el lanzamiento antes del timeout. Con `game.scheduler-millis=1000`, se resuelve
+en la siguiente comprobación (aproximadamente hasta un segundo más carga/CAS), sin una
+petición adicional del cliente. Un segundo tick no vuelve a cerrar el turno. Se conservan
+CAS, recibos e idempotencia; una solicitud tardía debe sincronizarse con la versión actual.
+No se añade pausa BotPacing por este descarte: las animaciones de la acción que lo originó
+conservan su presupuesto, incluidos dados o capturas.
+
+Godot debe aplicar el estado y los eventos completos de cada versión, incluso si
+`TURN_CHANGED` acompaña a `PIECE_MOVED`; no esperar siempre un mensaje independiente
+de cierre ni conservar el temporizador del jugador anterior. Ante una duda de presentación,
+`SYNC_REQUEST` devuelve `GAME_STATE` y `legalMoves` actuales. La ausencia de opciones por
+una obligación pendiente no significa por sí sola que deba cambiarse el turno.
+
+La [auditoría de turnos y corredor](TURN_RESOLUTION_VALIDATION.md) distingue las
+reproducciones backend de la comprobación visual pendiente en Godot.
+
 ## Ritmo visual de bots
 
 `game.bot-step-millis` conserva su función de comprobación periódica (500 ms por defecto).

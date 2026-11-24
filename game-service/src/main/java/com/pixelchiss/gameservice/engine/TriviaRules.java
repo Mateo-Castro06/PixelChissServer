@@ -123,7 +123,8 @@ public class TriviaRules extends RuleEngine {
         if (!game.status.equals("ACTIVE")) {
             return List.of();
         }
-        if (!movementPaused(game) && clock.millis() >= game.turn.deadline) return super.tick(game);
+        if ((game.trivia == null && game.card == null)
+                || (!movementPaused(game) && clock.millis() >= game.turn.deadline)) return super.tick(game);
         var events = new ArrayList<Event>();
 
         if (game.trivia != null && clock.millis() >= game.trivia.deadline) {

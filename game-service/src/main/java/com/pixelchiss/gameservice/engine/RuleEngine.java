@@ -337,10 +337,15 @@ public class RuleEngine {
     }
 
     public List<Event> tick(GameState game) {
-        if (!game.status.equals("ACTIVE") || movementPaused(game) || clock.millis() < game.turn.deadline) {
+        if (!game.status.equals("ACTIVE") || movementPaused(game)) {
             return List.of();
         }
         var events = new ArrayList<Event>();
+        if (clock.millis() < game.turn.deadline) {
+            // Recover an already impossible roll without requiring another client action or a timeout.
+            continueTurn(game, events);
+            return events;
+        }
         if (game.card != null || game.trivia != null) events.add(event("CARD_DISCARDED", "reason", "TURN_TIMEOUT"));
         var discarded = new ArrayList<Integer>();
         for (int i = 0; i < game.turn.dice.length; i++) if (!game.turn.consumed[i]) discarded.add(i);
@@ -361,7 +366,7 @@ public class RuleEngine {
         require("WAITING".equals(game.turn.animationStatus), "STALE_ROLL", "No animation pending");
         game.turn.animationStatus = "COMPLETED";
         long startedAt = clock.millis();
-        if (!hasMovementDice(game) || (game.turn.homeRelease && legalMoves(game, game.turn.playerId).isEmpty())) {
+        if (!hasMovementDice(game) || legalMoves(game, game.turn.playerId).isEmpty()) {
             game.turn.deadline = startedAt + movementMillis;
             continueTurn(game, events);
             return;

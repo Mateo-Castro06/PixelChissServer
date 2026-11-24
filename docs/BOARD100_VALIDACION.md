@@ -1,5 +1,10 @@
 ## Validación de la revisión v4-100
 
+Las tablas y evidencias v3 que siguen son históricas. El contrato vigente **v4-100**
+usa salidas/regresos 5/22/39/56, conservando entradas finales 68/76/84/92.
+Para integrar Godot utilizar [BOARD.md](../game-service/docs/BOARD.md) y la
+[auditoría de corredor y cierre automático](../game-service/docs/TURN_RESOLUTION_VALIDATION.md).
+
 La evidencia histórica que sigue corresponde a v3-100. No demuestra las reglas definitivas. La matriz inicial y los resultados actuales están en [AUDITORIA_REGLAS_DEFINITIVAS](AUDITORIA_REGLAS_DEFINITIVAS.md). Las nuevas pruebas cubren plazos, omisiones y probabilidades, además del traslado completo de las rutas. Godot real y la correspondencia visual no se han ejecutado.
 
 # Tablero de 100 casillas — recorrido confirmado y evidencia

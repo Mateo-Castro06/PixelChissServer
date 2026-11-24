@@ -13,6 +13,26 @@ Para asiento `s` y progreso `p`, el recorrido común es `(17*s+5+p)%68` para `p=
 
 Cada ruta tiene 77 visitas y 76 posiciones distintas, porque repite el seguro de salida al regresar. La unión de las rutas contiene exactamente las 100 posiciones. Godot debe consumir `GET /api/game/board`, cuyas rutas están indexadas por progreso; no debe deducir progreso a partir de posición, pues 0 y 68 de una ruta coinciden físicamente.
 
+### Entrada al corredor: contrato vigente
+
+| Color/asiento | Salida p=0 y regreso p=68 | Predecesora p=67 | Primera final p=69 | Corona p=76 |
+| --- | ---: | ---: | ---: | ---: |
+| Rojo/0 | 5 | 4 | 68 | 75 |
+| Azul/1 | 22 | 21 | 76 | 83 |
+| Verde/2 | 39 | 38 | 84 | 91 |
+| Amarillo/3 | 56 | 55 | 92 | 99 |
+
+Una ficha que vuelve a 5/22/39/56 en progreso 68 entra en su corredor con el siguiente
+paso. Una recién liberada en esa misma posición tiene progreso 0 y sigue la pista común.
+Las antiguas tablas v3 con salida 0/17/34/51 no describen v4: esos IDs siguen siendo
+comienzos de sector, no salidas. No añadir ni restar un offset al destino de `PIECE_MOVED`.
+Las posiciones intermedias de animación se obtienen recorriendo los índices de `routes`
+desde el progreso anterior hasta el nuevo, no incrementando el ID físico ni buscando
+la primera aparición de `position` en la ruta.
+
+La [auditoría reproducible](TURN_RESOLUTION_VALIDATION.md) incluye trayectorias de uno
+a cuatro pasos y evidencia por Gateway WebSocket para ambos mapas. No cambia la geometría.
+
 El retorno al mismo seguro conserva la topología del motor anterior, trasladando todo el recorrido cinco posiciones. Esta decisión no demuestra correspondencia con el plano visual de Godot: el repositorio no contiene su geometría ejecutable y la validación visual sigue pendiente.
 
 Seguros normales: 0/12/17/29/34/46/51/63, máximo dos fichas en total. Salidas especiales: 5/22/39/56, máximo cuatro en total. Ambas protegen de captura ordinaria, incluso con colores mezclados. Liberar HOME en la salida propia devuelve todos los rivales presentes antes de colocar las fichas propias; aterrizar allí ordinariamente no captura.
