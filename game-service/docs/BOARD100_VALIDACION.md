@@ -130,10 +130,10 @@ partidas ni volúmenes. La decisión de desplegar debe incluir esta limitación 
 
 ## Docker, LAN y cliente
 
-El proyecto Compose existente es docker, con el archivo base y overlay LAN. El Game
-ejecutado conserva la imagen sha256:3a82ccb23ea10ded444472e6ea6b66796b1f184751705841e6b628c1b54930e7:
+El proyecto Compose existente es docker, con el archivo base y overlay LAN. Antes
+del despliegue autorizado, Game ejecutaba la imagen sha256:3a82ccb23ea10ded444472e6ea6b66796b1f184751705841e6b628c1b54930e7:
 sus clases RuleEngine/TriviaRules coinciden con la revisión 8d9c7c7, anterior al arreglo
-1ba21cd. Esa actualización continúa pendiente; la imagen v5 preparada incluye también
+1ba21cd. Esa actualización estaba pendiente; la imagen v5 incluye también
 1ba21cd. No se recreó Game durante la implementación.
 
 Se prepara únicamente la imagen de Game con los mismos Compose y env-files. No se
@@ -148,6 +148,27 @@ principal vacío, para no presentar estados antiguos como compatibles. Godot deb
 renovar la caché a v5, usar rutas de 72 IDs, entrada 63→64 y corona 71; los detalles
 están en [WEBSOCKET.md](WEBSOCKET.md). No se ejecutó ni modificó Godot: falta verificar
 su animación y sus coordenadas reales tras la actualización coordinada.
+
+### Despliegue LAN autorizado
+
+Tras la instrucción explícita de reconstruir y desplegar, se volvió a comprobar que
+había cero partidas en el índice principal. Se ejecutó `up -d --no-deps --build
+--force-recreate game-service` con los mismos env-files y Compose base/LAN del
+proyecto docker. Solo Game fue reconstruido y recreado.
+
+- Código funcional desplegado: `8de183f6ec4edf30b7eacdf74cf847ba525d96d2`.
+- Imagen: `sha256:1992dd2a71fd56ac01dcf09ce9cba89b28231218eb8b217aa946806cc03d610c`.
+- Contenedor: `84c298caa2eeec26d6bd367cd46289d8b96893a659df7d23981c0a24f3e01c69`, saludable.
+- Board, RuleEngine, TriviaRules, GameService, BotRunner y BotPacing del JAR ejecutado
+  coinciden byte a byte con la compilación probada. La geometría v5 y 1ba21cd están aplicados.
+- HTTPS con CA/hostname, descubrimiento de CA y WSS hasta Game volvieron a pasar.
+- Las huellas de los 29 estados históricos permanecen idénticas; Redis conserva 42
+  claves y cero partidas principales activas. No se borró ni migró ningún estado.
+- Se conservaron variables, montajes, puertos, certificados y secretos. Todos los
+  demás contenedores principales mantienen sus identificadores originales.
+
+La política explícita de rechazo de layouts antiguos sigue vigente. La prueba visual
+en Godot continúa pendiente; su cliente debe utilizar las rutas v5 ahora desplegadas.
 
 ## Archivos afectados
 
